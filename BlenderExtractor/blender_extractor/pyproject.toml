@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wows-legends-assets"
+version = "0.1.0"
+description = "Read-only WoWS Legends IDX/PKG inventory and Blender staging"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Codex"}]
+dependencies = []
+
+[project.scripts]
+legends-assets = "legends_assets.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["legends_assets*"]

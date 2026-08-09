@@ -1,0 +1,64 @@
+# Local application state and generated exports
+output/
+exports/
+.test-*/
+*.wowsqueue.json
+*.diagnostics.zip
+batch-history.json
+last-batch-report.json
+settings.json
+settings.invalid-*.json
+
+# Release artifacts
+MANIFEST.sha256
+WoWS-Toolbox-Setup-*.exe
+WoWS-Toolbox-v*.zip
+BUILD_INFO.json
+
+# Python caches and test output
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.coverage
+htmlcov/
+
+# PowerShell and application logs
+*.log
+*.tmp
+*.bak
+*.dmp
+
+# Extracted or proprietary game assets
+*.obj
+*.mtl
+*.glb
+*.gltf
+*.bin
+*.dds
+*.tga
+*.geometry
+*.visual
+*.model
+*.anca
+*.anim
+*.pkg
+*.idx
+*.wowsreplay
+*.korablireplay
+
+# IDE and OS metadata
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Legacy local migration helpers
+Upgrade-*.ps1
+Run-SelfTests-v5.ps1
+README_KO-v5.md
+WoWS-Legends-Toolbox-GUI.cmd

@@ -1,0 +1,32 @@
+* text=auto
+
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.cmd text eol=crlf
+*.cs text eol=crlf
+*.iss text eol=crlf
+*.py text eol=lf
+*.js text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+*.exe binary
+*.dll binary
+*.pyd binary
+*.cat binary
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.zip binary
+
+* whitespace=blank-at-eol,-blank-at-eof,space-before-tab
+Runtime/Python/** whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab
+Viewer/web/vendor/** whitespace=-blank-at-eol,-space-before-tab
+Viewer/LICENSE-*.txt whitespace=-blank-at-eol
+BlenderExtractor/blender_extractor/VERIFICATION.md whitespace=-blank-at-eol
+FullAssembly/Ticonderoga1990/ANCA/RESEARCH_SUMMARY_KO.md whitespace=-blank-at-eol

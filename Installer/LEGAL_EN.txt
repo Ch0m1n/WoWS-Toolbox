@@ -1,0 +1,14 @@
+WoWS Toolbox Legal Notice
+
+WoWS Toolbox is an unofficial community tool and is not endorsed by, sponsored
+by, or affiliated with Wargaming Group Limited, Lesta Games, their licensors,
+or their affiliates.
+
+Game names, trademarks, logos, game data, 3D models, textures, audio, and all
+other game assets remain the property of their respective owners. The
+WoWS Toolbox MIT license applies only to WoWS Toolbox code and does not grant rights
+to use, distribute, or sell extracted game assets.
+
+Users are responsible for following the applicable game EULA, platform terms,
+and local law. Do not redistribute or sell extracted assets without permission
+from the rights holder. This notice is general information, not legal advice.

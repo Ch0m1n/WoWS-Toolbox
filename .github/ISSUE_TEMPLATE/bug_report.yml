@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a reproducible WoWS Toolbox problem
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not upload extracted models, textures, game packages, proprietary libraries, credentials, or logs containing personal paths.
+  - type: input
+    id: version
+    attributes:
+      label: WoWS Toolbox version
+      placeholder: 5.0.30
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Game source
+      options:
+        - World of Warships: Legends
+        - World of Warships PC
+        - Korabli
+        - GUI / viewer / installer
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows and PowerShell versions
+      placeholder: Windows 11 24H2, PowerShell 7.5
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the visible result and the result you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Select ...
+        2. Add ...
+        3. Start ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs
+      description: Remove usernames, personal paths, tokens, and unrelated game data.
+      render: text
+  - type: checkboxes
+    id: legal
+    attributes:
+      label: Attachment check
+      options:
+        - label: I did not attach copyrighted game assets, credentials, or proprietary runtime libraries.
+          required: true

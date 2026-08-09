@@ -1,0 +1,24 @@
+{
+  "schema": "wows-toolbox-batch-request/v1",
+  "common": {
+    "toolbox_root": "C:\\Path\\To\\WoWS-Toolbox",
+    "output_root": "C:\\Path\\To\\Exports",
+    "cache_root": "C:\\Path\\To\\Cache",
+    "state_root": "C:\\Path\\To\\State",
+    "control_file": "C:\\Path\\To\\State\\control.json",
+    "overwrite": false,
+    "keep_glb": false,
+    "formats": "obj",
+    "texture_max_size": 0,
+    "lod": 0,
+    "language": "en"
+  },
+  "items": [
+    {
+      "source": "pc",
+      "game_dir": "C:\\Games\\World_of_Warships",
+      "display_name": "Example ship",
+      "ship_index": "PXXX000"
+    }
+  ]
+}

@@ -1,0 +1,37 @@
+{
+  "hull_glbs": [
+    "parts/hull_mid.glb",
+    "parts/hull_bow.glb",
+    "parts/hull_stern.glb"
+  ],
+  "mounts": [
+    {
+      "hardpoint": "HP_AGS_1",
+      "category": "MainGuns",
+      "model_glb": "parts/main_gun.glb",
+      "visible": true,
+      "matrix": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        12.5,
+        3.0,
+        -18.0,
+        1.0
+      ]
+    }
+  ],
+  "output_blend": "assembled_ship.blend",
+  "output_glb": "assembled_ship.glb",
+  "output_combined_obj": "Ticonderoga1990_Combined.obj",
+  "validation_json": "assembled_ship.validation.json"
+}

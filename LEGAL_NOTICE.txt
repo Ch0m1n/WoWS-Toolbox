@@ -1,0 +1,26 @@
+NAVALFORGE LEGAL NOTICE / 법적 고지
+===================================
+
+[한국어]
+WoWS Toolbox는 비공식 커뮤니티 도구이며 Wargaming Group Limited, Lesta Games,
+각 라이선스 제공자 또는 관계사의 승인·후원·제휴를 받은 제품이 아니에요.
+게임 명칭, 상표, 로고, 게임 데이터, 3D 모델, 텍스처, 음원 및 그 밖의 모든
+게임 자산에 관한 권리는 각 권리자에게 있어요.
+
+WoWS Toolbox의 MIT 라이선스는 WoWS Toolbox 자체 코드에만 적용되며 추출된 게임
+자산의 사용·배포·판매 권리를 부여하지 않아요. 사용자는 해당 게임 EULA,
+플랫폼 약관과 지역 법률을 직접 확인하고 따라야 해요. 권리자의 허가 없이
+추출물을 재배포하거나 판매하면 안 돼요. 이 안내는 법률 자문이 아니에요.
+
+[English]
+WoWS Toolbox is an unofficial community tool and is not endorsed by, sponsored
+by, or affiliated with Wargaming Group Limited, Lesta Games, their licensors,
+or their affiliates. Game names, trademarks, logos, game data, 3D models,
+textures, audio, and all other game assets remain the property of their
+respective owners.
+
+The WoWS Toolbox MIT license applies only to WoWS Toolbox code and does not grant
+rights to use, distribute, or sell extracted game assets. Users are responsible
+for following the applicable game EULA, platform terms, and local law. Do not
+redistribute or sell extracted assets without permission from the rights holder.
+This notice is general information, not legal advice.

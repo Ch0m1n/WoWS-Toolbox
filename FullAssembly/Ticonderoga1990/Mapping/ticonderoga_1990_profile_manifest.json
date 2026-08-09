@@ -1,0 +1,66 @@
+{
+  "schema": "wowslegends.static_assembly.profile_manifest.v1",
+  "profile_id": "ticonderoga_1990_verified_profile",
+  "status": "verified",
+  "generic_ship_exporter": false,
+  "ship_key": "PXSD307_Ticonderoga_1990",
+  "ship_model_directory": "content/gameplay/usa/ship/cruiser/ASC307_Ticonderoga_1990",
+  "tested_build_directory": "722375",
+  "tested_game_version": "8.6.0",
+  "canonical_runner": "build_ticonderoga_assembly_v2.py",
+  "shared_core": "build_ticonderoga_assembly.py",
+  "canonical_output": {
+    "path": "ticonderoga_1990_static_assembly.json",
+    "sha256": "690F0EC02AB455D7DB7094A5E7D7052F0BC1F6110A87B5CEB6BB106B2C276337"
+  },
+  "acceptance": {
+    "static_assembly_acceptance": true,
+    "combat_hardpoints_expected": 17,
+    "combat_hardpoints_resolved": 17,
+    "authored_misc_instances": 10,
+    "runtime_action_overlays": 2,
+    "hull_model_prototypes": 10,
+    "detailed_model_prototypes": 26,
+    "render_sets": 194,
+    "resolved_texture_properties": 155
+  },
+  "visibility_profiles": {
+    "neutral_battle_intact": {
+      "always_misc": true,
+      "dock_misc": false,
+      "runtime_action_overlays": false
+    },
+    "harbor_dock": {
+      "always_misc": true,
+      "dock_misc": true,
+      "runtime_action_overlays": false
+    },
+    "replay_runtime": {
+      "always_misc": true,
+      "dock_misc": "scene_state",
+      "runtime_action_overlays": "launch_action_state"
+    }
+  },
+  "conditional_parts": {
+    "dock_misc": [
+      "MP_AM5042_Mk141_cap",
+      "MP_AM5042_Mk141_cap_INDEX_1"
+    ],
+    "runtime_action_overlays": [
+      {
+        "model": "content/gameplay/usa/misc/AM5058/AM5058.model",
+        "parent_hardpoint": "HP_AGM_1"
+      },
+      {
+        "model": "content/gameplay/usa/misc/AM5058/AM5058.model",
+        "parent_hardpoint": "HP_AGM_2"
+      }
+    ]
+  },
+  "generalization": {
+    "ship_key_argument_implemented": false,
+    "ship_model_directory_argument_implemented": false,
+    "reason": "The low-level Legends v0 readers are reusable, but ship composition, conditional variants, component families, and action/dead model classification still require discovery and per-ship acceptance.",
+    "documentation": "README.md"
+  }
+}

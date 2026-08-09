@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://model.local https://compare.local; img-src 'self' https://model.local https://compare.local data: blob:; style-src 'self'; script-src 'self'; connect-src 'self' https://model.local https://compare.local; worker-src 'self' blob:;" />
+  <title>WoWS Ship Model Viewer</title>
+  <link rel="stylesheet" href="./viewer.css?v=5.0.30" />
+  <link rel="stylesheet" href="./viewer-v5.css?v=5.0.30" />
+
+</head>
+<body>
+  <main id="app">
+    <section class="viewport-shell" aria-label="3D 함선 뷰포트">
+      <canvas id="viewport"></canvas>
+      <div class="atmosphere" aria-hidden="true"></div>
+      <div class="topbar">
+        <div class="brand-block">
+          <span class="brand-kicker">NAVAL MODEL LAB</span>
+          <strong id="modelName">모델을 열어 주세요</strong>
+        </div>
+        <div class="tool-cluster" role="toolbar" aria-label="카메라와 표시 도구">
+          <button data-view="perspective" class="tool active">원근</button>
+          <button data-view="front" class="tool">정면</button>
+          <button data-view="side" class="tool">측면</button>
+          <button data-view="top" class="tool">상면</button>
+          <span class="divider"></span>
+          <button id="modelModeButton" class="tool active">모델</button>
+          <button id="armorModeButton" class="tool" disabled>장갑</button>
+          <span class="divider"></span>
+          <button id="backgroundButton" class="tool active" aria-pressed="true" title="배경 표시 전환 (B)">배경</button>
+          <button id="gridButton" class="tool active">격자</button>
+          <button id="wireButton" class="tool">와이어</button>
+          <button id="clipButton" class="tool">단면</button>
+          <button id="measureButton" class="tool">측정</button>
+          <button id="waterlineButton" class="tool" aria-pressed="false" title="해수면 표시 전환">해수면</button>
+          <button id="compareLayoutButton" class="tool" disabled>비교 겹침</button>
+          <button id="clearCompareButton" class="tool" disabled>비교 닫기</button>
+          <button id="captureButton" class="tool">캡처</button>
+        </div>
+      </div>
+      <div class="empty-state" id="emptyState">
+        <div class="radar-mark" aria-hidden="true"><i></i><i></i><i></i></div>
+        <p class="eyebrow">VIEWER STANDBY</p>
+        <h1>추출한 OBJ를<br />바로 점검해요.</h1>
+        <p>메인 화면의 파일 열기 또는 최근 추출 열기를 사용해 주세요.</p>
+      </div>
+      <div class="loading" id="loading" hidden>
+        <span class="spinner"></span>
+        <div><strong id="loadingTitle">모델 읽는 중</strong><small id="loadingDetail">OBJ 구조를 분석하고 있어요.</small></div>
+      </div>
+      <div id="armorTooltip" class="armor-tooltip" hidden></div>
+      <div id="measureReadout" class="measure-readout" hidden></div>
+      <div class="bottom-hud">
+        <span id="statusDot" class="status-dot"></span>
+        <span id="statusText">뷰어 준비됨</span>
+        <span class="hud-separator"></span>
+        <span id="meshStats">파트 0 · 삼각형 0</span>
+      </div>
+      <div class="axis-hint" aria-hidden="true">
+        <span class="axis y">Y</span><span class="axis x">X</span><span class="axis z">Z</span>
+      </div>
+    </section>
+
+    <aside class="inspector">
+      <header class="inspector-head">
+        <div><span>OBJECT INDEX</span><strong>파트 목록</strong></div>
+        <em id="visibleCount">0 / 0</em>
+      </header>
+      <div class="inspector-content">
+      <div id="waterlinePanel" class="waterline-control" hidden>
+        <span>해수면 높이 <output id="waterlineValue" for="waterlinePosition">Y 0.000</output></span>
+        <input id="waterlinePosition" type="range" min="-100" max="100" step="1" value="0" aria-label="해수면 높이" />
+      </div>
+      <div id="modelPanel" class="inspector-body">
+        <label class="search-wrap">
+          <span aria-hidden="true">⌕</span>
+          <input id="partSearch" type="search" placeholder="함포, 선체, 코드 검색" autocomplete="off" />
+        </label>
+        <div id="categoryBar" class="category-bar" aria-label="파트 분류"></div>
+        <div class="selection-card" id="selectionCard">
+          <span>선택한 파트</span>
+          <strong id="selectionName">선택 없음</strong>
+          <div class="selection-actions">
+            <button id="moveButton" class="mini active" title="이동 도구 (G)">이동 G</button>
+            <button id="rotateButton" class="mini" title="회전 도구 (R)">회전 R</button>
+            <button id="isolateButton" class="mini">단독 보기</button>
+            <button id="hideButton" class="mini danger" title="선택 파트 숨김 (Delete)">숨김 Del</button>
+            <button id="turnLeftButton" class="mini">좌 선회 15°</button>
+            <button id="turnRightButton" class="mini">우 선회 15°</button>
+            <button id="resetPartButton" class="mini">원위치</button>
+          </div>
+          <section id="weaponPanel" class="weapon-control" hidden>
+            <div class="weapon-control-head">
+              <strong>무장 축 제어</strong>
+              <span id="weaponPivotStatus">파트 중심축</span>
+            </div>
+            <label>
+              <span>선회각 <output id="weaponTraverseValue" for="weaponTraverse">0°</output></span>
+              <input id="weaponTraverse" type="range" min="-180" max="180" step="1" value="0" />
+            </label>
+            <label>
+              <span>포신 앙각 <output id="barrelElevationValue" for="barrelElevation">0°</output></span>
+              <input id="barrelElevation" type="range" min="-15" max="60" step="1" value="0" />
+            </label>
+            <p id="barrelDetectionStatus">포신 형상을 분석하면 앙각을 조절할 수 있어요.</p>
+          </section>
+          <p class="shortcut-hint">Ctrl+Z 취소 · Ctrl+Y 복원 · G 이동 · R 회전 · B 배경 · Home 전체 보기 · Esc 선택 해제</p>
+          <p class="shortcut-hint">뷰어 편집은 미리보기 전용이며 원본 OBJ에는 저장되지 않아요.</p>
+        </div>
+        <label class="opacity-control compact">모델 불투명도 <input id="modelOpacity" type="range" min="5" max="100" value="100" /></label>
+        <div id="partList" class="part-list" role="listbox" aria-label="함선 오브젝트"></div>
+      </div>
+      <div id="armorPanel" class="armor-panel" hidden>
+        <section>
+          <div class="filter-title"><strong>장갑 두께</strong><button id="allThickness" class="filter-reset">전체</button></div>
+          <div id="thicknessFilters" class="armor-filters"></div>
+        </section>
+        <section>
+          <div class="filter-title"><strong>장갑 구역</strong><button id="allZones" class="filter-reset">전체</button></div>
+          <div id="zoneFilters" class="armor-filters zones"></div>
+        </section>
+        <section class="analysis-tools">
+          <div class="filter-title"><strong>단면 분석</strong><button id="clipReset" class="filter-reset">끄기</button></div>
+          <div class="clip-axis"><button data-clip-axis="x">가로</button><button data-clip-axis="y">높이</button><button data-clip-axis="z">세로</button></div>
+          <input id="clipPosition" type="range" min="-100" max="100" value="0" />
+        </section>
+        <label class="opacity-control">장갑 불투명도 <input id="armorOpacity" type="range" min="20" max="100" value="82" /></label>
+        <div id="armorHoverInfo" class="armor-hover-info"><span>표면을 가리키면 두께·구역·입사각을 계산해요.</span></div>
+        <p id="armorSummary" class="armor-summary">장갑 데이터가 없어요.</p>
+      </div>
+      </div>
+      <footer class="inspector-foot">
+        <p><b>왼쪽 드래그</b> 회전</p>
+        <p><b>오른쪽 드래그</b> 이동</p>
+        <p><b>휠</b> 확대·축소</p>
+      </footer>
+    </aside>
+  </main>
+  <script src="./i18n.js?v=5.0.30"></script>
+  <script src="./diagnostics.js?v=5.0.30"></script>
+  <script type="module" src="./viewer.js?v=5.0.30"></script>
+  <script type="module" src="./viewer-advanced.js?v=5.0.30"></script>
+</body>
+</html>
+

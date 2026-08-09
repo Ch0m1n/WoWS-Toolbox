@@ -1,0 +1,400 @@
+{
+  "schema": "wows-legends-ticonderoga-1990-resource-profile/v1",
+  "profile_id": "ticonderoga_1990_verified_profile",
+  "status": "verified-profile-specific",
+  "generic_ship_complete": false,
+  "tested_game_version": "8.6.0",
+  "tested_build_directory": "722375",
+  "selection": {
+    "lod_index": 0,
+    "damage_variants": false,
+    "visibility_profile_default": "harbor_dock"
+  },
+  "safety": {
+    "game_directory_access": "read-only",
+    "output_must_be_outside_game_directory": true,
+    "overwrite_default": false,
+    "execute_opt_in": true
+  },
+  "expected_counts": {
+    "system_sidecars": 4,
+    "lod0_geometry": 20,
+    "declared_textures": 52,
+    "total": 76
+  },
+  "resources": [
+    {
+      "kind": "system_sidecar",
+      "path": "content/assets.bin",
+      "index_hint": "system_data.idx"
+    },
+    {
+      "kind": "system_sidecar",
+      "path": "content/GameParams.data",
+      "index_hint": "system_data.idx"
+    },
+    {
+      "kind": "system_sidecar",
+      "path": "content/prototypes.index.data",
+      "index_hint": "system_data.idx"
+    },
+    {
+      "kind": "system_sidecar",
+      "path": "content/prototypes.data",
+      "index_hint": "system_data.idx"
+    },
+    {
+      "kind": "geometry",
+      "category": "combat",
+      "model_path": "content/gameplay/usa/gun/aaircraft/AGA2021_Mk15_Phalanx/AGA2021_Mk15_Phalanx.model",
+      "path": "content/gameplay/usa/gun/aaircraft/AGA2021_Mk15_Phalanx/AGA2021_Mk15_Phalanx.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "combat",
+      "model_path": "content/gameplay/usa/gun/main/AGM2028_VLS/AGM2028_VLS.model",
+      "path": "content/gameplay/usa/gun/main/AGM2028_VLS/AGM2028_VLS.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "combat",
+      "model_path": "content/gameplay/usa/gun/rocketlauncher/AGR2016_Mk141_Launcher/AGR2016_Mk141_Launcher.model",
+      "path": "content/gameplay/usa/gun/rocketlauncher/AGR2016_Mk141_Launcher/AGR2016_Mk141_Launcher.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "combat",
+      "model_path": "content/gameplay/usa/gun/secondary/AGS2026_5in54_Mk_45/AGS2026_5in54_Mk_45.model",
+      "path": "content/gameplay/usa/gun/secondary/AGS2026_5in54_Mk_45/AGS2026_5in54_Mk_45.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "misc",
+      "model_path": "content/gameplay/usa/misc/AM389/AM389.model",
+      "path": "content/gameplay/usa/misc/AM389/AM389.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "misc",
+      "model_path": "content/gameplay/usa/misc/AM5029/AM5029.model",
+      "path": "content/gameplay/usa/misc/AM5029/AM5029.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "misc",
+      "model_path": "content/gameplay/usa/misc/AM5031/AM5031.model",
+      "path": "content/gameplay/usa/misc/AM5031/AM5031.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "misc",
+      "model_path": "content/gameplay/usa/misc/AM5042/AM5042.model",
+      "path": "content/gameplay/usa/misc/AM5042/AM5042.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "misc",
+      "model_path": "content/gameplay/usa/misc/AM5045/AM5045.model",
+      "path": "content/gameplay/usa/misc/AM5045/AM5045.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "misc",
+      "model_path": "content/gameplay/usa/misc/AM5048/AM5048.model",
+      "path": "content/gameplay/usa/misc/AM5048/AM5048.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "misc",
+      "model_path": "content/gameplay/usa/misc/AM5049/AM5049.model",
+      "path": "content/gameplay/usa/misc/AM5049/AM5049.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "misc",
+      "model_path": "content/gameplay/usa/misc/AM5058/AM5058.model",
+      "path": "content/gameplay/usa/misc/AM5058/AM5058.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "combat",
+      "model_path": "content/gameplay/usa/radar/search/ARS2007_ANSLQ_32/ARS2007_ANSLQ_32.model",
+      "path": "content/gameplay/usa/radar/search/ARS2007_ANSLQ_32/ARS2007_ANSLQ_32.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "combat",
+      "model_path": "content/gameplay/usa/radar/search/ARS2008_ANSPG_62/ARS2008_ANSPG_62.model",
+      "path": "content/gameplay/usa/radar/search/ARS2008_ANSPG_62/ARS2008_ANSPG_62.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "combat",
+      "model_path": "content/gameplay/usa/radar/search/ARS2009_ANSPS_55/ARS2009_ANSPS_55.model",
+      "path": "content/gameplay/usa/radar/search/ARS2009_ANSPS_55/ARS2009_ANSPS_55.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "combat",
+      "model_path": "content/gameplay/usa/radar/search/ARS2012_ANSPS_49/ARS2012_ANSPS_49.model",
+      "path": "content/gameplay/usa/radar/search/ARS2012_ANSPS_49/ARS2012_ANSPS_49.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "hull",
+      "model_path": "content/gameplay/usa/ship/cruiser/ASC307_Ticonderoga_1990/ASC307_Ticonderoga_1990_Bow.model",
+      "path": "content/gameplay/usa/ship/cruiser/ASC307_Ticonderoga_1990/ASC307_Ticonderoga_1990_Bow.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "hull",
+      "model_path": "content/gameplay/usa/ship/cruiser/ASC307_Ticonderoga_1990/ASC307_Ticonderoga_1990_MidBack.model",
+      "path": "content/gameplay/usa/ship/cruiser/ASC307_Ticonderoga_1990/ASC307_Ticonderoga_1990_MidBack.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "hull",
+      "model_path": "content/gameplay/usa/ship/cruiser/ASC307_Ticonderoga_1990/ASC307_Ticonderoga_1990_MidFront.model",
+      "path": "content/gameplay/usa/ship/cruiser/ASC307_Ticonderoga_1990/ASC307_Ticonderoga_1990_MidFront.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "geometry",
+      "category": "hull",
+      "model_path": "content/gameplay/usa/ship/cruiser/ASC307_Ticonderoga_1990/ASC307_Ticonderoga_1990_Stern.model",
+      "path": "content/gameplay/usa/ship/cruiser/ASC307_Ticonderoga_1990/ASC307_Ticonderoga_1990_Stern.geometry",
+      "lod_index": 0
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/common/textures/American_wiresatlas_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/common/textures/C004_Grid_1_alpha_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/common/textures/default_ao.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/common/textures/default_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/common/textures/default_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/common/textures/ship_atlas_detail.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/common/textures/transparent_glass_alpha_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/gun/aaircraft/textures/AGA2021_Mk15_Phalanx_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/gun/aaircraft/textures/AGA2021_Mk15_Phalanx_ao.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/gun/aaircraft/textures/AGA2021_Mk15_Phalanx_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/gun/aaircraft/textures/AGA2021_Mk15_Phalanx_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/gun/main/textures/AGM2015_5in54_Mk_45_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/gun/main/textures/AGM2015_5in54_Mk_45_ao.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/gun/main/textures/AGM2015_5in54_Mk_45_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/gun/main/textures/AGM2015_5in54_Mk_45_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/gun/rocketlauncher/textures/AGR2016_Mk141_Launcher_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/gun/rocketlauncher/textures/AGR2016_Mk141_Launcher_ao.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/gun/rocketlauncher/textures/AGR2016_Mk141_Launcher_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/gun/rocketlauncher/textures/AGR2016_Mk141_Launcher_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/misc/textures/AM389_Whaleboat_26ft_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/misc/textures/AM389_Whaleboat_26ft_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/misc/textures/AM389_Whaleboat_26ft_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/misc/textures/AM5029_26_Personnel_Boat_Mk_2_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/misc/textures/AM5029_26_Personnel_Boat_Mk_2_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/misc/textures/AM5029_26_Personnel_Boat_Mk_2_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/misc/textures/AM5031_Mark_36_SRBOC_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/misc/textures/AM5031_Mark_36_SRBOC_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/misc/textures/AM5031_Mark_36_SRBOC_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/misc/textures/AM5040_OE_82_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/misc/textures/AM5040_OE_82_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/misc/textures/AM5040_OE_82_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2007_ANSLQ_32_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2007_ANSLQ_32_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2007_ANSLQ_32_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2008_ANSPG_62_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2008_ANSPG_62_ao.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2008_ANSPG_62_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2008_ANSPG_62_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2009_ANSPS_55_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2009_ANSPS_55_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2009_ANSPS_55_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2012_ANSPS_49_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2012_ANSPS_49_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/radar/search/textures/ARS2012_ANSPS_49_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/ship/cruiser/textures/ASC307_Ticonderoga_1990_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/ship/cruiser/textures/ASC307_Ticonderoga_1990_ao.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/ship/cruiser/textures/ASC307_Ticonderoga_1990_DeckHouse_a.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/ship/cruiser/textures/ASC307_Ticonderoga_1990_DeckHouse_ao.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/ship/cruiser/textures/ASC307_Ticonderoga_1990_DeckHouse_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/ship/cruiser/textures/ASC307_Ticonderoga_1990_DeckHouse_n.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/ship/cruiser/textures/ASC307_Ticonderoga_1990_mg.dds"
+    },
+    {
+      "kind": "texture",
+      "path": "content/gameplay/usa/ship/cruiser/textures/ASC307_Ticonderoga_1990_n.dds"
+    }
+  ],
+  "limitations": [
+    "This is a verified Ticonderoga 1990 profile, not a generic complete-ship exporter.",
+    "ANCA streamed keyframes and standalone .anim are not fully decoded.",
+    "Generated mappings, extracted assets, GLBs, and Blender files are user-local outputs and are not bundled."
+  ]
+}
