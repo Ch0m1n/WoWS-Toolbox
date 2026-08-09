@@ -67,6 +67,7 @@ Add-Type -AssemblyName PresentationFramework
 Add-Type -AssemblyName WindowsBase
 Add-Type -AssemblyName System.Xaml
 Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Net.Http
 
 if (-not ('WoWSToolboxV5.GuiProcessRunner' -as [type])) {
     $runnerSource = @"
@@ -322,6 +323,8 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$script:AppVersion = '5.0.31'
+$script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
     throw "Localization module is missing: $localizationScript"
@@ -360,6 +363,7 @@ else {
     Join-Path $env:LOCALAPPDATA 'WoWSToolbox'
 }
 $script:CatalogRoot = Join-Path $script:StateRoot 'Catalog'
+$script:UpdateRoot = Join-Path $script:StateRoot 'Updates'
 $script:SettingsPath = Join-Path $script:StateRoot 'settings.json'
 [IO.Directory]::CreateDirectory($script:CatalogRoot) | Out-Null
 
@@ -412,6 +416,79 @@ function Write-JsonAtomic {
     Write-TextAtomic -Path $Path -Text $json
 }
 
+function ConvertTo-WoWSToolboxVersion {
+    param([Parameter(Mandatory)] [string] $Value)
+    $normalized = $Value.Trim().TrimStart([char[]] @('v', 'V'))
+    $normalized = ($normalized -split '[-+]', 2)[0]
+    $parsed = $null
+    if (-not [Version]::TryParse($normalized, [ref] $parsed)) {
+        throw "지원하지 않는 버전 형식이에요: $Value"
+    }
+    return $parsed
+}
+
+function ConvertFrom-WoWSToolboxReleaseJson {
+    param(
+        [Parameter(Mandatory)] [string] $Json,
+        [Parameter(Mandatory)] [string] $CurrentVersion
+    )
+    $release = $Json | ConvertFrom-Json -ErrorAction Stop
+    if ([bool] $release.draft -or [bool] $release.prerelease) {
+        throw '정식 GitHub 릴리스가 아니에요.'
+    }
+    $current = ConvertTo-WoWSToolboxVersion $CurrentVersion
+    $latest = ConvertTo-WoWSToolboxVersion ([string] $release.tag_name)
+    if ($latest -le $current) {
+        return [pscustomobject] @{
+            UpdateAvailable = $false
+            CurrentVersion = $current.ToString()
+            Version = $latest.ToString()
+            TagName = [string] $release.tag_name
+        }
+    }
+
+    $versionText = $latest.ToString()
+    $installerName = "WoWS-Toolbox-Setup-$versionText.exe"
+    $asset = @($release.assets | Where-Object {
+        [string] $_.name -ceq $installerName
+    } | Select-Object -First 1)
+    if ($asset.Count -eq 0) { $asset = $null } else { $asset = $asset[0] }
+    $installerUrl = if ($null -eq $asset) { '' } else { [string] $asset.browser_download_url }
+    $digest = if ($null -eq $asset -or $null -eq $asset.PSObject.Properties['digest']) {
+        ''
+    }
+    else { [string] $asset.digest }
+    $sha256 = if ($digest -match '(?i)^sha256:([0-9a-f]{64})$') {
+        $Matches[1].ToUpperInvariant()
+    }
+    else { '' }
+    $installerUri = $null
+    $safeInstallerUrl = [Uri]::TryCreate(
+        $installerUrl, [UriKind]::Absolute, [ref] $installerUri
+    ) -and $installerUri.Scheme -eq 'https' -and
+        $installerUri.Host -eq 'github.com'
+    $releaseUrl = [string] $release.html_url
+    $releaseUri = $null
+    $safeReleaseUrl = [Uri]::TryCreate(
+        $releaseUrl, [UriKind]::Absolute, [ref] $releaseUri
+    ) -and $releaseUri.Scheme -eq 'https' -and
+        $releaseUri.Host -eq 'github.com'
+
+    return [pscustomobject] @{
+        UpdateAvailable = $true
+        CurrentVersion = $current.ToString()
+        Version = $versionText
+        TagName = [string] $release.tag_name
+        Name = [string] $release.name
+        ReleaseUrl = if ($safeReleaseUrl) { $releaseUrl } else { '' }
+        InstallerUrl = if ($safeInstallerUrl) { $installerUrl } else { '' }
+        InstallerName = $installerName
+        Sha256 = $sha256
+        Installable = $null -ne $asset -and $safeInstallerUrl -and
+            -not [string]::IsNullOrWhiteSpace($sha256)
+    }
+}
+
 $documents = [Environment]::GetFolderPath(
     [Environment+SpecialFolder]::MyDocuments
 )
@@ -441,6 +518,7 @@ $defaultSettings = [ordered] @{
     TextureMaxSize = '0'
     Lod = '0'
     NotifyComplete = 'true'
+    AutoCheckUpdates = 'true'
 }
 $script:Settings = [ordered] @{}
 $script:SettingsRecoveryNotice = ''
@@ -802,7 +880,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.30"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.31"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1118,6 +1196,25 @@ $xaml = @'
                                 </ComboBox>
                             </Grid>
                         </Border>
+                        <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="업데이트" FontSize="16" FontWeight="SemiBold"/>
+                                    <TextBlock Text="시작할 때 새 GitHub 릴리스를 자동으로 확인해요."
+                                               Foreground="#8195AF" FontSize="11" Margin="0,6,0,0"/>
+                                </StackPanel>
+                                <CheckBox Grid.Column="1" x:Name="AutoUpdateCheck"
+                                          Content="시작할 때 자동 확인" VerticalAlignment="Center"
+                                          Margin="18,0,14,0"/>
+                                <Button Grid.Column="2" x:Name="CheckUpdateButton" Content="지금 확인"
+                                        Style="{StaticResource QuietButton}" VerticalAlignment="Center"/>
+                            </Grid>
+                        </Border>
                         <Border Style="{StaticResource CardBorder}">
                             <StackPanel>
                                 <TextBlock Text="게임 설치 폴더" FontSize="16"
@@ -1225,7 +1322,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.30 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.31 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -1289,6 +1386,7 @@ $controlNames = @(
     'BrowseOutputButton', 'ProgressStage', 'ProgressMessage',
     'MainProgress', 'InspectButton', 'PauseButton', 'CancelButton', 'ExtractButton',
     'FormatCombo', 'TextureCombo', 'LodCombo', 'LanguageCombo',
+    'AutoUpdateCheck', 'CheckUpdateButton',
     'LogBox', 'ModelWebView', 'ViewerPathLabel', 'ViewerStatus',
     'OpenModelButton', 'OpenRecentModelButton', 'OpenCompareModelButton', 'OpenViewerFolderButton',
     'LegendsPathBox', 'PcPathBox', 'KorabliPathBox',
@@ -1308,6 +1406,8 @@ foreach ($name in $controlNames) {
 if ($SelfTest) {
     $sourceCombo = $window.FindName('SourceCombo')
     [void] $sourceCombo.ApplyTemplate()
+    $updateFixtureJson = '{"tag_name":"v5.0.31","name":"WoWS Toolbox 5.0.31","draft":false,"prerelease":false,"html_url":"https://github.com/Ch0m1n/WoWS-Toolbox/releases/tag/v5.0.31","assets":[{"name":"WoWS-Toolbox-Setup-5.0.31.exe","browser_download_url":"https://github.com/Ch0m1n/WoWS-Toolbox/releases/download/v5.0.31/WoWS-Toolbox-Setup-5.0.31.exe","digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}]}'
+    $updateFixture = ConvertFrom-WoWSToolboxReleaseJson -CurrentVersion '5.0.30' -Json $updateFixtureJson
     [pscustomobject] @{
         ok = $true
         language = $script:WoWSToolboxLanguage
@@ -1318,6 +1418,11 @@ if ($SelfTest) {
         hull_only_control_present = $null -ne $window.FindName('HullOnly')
         thumbnail_control_present = $null -ne $window.FindName('ShipThumbnail')
         viewer_control_present = $null -ne $window.FindName('ModelWebView')
+        update_controls_present = $null -ne $window.FindName('AutoUpdateCheck') -and
+            $null -ne $window.FindName('CheckUpdateButton')
+        auto_update_default = [string] $script:Settings.AutoCheckUpdates
+        update_release_parser_ok = $updateFixture.UpdateAvailable -and
+            $updateFixture.Installable -and $updateFixture.Version -eq '5.0.31'
         queue_controls_present =
             $null -ne $window.FindName('QueueList') -and
             $null -ne $window.FindName('RemoveQueueButton') -and
@@ -1364,6 +1469,16 @@ $script:BatchCurrentItem = $null
 $script:ActiveRunner = $null
 $script:ActiveOperation = ''
 $script:ActiveCompletion = $null
+$script:UpdateHttpClient = $null
+$script:UpdateCheckTask = $null
+$script:UpdateCheckManual = $false
+$script:UpdateCheckStarted = $false
+$script:UpdateDownloadClient = $null
+$script:UpdateDownloadTask = $null
+$script:PendingUpdate = $null
+$script:UpdateDownloadTempPath = ''
+$script:UpdateDownloadFinalPath = ''
+$script:UpdateInstallerStarted = $false
 $script:PendingPicker = $false
 $script:LastResult = $null
 $script:LastOutputDir = ''
@@ -1605,6 +1720,268 @@ function Add-Log {
     }
     $controls.LogBox.AppendText($line + [Environment]::NewLine)
     $controls.LogBox.ScrollToEnd()
+}
+
+function New-UpdateHttpClient {
+    if ($null -eq $script:UpdateHttpClient) {
+        $client = [Net.Http.HttpClient]::new()
+        $client.Timeout = [TimeSpan]::FromSeconds(25)
+        $client.DefaultRequestHeaders.UserAgent.ParseAdd(
+            "WoWS-Toolbox/$($script:AppVersion)"
+        )
+        $client.DefaultRequestHeaders.Accept.ParseAdd(
+            'application/vnd.github+json'
+        )
+        [void] $client.DefaultRequestHeaders.TryAddWithoutValidation(
+            'X-GitHub-Api-Version', '2022-11-28'
+        )
+        $script:UpdateHttpClient = $client
+    }
+    return $script:UpdateHttpClient
+}
+
+function Show-UpdateMessage {
+    param(
+        [Parameter(Mandatory)] [string] $Korean,
+        [Parameter(Mandatory)] [string] $English,
+        [Windows.MessageBoxImage] $Image = [Windows.MessageBoxImage]::Information
+    )
+    [Windows.MessageBox]::Show(
+        $window,
+        (Get-UiText $Korean $English),
+        (Get-UiText 'WoWS Toolbox 업데이트' 'WoWS Toolbox Update'),
+        [Windows.MessageBoxButton]::OK,
+        $Image
+    ) | Out-Null
+}
+
+function Start-UpdateCheck {
+    param([switch] $Manual)
+    if ($automatedMode) { return }
+    if ($null -ne $script:UpdateCheckTask -or
+        $null -ne $script:UpdateDownloadTask) {
+        if ($Manual) {
+            Show-UpdateMessage '이미 업데이트를 확인하거나 받고 있어요.' `
+                'An update check or download is already in progress.'
+        }
+        return
+    }
+    if (-not $Manual -and
+        [string] $script:Settings.AutoCheckUpdates -ne 'true') { return }
+    try {
+        $script:UpdateCheckStarted = $true
+        $script:UpdateCheckManual = [bool] $Manual
+        $controls.CheckUpdateButton.IsEnabled = $false
+        $client = New-UpdateHttpClient
+        $script:UpdateCheckTask = $client.GetStringAsync($script:UpdateApiUrl)
+        Add-Log (Get-UiText 'GitHub에서 새 버전을 확인하는 중이에요.' 'Checking GitHub for updates.')
+    }
+    catch {
+        $script:UpdateCheckTask = $null
+        $controls.CheckUpdateButton.IsEnabled = $true
+        if ($Manual) {
+            Show-UpdateMessage "업데이트 확인을 시작하지 못했어요.`n`n$($_.Exception.Message)" `
+                "Could not start the update check.`n`n$($_.Exception.Message)" `
+                -Image ([Windows.MessageBoxImage]::Warning)
+        }
+        else {
+            Add-Log (Get-UiText "업데이트 확인 시작 실패: $($_.Exception.Message)" "Could not start the update check: $($_.Exception.Message)") -ErrorLine
+        }
+    }
+}
+
+function Remove-UpdateDownloadTempFile {
+    if (-not [string]::IsNullOrWhiteSpace($script:UpdateDownloadTempPath) -and
+        (Test-Path -LiteralPath $script:UpdateDownloadTempPath -PathType Leaf)) {
+        Remove-Item -LiteralPath $script:UpdateDownloadTempPath -Force `
+            -ErrorAction SilentlyContinue
+    }
+}
+
+function Start-VerifiedUpdateInstaller {
+    param(
+        [Parameter(Mandatory)] $Update,
+        [Parameter(Mandatory)] [string] $InstallerPath
+    )
+    $actualHash = (Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256).Hash
+    if (-not [StringComparer]::OrdinalIgnoreCase.Equals(
+        $actualHash, [string] $Update.Sha256
+    )) {
+        throw '다운로드한 설치 파일의 SHA-256이 GitHub 릴리스와 일치하지 않아요.'
+    }
+    Add-Log (Get-UiText `
+        "WoWS Toolbox $($Update.Version) 설치 파일 검증 완료. 설치 프로그램을 열어요." `
+        "WoWS Toolbox $($Update.Version) installer verified. Opening setup.")
+    Start-Process -FilePath $InstallerPath `
+        -WorkingDirectory ([IO.Path]::GetDirectoryName($InstallerPath))
+    $script:UpdateInstallerStarted = $true
+    $window.Close()
+}
+
+function Start-UpdateDownload {
+    param([Parameter(Mandatory)] $Update)
+    if (-not [bool] $Update.Installable) {
+        throw '검증 가능한 GitHub 설치 파일이 없어요.'
+    }
+    if ($script:BatchActive -or $null -ne $script:ActiveRunner) {
+        Show-UpdateMessage `
+            '현재 작업을 마친 뒤 다시 업데이트해 주세요.' `
+            'Finish the current task before updating.' `
+            -Image ([Windows.MessageBoxImage]::Warning)
+        return
+    }
+    $versionRoot = Join-Path $script:UpdateRoot ([string] $Update.Version)
+    [IO.Directory]::CreateDirectory($versionRoot) | Out-Null
+    $finalPath = Join-Path $versionRoot ([string] $Update.InstallerName)
+    $tempPath = "$finalPath.download"
+    if (Test-Path -LiteralPath $finalPath -PathType Leaf) {
+        try {
+            Start-VerifiedUpdateInstaller -Update $Update -InstallerPath $finalPath
+            return
+        }
+        catch {
+            Remove-Item -LiteralPath $finalPath -Force -ErrorAction SilentlyContinue
+            if ($script:UpdateInstallerStarted) { throw }
+        }
+    }
+    if (Test-Path -LiteralPath $tempPath -PathType Leaf) {
+        Remove-Item -LiteralPath $tempPath -Force
+    }
+    $client = [Net.WebClient]::new()
+    $client.Headers[[Net.HttpRequestHeader]::UserAgent] =
+        "WoWS-Toolbox/$($script:AppVersion)"
+    $script:PendingUpdate = $Update
+    $script:UpdateDownloadClient = $client
+    $script:UpdateDownloadTempPath = $tempPath
+    $script:UpdateDownloadFinalPath = $finalPath
+    $script:UpdateDownloadTask = $client.DownloadFileTaskAsync(
+        [Uri]::new([string] $Update.InstallerUrl), $tempPath
+    )
+    $controls.CheckUpdateButton.IsEnabled = $false
+    Set-TopStatus (Get-UiText '업데이트 받는 중' 'Downloading update') '#60A5FA'
+    Add-Log (Get-UiText `
+        "WoWS Toolbox $($Update.Version) 설치 파일을 받고 있어요." `
+        "Downloading the WoWS Toolbox $($Update.Version) installer.")
+}
+
+function Complete-UpdateWork {
+    if ($null -ne $script:UpdateCheckTask -and
+        $script:UpdateCheckTask.IsCompleted) {
+        $task = $script:UpdateCheckTask
+        $manual = $script:UpdateCheckManual
+        $script:UpdateCheckTask = $null
+        $script:UpdateCheckManual = $false
+        $controls.CheckUpdateButton.IsEnabled = $true
+        try {
+            if ($task.IsCanceled) { throw '업데이트 확인이 취소됐어요.' }
+            if ($task.IsFaulted) { throw $task.Exception.GetBaseException() }
+            $json = $task.GetAwaiter().GetResult()
+            $update = ConvertFrom-WoWSToolboxReleaseJson `
+                -Json $json -CurrentVersion $script:AppVersion
+            if (-not $update.UpdateAvailable) {
+                Add-Log (Get-UiText `
+                    "최신 버전 $($script:AppVersion)을 사용 중이에요." `
+                    "WoWS Toolbox $($script:AppVersion) is up to date.")
+                if ($manual) {
+                    Show-UpdateMessage `
+                        "최신 버전 $($script:AppVersion)을 사용 중이에요." `
+                        "WoWS Toolbox $($script:AppVersion) is up to date."
+                }
+                return
+            }
+            Add-Log (Get-UiText `
+                "새 버전 $($update.Version)을 찾았어요." `
+                "WoWS Toolbox $($update.Version) is available.")
+            if (-not $update.Installable) {
+                $messageKo = "새 버전 $($update.Version)을 찾았지만 검증 가능한 설치 파일이 없어요. 릴리스 페이지를 열까요?"
+                $messageEn = "WoWS Toolbox $($update.Version) is available, but no verifiable installer was found. Open the release page?"
+                $answer = [Windows.MessageBox]::Show(
+                    $window, (Get-UiText $messageKo $messageEn),
+                    (Get-UiText '업데이트 확인' 'Update available'),
+                    [Windows.MessageBoxButton]::YesNo,
+                    [Windows.MessageBoxImage]::Warning
+                )
+                if ($answer -eq [Windows.MessageBoxResult]::Yes -and
+                    -not [string]::IsNullOrWhiteSpace([string] $update.ReleaseUrl)) {
+                    Start-Process ([string] $update.ReleaseUrl)
+                }
+                return
+            }
+            $questionKo = "WoWS Toolbox $($update.Version) 업데이트가 확인됐어요.`n지금 업데이트할까요?"
+            $questionEn = "WoWS Toolbox $($update.Version) is available.`nUpdate now?"
+            $answer = [Windows.MessageBox]::Show(
+                $window, (Get-UiText $questionKo $questionEn),
+                (Get-UiText '업데이트 확인' 'Update available'),
+                [Windows.MessageBoxButton]::YesNo,
+                [Windows.MessageBoxImage]::Question
+            )
+            if ($answer -eq [Windows.MessageBoxResult]::Yes) {
+                Start-UpdateDownload $update
+            }
+        }
+        catch {
+            $message = $_.Exception.Message
+            if ($manual) {
+                Show-UpdateMessage "업데이트를 확인하지 못했어요.`n`n$message" `
+                    "Could not check for updates.`n`n$message" `
+                    -Image ([Windows.MessageBoxImage]::Warning)
+            }
+            else {
+                Add-Log (Get-UiText "업데이트 자동 확인 실패: $message" "Automatic update check failed: $message") -ErrorLine
+            }
+        }
+    }
+
+    if ($null -ne $script:UpdateDownloadTask -and
+        $script:UpdateDownloadTask.IsCompleted) {
+        $task = $script:UpdateDownloadTask
+        $update = $script:PendingUpdate
+        $client = $script:UpdateDownloadClient
+        $tempPath = $script:UpdateDownloadTempPath
+        $finalPath = $script:UpdateDownloadFinalPath
+        $script:UpdateDownloadTask = $null
+        $script:UpdateDownloadClient = $null
+        $script:PendingUpdate = $null
+        $controls.CheckUpdateButton.IsEnabled = $true
+        try {
+            if ($task.IsCanceled) { throw '업데이트 다운로드가 취소됐어요.' }
+            if ($task.IsFaulted) { throw $task.Exception.GetBaseException() }
+            $actualHash = (Get-FileHash -LiteralPath $tempPath -Algorithm SHA256).Hash
+            if (-not [StringComparer]::OrdinalIgnoreCase.Equals(
+                $actualHash, [string] $update.Sha256
+            )) {
+                throw '다운로드한 설치 파일의 SHA-256이 GitHub 릴리스와 일치하지 않아요.'
+            }
+            Move-Item -LiteralPath $tempPath -Destination $finalPath -Force
+            Start-VerifiedUpdateInstaller -Update $update -InstallerPath $finalPath
+        }
+        catch {
+            Remove-UpdateDownloadTempFile
+            Set-TopStatus '오류' '#FB7185'
+            Show-UpdateMessage "업데이트를 설치하지 못했어요.`n`n$($_.Exception.Message)" `
+                "Could not install the update.`n`n$($_.Exception.Message)" `
+                -Image ([Windows.MessageBoxImage]::Error)
+            Add-Log (Get-UiText "업데이트 실패: $($_.Exception.Message)" "Update failed: $($_.Exception.Message)") -ErrorLine
+        }
+        finally {
+            if ($null -ne $client) { $client.Dispose() }
+            $script:UpdateDownloadTempPath = ''
+            $script:UpdateDownloadFinalPath = ''
+        }
+    }
+}
+
+function Stop-UpdateNetwork {
+    if ($null -ne $script:UpdateDownloadClient) {
+        try { $script:UpdateDownloadClient.CancelAsync() } catch {}
+        try { $script:UpdateDownloadClient.Dispose() } catch {}
+        $script:UpdateDownloadClient = $null
+    }
+    if ($null -ne $script:UpdateHttpClient) {
+        try { $script:UpdateHttpClient.Dispose() } catch {}
+        $script:UpdateHttpClient = $null
+    }
+    Remove-UpdateDownloadTempFile
 }
 
 function Update-OutputLabel {
@@ -2792,7 +3169,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.30&lang=' +
+            'https://viewer.local/index.html?app=5.0.31&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -3046,7 +3423,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.30&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.31&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }
@@ -3174,6 +3551,8 @@ function Sync-SettingsToUi {
     $controls.SettingsOutputBox.Text = [string] $script:Settings.OutputPath
     $controls.OodlePathBox.Text = [string] $script:Settings.OodlePath
     Select-ComboTag $controls.LanguageCombo ([string] $script:Settings.Language)
+    $controls.AutoUpdateCheck.IsChecked =
+        [string] $script:Settings.AutoCheckUpdates -eq 'true'
     Select-ComboTag $controls.FormatCombo ([string] $script:Settings.Formats)
     Select-ComboTag $controls.TextureCombo ([string] $script:Settings.TextureMaxSize)
     Select-ComboTag $controls.LodCombo ([string] $script:Settings.Lod)
@@ -3189,6 +3568,10 @@ function Sync-UiToSettings {
     $script:Settings.OutputPath = $controls.SettingsOutputBox.Text.Trim()
     $script:Settings.OodlePath = $controls.OodlePathBox.Text.Trim()
     $script:Settings.Language = Get-ComboTag $controls.LanguageCombo
+    $script:Settings.AutoCheckUpdates = if ($controls.AutoUpdateCheck.IsChecked -eq $true) {
+        'true'
+    }
+    else { 'false' }
     $script:Settings.Formats = Get-ComboTag $controls.FormatCombo
     $script:Settings.TextureMaxSize = Get-ComboTag $controls.TextureCombo
     $script:Settings.Lod = Get-ComboTag $controls.LodCombo
@@ -3692,7 +4075,7 @@ function New-DiagnosticsZip {
     $summary = [ordered] @{
         schema = 'wows-toolbox-diagnostics/v1'
         created = (Get-Date).ToString('o')
-        app_version = '5.0.30'
+        app_version = $script:AppVersion
         os = [Environment]::OSVersion.VersionString
         powershell = $PSVersionTable.PSVersion.ToString()
         games = [ordered] @{
@@ -3834,6 +4217,9 @@ $controls.PauseButton.Add_Click({
 $controls.FormatCombo.Add_SelectionChanged({ Sync-UiToSettings; Save-Settings })
 $controls.TextureCombo.Add_SelectionChanged({ Sync-UiToSettings; Save-Settings })
 $controls.LodCombo.Add_SelectionChanged({ Sync-UiToSettings; Save-Settings })
+$controls.AutoUpdateCheck.Add_Checked({ Sync-UiToSettings; Save-Settings })
+$controls.AutoUpdateCheck.Add_Unchecked({ Sync-UiToSettings; Save-Settings })
+$controls.CheckUpdateButton.Add_Click({ Start-UpdateCheck -Manual })
 $controls.AutoDetectButton.Add_Click({ Auto-DetectPaths })
 $controls.CacheRefreshButton.Add_Click({ Refresh-CacheStatus })
 $controls.OpenCacheButton.Add_Click({
@@ -3882,6 +4268,7 @@ $timer.Interval = [TimeSpan]::FromMilliseconds(120)
 $timer.Add_Tick({
     try {
         Update-DynamicUiLanguage
+        Complete-UpdateWork
         if ($script:ViewerInitializing -and
             -not $script:ViewerCoreConfigured -and
             $null -ne $script:ViewerInitTask -and
@@ -4111,7 +4498,11 @@ $window.Dispatcher.Add_UnhandledException({
     $eventArgs.Handled = $true
 })
 $window.Add_Closing({
-    if ($script:BatchActive -or $null -ne $script:ActiveRunner) {
+    $updateDownloadActive = $null -ne $script:UpdateDownloadTask
+    if (-not $script:UpdateInstallerStarted -and (
+        $script:BatchActive -or $null -ne $script:ActiveRunner -or
+        $updateDownloadActive
+    )) {
         $answer = [Windows.MessageBox]::Show(
             $window,
             (Get-UiText '작업이 실행 중이에요. 하위 프로세스를 종료하고 창을 닫을까요?' 'A task is running. Stop its child processes and close the window?'),
@@ -4123,8 +4514,11 @@ $window.Add_Closing({
             $_.Cancel = $true
             return
         }
-        $script:ActiveRunner.CancelTree()
+        if ($null -ne $script:ActiveRunner) {
+            $script:ActiveRunner.CancelTree()
+        }
     }
+    Stop-UpdateNetwork
     $timer.Stop()
     if ($null -ne $script:NotifyTimer) { $script:NotifyTimer.Stop() }
     if ($null -ne $script:NotifyIcon) {
@@ -4153,7 +4547,7 @@ if (Test-Path -LiteralPath $initialCatalog -PathType Leaf) {
 if (-not [string]::IsNullOrWhiteSpace($script:SettingsRecoveryNotice)) {
     Add-Log $script:SettingsRecoveryNotice -ErrorLine
 }
-Add-Log 'WoWS Toolbox 5.0.30 준비 완료. 설치본 선택·대기열 추출·모델/장갑 뷰어를 사용할 수 있어요.'
+Add-Log (Get-UiText "WoWS Toolbox $($script:AppVersion) 준비 완료. 설치본 선택·대기열 추출·모델/장갑 뷰어를 사용할 수 있어요." "WoWS Toolbox $($script:AppVersion) ready. Select an installation, extract queued ships, and use the model/armor viewer.")
 Switch-Page 'extract'
 if ($QueueSelfTest) {
     $dummyShip = [pscustomobject] @{
@@ -4367,6 +4761,12 @@ if ($SmokeTest) {
     $window.Close()
     return
 }
+$window.Add_ContentRendered({
+    if (-not $script:UpdateCheckStarted -and
+        [string] $script:Settings.AutoCheckUpdates -eq 'true') {
+        Start-UpdateCheck
+    }
+})
 try {
     [void] $window.ShowDialog()
 }

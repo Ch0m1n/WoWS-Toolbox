@@ -35,6 +35,7 @@ The selected game directory is treated as read-only. WoWS Toolbox writes caches 
 - Show or hide the grid, background, waterline, wireframe, and armor overlays
 - Compare two extracted models
 - Use Korean or English throughout the main UI, ship picker, viewer, and runtime logs
+- Check GitHub Releases at startup and ask before downloading any update
 - Run on Windows PowerShell 5.1 or PowerShell 7; PowerShell 7 is preferred when both are installed
 
 English is the default application language for a new installation. It can be changed under **Settings > Interface language**.
@@ -49,6 +50,8 @@ English is the default application language for a new installation. It can be ch
 6. Refresh the ship catalog, add one or more ships to the queue, run the readiness check, and start extraction.
 
 The installer upgrades an older WoWS Toolbox installation in place. User settings, caches, and exported models are stored separately and are preserved.
+
+Starting with 5.0.31, the app checks GitHub Releases in the background at startup. It asks before downloading, verifies the installer against the SHA-256 digest published by GitHub, then opens the normal interactive installer. Automatic checks can be disabled, and a manual **Check now** button is available under **Settings > Updates**.
 
 The application launcher and installer are currently unsigned. Windows SmartScreen or reputation-based antivirus products may warn about new builds. Release notes should always include a SHA-256 digest.
 
@@ -93,7 +96,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.30 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.31 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -156,6 +159,7 @@ WoWS Toolbox는 내 PC에 설치된 World of Warships 계열 게임에서 원하
 - 격자, 배경, 해수면, 와이어프레임과 장갑 오버레이 전환
 - 두 추출 모델 비교
 - 메인 UI, 함선 선택 창, 뷰어와 실행 로그의 한국어·영어 지원
+- 시작할 때 GitHub Releases를 확인하고 사용자 동의를 받은 뒤에만 업데이트
 - Windows PowerShell 5.1과 PowerShell 7 지원
 
 새 설치의 기본 언어는 영어예요. **Settings > Interface language**에서 한국어로 바꿀 수 있어요.
@@ -170,6 +174,8 @@ WoWS Toolbox는 내 PC에 설치된 World of Warships 계열 게임에서 원하
 6. 함선 목록을 새로고침하고 대기열에 함선을 추가한 뒤 준비 검사와 추출을 시작해요.
 
 설치기는 기존 WoWS Toolbox를 제자리에서 업데이트해요. 사용자 설정, 캐시와 기존 추출 모델은 그대로 유지돼요.
+
+5.0.31부터 프로그램을 열면 백그라운드에서 GitHub Releases를 확인해요. 새 버전이 있으면 먼저 업데이트 여부를 묻고, 동의한 경우에만 설치 파일을 받아 GitHub가 게시한 SHA-256과 비교한 뒤 일반 설치기를 열어요. **설정 > 업데이트**에서 자동 확인을 끄거나 **지금 확인**을 누를 수 있어요.
 
 현재 실행 파일과 설치기는 코드 서명이 없어요. Windows SmartScreen 또는 평판 기반 백신이 새 빌드에 경고를 표시할 수 있으므로 릴리스에 적힌 SHA-256 값을 확인하세요.
 
@@ -202,7 +208,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.30 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.31 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 

@@ -1,4 +1,4 @@
-WoWS Toolbox 5.0.30
+WoWS Toolbox 5.0.31
 =======================================
 
 [한국어 빠른 사용법]
@@ -7,6 +7,13 @@ WoWS Toolbox는 내 PC에 설치된 World of Warships 계열 게임에서 원하
 선택해 파트별 OBJ로 내보내고, 모델과 장갑을 내장 3D 뷰어에서 확인하는
 Windows용 비공식 커뮤니티 도구예요.
 
+
+
+[5.0.31 · GitHub update check]
+- 프로그램을 열면 GitHub Releases의 최신 정식 버전을 백그라운드에서 확인해요.
+- 새 버전이 있으면 먼저 업데이트할지 묻고, 동의한 경우에만 설치 파일을 받아요.
+- GitHub가 게시한 SHA-256과 받은 설치 파일이 일치할 때만 설치기를 실행해요.
+- 설정에서 시작 시 자동 확인을 끄거나 수동으로 확인할 수 있어요.
 [5.0.30 · English default and GitHub-ready source]
 - 새 설치와 포터블 배포본의 기본 언어를 영어로 바꾸고, 설치 언어 화면도 영어를 기본 선택으로 열어요. 기존 설치의 언어 선택은 업데이트 때 보존해요.
 - 영문 README, 기여·보안 정책, 이슈·PR 양식과 Windows CI를 추가해 GitHub에서 소스와 변경 이력을 관리할 수 있게 정리했어요.
@@ -107,6 +114,13 @@ OBJ models, and inspects models and armor in the built-in 3D viewer.
    turrets, elevate barrels, and inspect exact armor thickness, waterline, and
    section views.
 
+
+
+[5.0.31 · GitHub update check]
+- The app checks the latest stable GitHub Release in the background at startup.
+- It asks first and downloads the installer only after the user agrees.
+- Setup runs only after its SHA-256 matches the digest published by GitHub.
+- Automatic checks can be disabled, and Settings also provides a manual check.
 [5.0.30 · English default and GitHub-ready source]
 - English is now the default for new and portable installations, including the initial installer language selection. In-place updates preserve the user's existing language choice.
 - Adds an English project README, contribution and security policies, issue and pull-request templates, and Windows CI for public source management.

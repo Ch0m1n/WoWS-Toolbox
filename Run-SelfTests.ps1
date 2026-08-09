@@ -1,4 +1,4 @@
-﻿#requires -Version 7.0
+#requires -Version 7.0
 
 [CmdletBinding()]
 param([string] $Python = 'python')
@@ -22,6 +22,9 @@ Assert-ExitCode 'Main GUI self-test'
 if (-not $mainSelf.ok -or $mainSelf.language -ne 'en' -or $mainSelf.controls -lt 60 -or
     $mainSelf.hull_only_control_present -or $mainSelf.thumbnail_control_present -or
     -not $mainSelf.viewer_control_present -or
+    -not $mainSelf.update_controls_present -or
+    $mainSelf.auto_update_default -ne 'true' -or
+    -not $mainSelf.update_release_parser_ok -or
     -not $mainSelf.queue_controls_present -or
     $mainSelf.batch_extract_label -notin @('대기열 모델 추출', 'Extract queued models') -or
     -not $mainSelf.webview_runtime_present -or
@@ -61,7 +64,8 @@ Assert-ExitCode 'Windows PowerShell 5.1 GUI self-test'
 $legacySmoke = & $windowsPowerShell -STA -NoLogo -NoProfile -ExecutionPolicy Bypass -File $mainGui -SmokeTest |
     Select-Object -Last 1 | ConvertFrom-Json
 Assert-ExitCode 'Windows PowerShell 5.1 GUI smoke test'
-if (-not $legacySelf.ok -or -not $legacySmoke.ok -or
+if (-not $legacySelf.ok -or -not $legacySelf.update_release_parser_ok -or
+    -not $legacySelf.update_controls_present -or -not $legacySmoke.ok -or
     -not $legacySmoke.event_runtime) {
     throw 'Windows PowerShell 5.1 compatibility acceptance failed.'
 }
@@ -122,7 +126,7 @@ foreach ($marker in @(
     'LanguageCombo', 'Convert-XamlToUiLanguage', 'Get-WoWSToolboxLanguageMarker',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.30',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.31',
     'ConvertTo-ValidatedQueueEntries',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -134,7 +138,10 @@ foreach ($marker in @(
     'Add-Log "뷰어 오류: $viewerError" -ErrorLine',
     "SettingsSchema = '2'", "TextureMaxSize = '0'",
     'ModelWebView.Dispose()', 'function Write-JsonAtomic',
-    'Local\WoWSToolbox.Gui.v1', 'function Update-QualityControls'
+    'Local\WoWSToolbox.Gui.v1', 'function Update-QualityControls',
+    'AutoUpdateCheck', 'CheckUpdateButton', 'function Start-UpdateCheck',
+    'api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest',
+    'digest', 'Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256'
 )) {
     if (-not $guiText.Contains($marker)) { throw "Modern queue marker missing: $marker" }
 }
@@ -423,8 +430,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.30.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.30') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.31.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.31') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -552,8 +559,8 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.30 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.31 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.30 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.31 self-tests passed.'
 }

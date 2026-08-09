@@ -12,7 +12,7 @@ body:
     id: version
     attributes:
       label: WoWS Toolbox version
-      placeholder: 5.0.30
+      placeholder: 5.0.31
     validations:
       required: true
   - type: dropdown
