@@ -89,11 +89,21 @@ def validate_output_location(game_dir: Path, output_root: Path) -> tuple[Path, P
 
 def validate_output_child(output_root: Path, output_dir: Path) -> Path:
     """Resolve one extractor-owned child without following a junction outside it."""
-    root = output_root.resolve()
+    # Compare the requested layout before resolving filesystem aliases. On
+    # Windows, tempfile may return an 8.3 path (RUNNER~1) while Path.resolve()
+    # expands the same directory to its long name. Mixing those forms falsely
+    # rejects a legitimate immediate child on GitHub-hosted runners.
+    lexical_root = Path(os.path.abspath(output_root))
     requested = Path(os.path.abspath(output_dir))
-    expected = root / requested.name
-    if requested.parent != root:
+    if os.path.normcase(str(requested.parent)) != os.path.normcase(
+        str(lexical_root)
+    ):
         raise ValueError(f"출력 대상이 출력 루트의 바로 아래가 아니에요: {output_dir}")
+
+    # Resolve both paths only after the lexical boundary check. This second
+    # check still rejects a child junction/symlink that escapes output_root.
+    root = output_root.resolve()
+    expected = root / requested.name
     resolved = output_dir.resolve(strict=False)
     if resolved != expected or resolved.parent != root:
         raise ValueError(
