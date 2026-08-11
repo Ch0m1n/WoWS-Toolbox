@@ -6,6 +6,8 @@ param([string] $Python = 'python')
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 $env:PYTHONDONTWRITEBYTECODE = '1'
+$env:PYTHONUTF8 = '1'
+$env:PYTHONIOENCODING = 'utf-8'
 $pythonCommand = (Get-Command $Python -ErrorAction Stop).Source
 $pwshCommand = (Get-Command pwsh -ErrorAction Stop).Source
 $mainGui = Join-Path $PSScriptRoot 'GUI\WoWSToolboxGUI.ps1'
@@ -140,6 +142,7 @@ foreach ($marker in @(
     'ModelWebView.Dispose()', 'function Write-JsonAtomic',
     'Local\WoWSToolbox.Gui.v1', 'function Update-QualityControls',
     'AutoUpdateCheck', 'CheckUpdateButton', 'function Start-UpdateCheck',
+    'PYTHONIOENCODING',
     'api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest',
     'digest', 'Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256'
 )) {

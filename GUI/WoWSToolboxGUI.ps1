@@ -143,6 +143,7 @@ namespace WoWSToolboxV5
             };
             info.EnvironmentVariables["PYTHONDONTWRITEBYTECODE"] = "1";
             info.EnvironmentVariables["PYTHONUTF8"] = "1";
+            info.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
             info.Arguments = BuildArguments(arguments ?? new string[0]);
 
             _process = new Process { StartInfo = info };
