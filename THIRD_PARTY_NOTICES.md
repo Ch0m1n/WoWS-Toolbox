@@ -86,8 +86,8 @@ license text is reproduced by the package's root `LICENSE`.
 Packaged SHA-256 values:
 
 ```text
-8DE5121B9321D05F1E4AD709B7B116EB521671B0B9AB63CC614784B077E6A6F4  Backend/wowsunpack.exe
-8DE5121B9321D05F1E4AD709B7B116EB521671B0B9AB63CC614784B077E6A6F4  Backend/wowsunpack_armor.exe
+52C33F741F0E9109B8AA24F9AF6FCB0920690FCEEB353C0BB8F437FF07FABFE5  Backend/wowsunpack.exe
+52C33F741F0E9109B8AA24F9AF6FCB0920690FCEEB353C0BB8F437FF07FABFE5  Backend/wowsunpack_armor.exe
 ```
 
 The Oodle runtime itself is proprietary external software. It is not copied,
@@ -158,4 +158,4 @@ replays, animation data, names, and other game content remain assets of their
 respective rights holders. Users must supply files from their own installation
 and follow the game's terms and applicable law. This notice is not legal advice.
 
-CPython and Pillow are bundled under their licenses. PowerShell 5.1/7 is provided by Windows or the user. Blender is not required or invoked by WoWS Toolbox 5.0.34. The WebView2 bootstrapper is redistributed as described above; the WebView2 Runtime is supplied by Microsoft. Oodle runtimes are never redistributed and must come from the user's legally installed software.
+CPython and Pillow are bundled under their licenses. PowerShell 5.1/7 is provided by Windows or the user. Blender is not required or invoked by WoWS Toolbox 5.0.35. The WebView2 bootstrapper is redistributed as described above; the WebView2 Runtime is supplied by Microsoft. Oodle runtimes are never redistributed and must come from the user's legally installed software.

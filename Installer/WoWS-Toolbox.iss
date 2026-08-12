@@ -1,7 +1,7 @@
-#define MyAppName "WoWS Toolbox"
-#define MyAppVersion "5.0.34"
+﻿#define MyAppName "WoWS Toolbox"
+#define MyAppVersion "5.0.35"
 #define MyAppPublisher "WoWS Toolbox contributors"
-#define ReleaseRoot "..\..\..\outputs\WoWS-Toolbox-v5.0.34"
+#define ReleaseRoot "..\..\..\outputs\WoWS-Toolbox-v5.0.35"
 
 [Setup]
 AppId={{88AA1660-CC89-4EDA-9895-BC051E8CAD26}
@@ -11,7 +11,7 @@ AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppCopyright=Copyright (c) 2026 WoWS Toolbox contributors
 AppComments=Unofficial WoWS-family model extraction and inspection toolbox
-VersionInfoVersion=5.0.34.0
+VersionInfoVersion=5.0.35.0
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription={#MyAppName} Installer
 VersionInfoCompany={#MyAppPublisher}
@@ -53,8 +53,6 @@ en.MainShortcut=WoWS Toolbox model toolbox
 ko.MainShortcut=WoWS Toolbox 함선 모델 도구
 en.ShortcutGroup=Choose which shortcuts to create:
 ko.ShortcutGroup=생성할 바로가기를 선택합니다:
-en.CreateStartMenuShortcut=Create a Start menu shortcut
-ko.CreateStartMenuShortcut=시작 메뉴 바로가기 만들기
 en.CreateDesktopShortcut=Create a desktop shortcut
 ko.CreateDesktopShortcut=바탕화면 바로가기 만들기
 en.MissingRuntimeTitle=Required runtime not found
@@ -75,7 +73,6 @@ en.CloseAppForUpdate=Close WoWS Toolbox before installing or updating, then clic
 ko.CloseAppForUpdate=설치 또는 업데이트 전에 WoWS Toolbox를 정상적으로 닫고 다시 다음을 눌러 주세요. 내장 WebView2 프로세스가 강제로 종료되는 오류를 막기 위한 절차입니다.
 
 [Tasks]
-Name: "startmenuicon"; Description: "{cm:CreateStartMenuShortcut}"; GroupDescription: "{cm:ShortcutGroup}"; Flags: checkedonce
 Name: "desktopicon"; Description: "{cm:CreateDesktopShortcut}"; GroupDescription: "{cm:ShortcutGroup}"; Flags: unchecked
 
 [Files]
@@ -85,13 +82,14 @@ Source: "app-language-en.txt"; DestDir: "{app}"; DestName: "app-language.txt"; L
 Source: "dependencies\MicrosoftEdgeWebview2Setup.exe"; DestDir: "{tmp}"; Flags: deleteafterinstall; Check: NeedsWebView2
 
 [Dirs]
+Name: "{app}"; Attribs: notcontentindexed
 Name: "{app}\output"; Attribs: notcontentindexed
 
 [Icons]
-Name: "{group}\WoWS Toolbox"; Filename: "{app}\WoWS Toolbox.exe"; WorkingDir: "{app}"; Comment: "{cm:MainShortcut}"; Tasks: startmenuicon
-Name: "{group}\README"; Filename: "{app}\README.txt"; WorkingDir: "{app}"; Tasks: startmenuicon
-Name: "{group}\Legal Notice"; Filename: "{app}\LEGAL_NOTICE.txt"; WorkingDir: "{app}"; Tasks: startmenuicon
-Name: "{group}\{cm:UninstallProgram,WoWS Toolbox}"; Filename: "{uninstallexe}"; Tasks: startmenuicon
+Name: "{group}\WoWS Toolbox"; Filename: "{app}\WoWS Toolbox.exe"; WorkingDir: "{app}"; Comment: "{cm:MainShortcut}"
+Name: "{group}\README"; Filename: "{app}\README.txt"; WorkingDir: "{app}"
+Name: "{group}\Legal Notice"; Filename: "{app}\LEGAL_NOTICE.txt"; WorkingDir: "{app}"
+Name: "{group}\{cm:UninstallProgram,WoWS Toolbox}"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\WoWS Toolbox"; Filename: "{app}\WoWS Toolbox.exe"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [InstallDelete]

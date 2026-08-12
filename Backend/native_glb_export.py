@@ -342,15 +342,35 @@ def classify_part(name: str) -> str:
         and any(token in folded for token in ("_bow", "_midback", "_midfront", "_stern", "hull"))
     ):
         return "hull"
+
+    # Hardpoint prefixes include a nation letter (A/B/J/R/etc.). Keep the
+    # classifier nation-agnostic so Korabli/PTS parts are not all labelled other.
+    hardpoint = re.match(r"^hp_([a-z])([a-z]+)(?:_|\b)", folded)
+    family = hardpoint.group(2) if hardpoint else ""
+    if family == "gr":
+        return "missile_launcher"
+    if family == "gs":
+        return "secondary"
+    if family == "ga":
+        return "anti_air"
+    if family == "gt":
+        return "torpedo"
+    if family in {"d", "f", "rs"}:
+        return "radar_sensor"
+    if family == "gm":
+        return "main_gun"
+    if family == "c":
+        return "aircraft"
+
     rules = (
         ("missile_launcher", ("vertical_launch", "guided_missile", "missile_launcher", "vls")),
-        ("secondary", ("_ags_", "_bgs_", "secondary", "secgun", "casemate", "_jgs_", "_ags")),
-        ("anti_air", ("_aga_", "_bga_", "antiair", "anti_air", "aagun", "machinegun", "_jga_")),
-        ("torpedo", ("_agt_", "_bgt_", "torpedo", "ttube", "torp")),
-        ("radar_sensor", ("_ad_", "_bd_", "_ars_", "_jrs_", "radar", "director", "rangefinder", "sensor")),
-        ("main_gun", ("_agm_", "_bgm_", "_jgm_", "main_gun", "main_artillery", "turret")),
+        ("secondary", ("secondary", "secgun", "casemate")),
+        ("anti_air", ("antiair", "anti_air", "aagun", "machinegun")),
+        ("torpedo", ("torpedo", "ttube", "torp")),
+        ("radar_sensor", ("radar", "director", "rangefinder", "sensor")),
+        ("main_gun", ("main_gun", "main_artillery", "turret")),
         ("deck_superstructure", ("deck", "superstructure", "deckhouse", "bridge")),
-        ("aircraft", ("aircraft", "plane", "catapult")),
+        ("aircraft", ("air_armament", "aircraft", "plane", "catapult")),
         ("decoration", ("flag", "rope", "wire", "anchor", "decor")),
     )
     for category, tokens in rules:
@@ -400,8 +420,12 @@ def write_mtl(
             if factor[3] < 0.999:
                 output.write(f"d {factor[3]:.6g}\n")
             image_index = material_texture_index(document, material)
-            if image_index is not None and image_index in image_paths:
+            color_map = pbr_maps.get("albedo_override")
+            if color_map:
+                output.write(f"map_Kd {color_map}\n")
+            elif image_index is not None and image_index in image_paths:
                 output.write(f"map_Kd {image_paths[image_index]}\n")
+            if image_index is not None and image_index in image_paths:
                 if str(material.get("alphaMode", "OPAQUE")) != "OPAQUE":
                     output.write(f"map_d {image_paths[image_index]}\n")
             if pbr_maps:
@@ -444,6 +468,32 @@ def face_token(vertex: int, uv: int | None, normal: int | None) -> str:
     return str(vertex)
 
 
+def accessor_fingerprint(document: dict, binary: bytes, index: int) -> bytes:
+    accessor = document["accessors"][index]
+    view = document["bufferViews"][accessor["bufferView"]]
+    start = int(view.get("byteOffset", 0)) + int(accessor.get("byteOffset", 0))
+    count = int(accessor["count"])
+    component_size = COMPONENTS[int(accessor["componentType"])][1]
+    width = TYPE_WIDTHS[accessor["type"]]
+    packed_size = component_size * width
+    stride = int(view.get("byteStride", packed_size))
+    digest = hashlib.sha256()
+    for row in range(count):
+        offset = start + row * stride
+        digest.update(binary[offset : offset + packed_size])
+    return digest.digest()
+
+
+def primitive_fingerprint(document: dict, binary: bytes, primitive: dict) -> tuple:
+    attributes = primitive.get("attributes", {})
+    channels = tuple(
+        (name, accessor_fingerprint(document, binary, int(index)))
+        for name, index in sorted(attributes.items())
+    )
+    indices = accessor_fingerprint(document, binary, int(primitive["indices"])) if "indices" in primitive else b""
+    return channels, indices, primitive.get("material"), int(primitive.get("mode", 4))
+
+
 def export_obj(
     document: dict,
     binary: bytes,
@@ -456,6 +506,8 @@ def export_obj(
         "Part",
     )
     vertex_offset = uv_offset = normal_offset = 0
+
+
     objects: list[dict] = []
     triangle_total = 0
     with target.open("w", encoding="utf-8", newline="\n", buffering=1024 * 1024) as output:
@@ -466,10 +518,15 @@ def export_obj(
             output.write(f"\no {object_name}\n")
             object_vertices = 0
             object_triangles = 0
+            seen_primitives: set[tuple] = set()
             for primitive_index, primitive in enumerate(mesh.get("primitives", [])):
                 attributes = primitive.get("attributes", {})
                 if "POSITION" not in attributes:
                     continue
+                fingerprint = primitive_fingerprint(document, binary, primitive)
+                if fingerprint in seen_primitives:
+                    continue
+                seen_primitives.add(fingerprint)
                 positions = accessor_values(document, binary, int(attributes["POSITION"]))
                 normals = accessor_values(document, binary, int(attributes["NORMAL"])) if "NORMAL" in attributes else []
                 uvs = accessor_values(document, binary, int(attributes["TEXCOORD_0"])) if "TEXCOORD_0" in attributes else []

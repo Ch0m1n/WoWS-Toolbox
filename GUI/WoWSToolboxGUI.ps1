@@ -324,7 +324,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.34'
+$script:AppVersion = '5.0.35'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -881,7 +881,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.34"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.35"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1323,7 +1323,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.34 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.35 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -1407,7 +1407,7 @@ foreach ($name in $controlNames) {
 if ($SelfTest) {
     $sourceCombo = $window.FindName('SourceCombo')
     [void] $sourceCombo.ApplyTemplate()
-    $updateFixtureJson = '{"tag_name":"v5.0.34","name":"WoWS Toolbox 5.0.34","draft":false,"prerelease":false,"html_url":"https://github.com/Ch0m1n/WoWS-Toolbox/releases/tag/v5.0.34","assets":[{"name":"WoWS-Toolbox-Setup-5.0.34.exe","browser_download_url":"https://github.com/Ch0m1n/WoWS-Toolbox/releases/download/v5.0.34/WoWS-Toolbox-Setup-5.0.34.exe","digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}]}'
+    $updateFixtureJson = '{"tag_name":"v5.0.35","name":"WoWS Toolbox 5.0.35","draft":false,"prerelease":false,"html_url":"https://github.com/Ch0m1n/WoWS-Toolbox/releases/tag/v5.0.35","assets":[{"name":"WoWS-Toolbox-Setup-5.0.35.exe","browser_download_url":"https://github.com/Ch0m1n/WoWS-Toolbox/releases/download/v5.0.35/WoWS-Toolbox-Setup-5.0.35.exe","digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}]}'
     $updateFixture = ConvertFrom-WoWSToolboxReleaseJson -CurrentVersion '5.0.31' -Json $updateFixtureJson
     [pscustomobject] @{
         ok = $true
@@ -1423,7 +1423,7 @@ if ($SelfTest) {
             $null -ne $window.FindName('CheckUpdateButton')
         auto_update_default = [string] $script:Settings.AutoCheckUpdates
         update_release_parser_ok = $updateFixture.UpdateAvailable -and
-            $updateFixture.Installable -and $updateFixture.Version -eq '5.0.34'
+            $updateFixture.Installable -and $updateFixture.Version -eq '5.0.35'
         queue_controls_present =
             $null -ne $window.FindName('QueueList') -and
             $null -ne $window.FindName('RemoveQueueButton') -and
@@ -2102,6 +2102,9 @@ function Select-File {
     if (Test-Path -LiteralPath $InitialPath -PathType Leaf) {
         $dialog.FileName = $InitialPath
         $dialog.InitialDirectory = Split-Path -Parent $InitialPath
+    }
+    elseif (Test-Path -LiteralPath $InitialPath -PathType Container) {
+        $dialog.InitialDirectory = (Resolve-Path -LiteralPath $InitialPath).Path
     }
     if ($dialog.ShowDialog($window)) {
         return $dialog.FileName
@@ -3128,6 +3131,10 @@ function Get-AssemblyValidationPath {
             return (Resolve-Path -LiteralPath $candidate).Path
         }
     }
+    $nativeReport = Join-Path $objDirectory 'export.json'
+    if (Test-Path -LiteralPath $nativeReport -PathType Leaf) {
+        return (Resolve-Path -LiteralPath $nativeReport).Path
+    }
     $validationFiles = @(
         Get-ChildItem -LiteralPath $objDirectory -Filter '*.validation.json' -File `
             -ErrorAction SilentlyContinue
@@ -3172,7 +3179,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.34&lang=' +
+            'https://viewer.local/index.html?app=5.0.35&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -3426,7 +3433,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.34&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.35&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }
@@ -4455,10 +4462,7 @@ $controls.SaveSettingsButton.Add_Click({
 
 $controls.OpenModelButton.Add_Click({
     try {
-        $initial = if (-not [string]::IsNullOrWhiteSpace($script:ViewerModelPath)) {
-            $script:ViewerModelPath
-        }
-        else { '' }
+        $initial = [string] $script:Settings.OutputPath
         $selected = Select-File $initial 'Wavefront OBJ|*.obj|모든 파일|*.*'
         if ($null -ne $selected) { Open-ModelInViewer $selected }
     }
