@@ -161,11 +161,15 @@ def validate_output_location(game_dir: Path, output_root: Path) -> None:
 
 
 def validate_run_root(output_root: Path, run_root: Path) -> Path:
-    output = output_root.resolve()
+    lexical_output = Path(os.path.abspath(output_root))
     requested = Path(os.path.abspath(run_root))
-    expected = output / requested.name
-    if requested.parent != output:
+    if os.path.normcase(str(requested.parent)) != os.path.normcase(
+        str(lexical_output)
+    ):
         raise PipelineError(f"unsafe run output target: {run_root}")
+
+    output = output_root.resolve()
+    expected = output / requested.name
     resolved = run_root.resolve(strict=False)
     if resolved != expected or resolved.parent != output:
         raise PipelineError(
