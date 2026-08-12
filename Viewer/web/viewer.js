@@ -13,6 +13,7 @@ const lightingReset = document.querySelector('#lightingReset');
 const exposureControl = document.querySelector('#exposureControl');
 const keyLightControl = document.querySelector('#keyLightControl');
 const environmentControl = document.querySelector('#environmentControl');
+const pbrPreviewControl = document.querySelector('#pbrPreviewControl');
 const normalStrengthControl = document.querySelector('#normalStrengthControl');
 const azimuthControl = document.querySelector('#azimuthControl');
 const elevationControl = document.querySelector('#elevationControl');
@@ -57,21 +58,21 @@ orbit.minDistance = 0.05;
 orbit.maxDistance = 50000;
 orbit.target.set(0, 0, 0);
 
-// Keep the default studio neutral and directional. The previous ambient-heavy
-// rig washed the source albedo into a pale flat surface and could be mistaken
-// for a lower-resolution texture even though the original PNG was loaded.
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.52);
+// The default rig is deliberately broad and neutral. The viewer is primarily
+// an asset inspector, so source albedo must remain readable on every part
+// instead of being split into bright and dark directional-light regions.
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.78);
 scene.add(ambientLight);
-const hemisphereLight = new THREE.HemisphereLight(0xf0f4fa, 0x435466, 0.9);
+const hemisphereLight = new THREE.HemisphereLight(0xf2f5f9, 0x657485, 1.1);
 scene.add(hemisphereLight);
-const keyLight = new THREE.DirectionalLight(0xfffbf3, 1.45);
+const keyLight = new THREE.DirectionalLight(0xfffbf3, 0.72);
 keyLight.position.set(6, 10, 8);
 keyLight.castShadow = false;
 scene.add(keyLight);
-const rimLight = new THREE.DirectionalLight(0xdbe8f7, 0.28);
+const rimLight = new THREE.DirectionalLight(0xdbe8f7, 0.18);
 rimLight.position.set(-8, 4, -7);
 scene.add(rimLight);
-const fillLight = new THREE.DirectionalLight(0xf2f6ff, 0.48);
+const fillLight = new THREE.DirectionalLight(0xf2f6ff, 0.7);
 fillLight.position.set(0, -2, 8);
 scene.add(fillLight);
 
@@ -119,9 +120,10 @@ const undoHistory = [];
 const redoHistory = [];
 let pendingTransformEdit = null;
 const BACKGROUND_VISIBILITY_KEY = 'wows-toolbox-viewer-background';
-const LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v2';
-const LIGHTING_DEFAULTS = Object.freeze({ exposure: 0.98, key: 1.45, environment: 1, normalStrength: 0.35, azimuth: 32, elevation: 48 });
+const LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v3';
+const LIGHTING_DEFAULTS = Object.freeze({ exposure: 1, key: 0.72, environment: 1, normalStrength: 0.2, pbrPreview: false, azimuth: 32, elevation: 48 });
 let activeNormalStrength = LIGHTING_DEFAULTS.normalStrength;
+let pbrPreviewEnabled = LIGHTING_DEFAULTS.pbrPreview;
 const viewerMaterialUpgrades = new WeakMap();
 let backgroundVisible = true;
 const ARMOR_GHOST_RENDER_ORDER = 100;
@@ -179,22 +181,57 @@ function applyNormalStrength(value) {
   });
 }
 
+function setMaterialPbrPreview(material, enabled) {
+  if (!material?.isMaterial) return false;
+  const channels = material.userData?.viewerPbrChannels;
+  if (!channels) return false;
+  material.normalMap = enabled ? channels.normalMap : null;
+  material.roughnessMap = enabled ? channels.roughnessMap : null;
+  material.aoMap = enabled ? channels.aoMap : null;
+  material.roughness = enabled && channels.roughnessMap ? 1 : 0.82;
+  material.metalness = 0;
+  if (material.normalMap && material.normalScale) {
+    material.normalScale.set(activeNormalStrength, activeNormalStrength);
+  }
+  material.userData.viewerPbrPreview = Boolean(enabled);
+  material.needsUpdate = true;
+  return true;
+}
+
+function applyPbrPreview(enabled) {
+  pbrPreviewEnabled = Boolean(enabled);
+  const visited = new Set();
+  scene.traverse((node) => {
+    if (!node.isMesh) return;
+    const materials = Array.isArray(node.material) ? node.material : [node.material];
+    for (const material of materials.filter(Boolean)) {
+      if (visited.has(material)) continue;
+      visited.add(material);
+      setMaterialPbrPreview(material, pbrPreviewEnabled);
+    }
+  });
+  pbrPreviewControl.checked = pbrPreviewEnabled;
+  normalStrengthControl.disabled = !pbrPreviewEnabled;
+}
+
 function applyLightingSettings(settings, persist = true) {
   const state = {
     exposure: clampLighting(settings.exposure, 0.4, 1.8, LIGHTING_DEFAULTS.exposure),
     key: clampLighting(settings.key, 0, 4, LIGHTING_DEFAULTS.key),
     environment: clampLighting(settings.environment, 0, 2, LIGHTING_DEFAULTS.environment),
     normalStrength: clampLighting(settings.normalStrength, 0, 1, LIGHTING_DEFAULTS.normalStrength),
+    pbrPreview: settings.pbrPreview === true || settings.pbrPreview === 'true',
     azimuth: clampLighting(settings.azimuth, -180, 180, LIGHTING_DEFAULTS.azimuth),
     elevation: clampLighting(settings.elevation, 5, 85, LIGHTING_DEFAULTS.elevation),
   };
   renderer.toneMappingExposure = state.exposure;
   keyLight.intensity = state.key;
-  hemisphereLight.intensity = state.environment * 0.9;
-  ambientLight.intensity = state.environment * 0.52;
-  rimLight.intensity = 0.28 * (0.35 + state.environment * 0.65);
-  fillLight.intensity = 0.48 * (0.25 + state.environment * 0.75);
+  hemisphereLight.intensity = state.environment * 1.1;
+  ambientLight.intensity = state.environment * 0.78;
+  rimLight.intensity = 0.18 * (0.35 + state.environment * 0.65);
+  fillLight.intensity = 0.7 * (0.25 + state.environment * 0.75);
   applyNormalStrength(state.normalStrength);
+  applyPbrPreview(state.pbrPreview);
   const azimuth = THREE.MathUtils.degToRad(state.azimuth);
   const elevation = THREE.MathUtils.degToRad(state.elevation);
   const horizontal = Math.cos(elevation) * 14;
@@ -202,6 +239,8 @@ function applyLightingSettings(settings, persist = true) {
   exposureControl.value = String(state.exposure);
   keyLightControl.value = String(state.key);
   environmentControl.value = String(state.environment);
+  pbrPreviewControl.checked = state.pbrPreview;
+  normalStrengthControl.disabled = !state.pbrPreview;
   normalStrengthControl.value = String(state.normalStrength);
   azimuthControl.value = String(state.azimuth);
   elevationControl.value = String(state.elevation);
@@ -216,7 +255,7 @@ function applyLightingSettings(settings, persist = true) {
 }
 
 function currentLightingSettings() {
-  return { exposure: exposureControl.value, key: keyLightControl.value, environment: environmentControl.value, normalStrength: normalStrengthControl.value, azimuth: azimuthControl.value, elevation: elevationControl.value };
+  return { exposure: exposureControl.value, key: keyLightControl.value, environment: environmentControl.value, normalStrength: normalStrengthControl.value, pbrPreview: pbrPreviewControl.checked, azimuth: azimuthControl.value, elevation: elevationControl.value };
 }
 
 function showLoading(title, detail) {
@@ -237,22 +276,32 @@ function createStandardViewerMaterial(material) {
   const standard = new THREE.MeshStandardMaterial({
     name: material.name, color: material.color, map: material.map, alphaMap: material.alphaMap,
     normalMap: material.normalMap || material.bumpMap || null, roughnessMap: pbr.roughnessMap || null,
-    metalnessMap: null, aoMap: pbr.aoMap || null, roughness: pbr.roughnessMap ? 1 : 0.72,
+    metalnessMap: null, aoMap: pbr.aoMap || null, roughness: pbr.roughnessMap ? 1 : 0.82,
     metalness: 0, opacity: material.opacity, transparent: material.transparent,
     alphaTest: material.alphaTest, side: material.side, depthWrite: material.depthWrite, vertexColors: material.vertexColors,
   });
   // _mg.G is retained in the export but only inferred as metalness. Without
   // the game's proprietary shader/environment it creates false black/white paint.
-  standard.userData = { ...(material.userData || {}), viewerPbrMaterial: true, viewerMetalnessPreview: false };
+  standard.userData = {
+    ...(material.userData || {}),
+    viewerPbrMaterial: true,
+    viewerMetalnessPreview: false,
+    viewerPbrChannels: {
+      normalMap: standard.normalMap,
+      roughnessMap: standard.roughnessMap,
+      aoMap: standard.aoMap,
+    },
+  };
   standard.normalScale.set(activeNormalStrength, activeNormalStrength);
+  setMaterialPbrPreview(standard, pbrPreviewEnabled);
   viewerMaterialUpgrades.set(material, standard);
   material.dispose();
   return standard;
 }
 
 function normalizeViewerMaterial(material) {
-  if (!material || material.userData.viewerMaterialPolicy === 'paint-v4') return false;
-  material.userData.viewerMaterialPolicy = 'paint-v4';
+  if (!material || material.userData.viewerMaterialPolicy === 'paint-v5') return false;
+  material.userData.viewerMaterialPolicy = 'paint-v5';
   material.userData.viewerSourceShininess = Number(material.shininess ?? 0);
   material.userData.viewerSourceSpecular = material.specular?.getHex?.() ?? null;
   if (material.map) {
@@ -281,6 +330,7 @@ function normalizeViewerMaterial(material) {
     material.roughnessMap,
     material.metalnessMap,
     material.aoMap,
+    ...Object.values(material.userData?.viewerPbrChannels || {}),
   ].filter(Boolean));
   for (const texture of textures) {
     texture.anisotropy = maxTextureAnisotropy;
@@ -346,6 +396,19 @@ function isAssemblyMirroredNode(node, assemblyMetadata) {
   );
 }
 
+function applyStableDoubleSidedNormals(material) {
+  if (!material?.isMaterial || material.userData?.viewerStableDoubleSidedNormals) return material;
+  const inheritedCompile = material.onBeforeCompile;
+  const inheritedCacheKey = material.customProgramCacheKey?.bind(material);
+  material.onBeforeCompile = (shader, rendererInstance) => {
+    inheritedCompile?.call(material, shader, rendererInstance);
+    shader.defines = { ...(shader.defines || {}), WOWS_STABLE_DOUBLE_SIDED_NORMALS: 1 };
+  };
+  material.customProgramCacheKey = () => `${inheritedCacheKey?.() || ''}|stable-double-sided-normals-v1`;
+  material.userData = { ...(material.userData || {}), viewerStableDoubleSidedNormals: true };
+  material.needsUpdate = true;
+  return material;
+}
 function cloneNodeMaterialsForSide(node, side, policy) {
   const originals = Array.isArray(node.material) ? node.material : [node.material];
   const clones = originals.map((material) => {
@@ -354,6 +417,7 @@ function cloneNodeMaterialsForSide(node, side, policy) {
     clone.userData = { ...(material.userData || {}) };
     clone.side = side;
     clone.userData.viewerWindingPolicy = policy;
+    if (side === THREE.DoubleSide) applyStableDoubleSidedNormals(clone);
     clone.needsUpdate = true;
     return clone;
   });
@@ -378,23 +442,27 @@ function normalizeModelMaterials(root, assemblyMetadata = null) {
     });
     const reportMirrored = isAssemblyMirroredNode(node, assemblyMetadata);
     const unverifiedObj = !assemblyMetadata;
-    if (reportMirrored || unverifiedObj) {
-      mirroredPartMaterials += cloneNodeMaterialsForSide(
-        node,
-        THREE.DoubleSide,
-        reportMirrored ? 'assembly-mirrored-double-sided-v2' : 'unverified-obj-double-sided-v3',
-      );
-    }
+    const windingPolicy = reportMirrored
+      ? 'assembly-mirrored-stable-double-sided-v3'
+      : (unverifiedObj ? 'unverified-obj-stable-double-sided-v4' : 'verified-obj-stable-double-sided-v1');
+    // Apply the same stable two-sided policy to every extracted part. Source
+    // winding varies within hull, weapons, sensors, catapults, and detail meshes.
+    mirroredPartMaterials += cloneNodeMaterialsForSide(node, THREE.DoubleSide, windingPolicy);
   });
   return normalized.size + mirroredPartMaterials;
 }
 
 function disposeMaterial(material) {
   if (!material) return;
+  const textures = new Set();
   for (const key of Object.keys(material)) {
     const value = material[key];
-    if (value?.isTexture) value.dispose();
+    if (value?.isTexture) textures.add(value);
   }
+  for (const value of Object.values(material.userData?.viewerPbrChannels || {})) {
+    if (value?.isTexture) textures.add(value);
+  }
+  textures.forEach((texture) => texture.dispose());
   material.dispose?.();
 }
 
@@ -1476,6 +1544,7 @@ lightingButton.addEventListener('click', () => {
 for (const control of [exposureControl, keyLightControl, environmentControl, normalStrengthControl, azimuthControl, elevationControl]) {
   control.addEventListener('input', () => applyLightingSettings(currentLightingSettings()));
 }
+pbrPreviewControl.addEventListener('change', () => applyLightingSettings(currentLightingSettings()));
 lightingReset.addEventListener('click', () => { applyLightingSettings(LIGHTING_DEFAULTS); setStatus('조명 기본값을 복원했습니다.'); });
 document.querySelector('#gridButton').addEventListener('click', (event) => { grid.visible = !grid.visible; event.currentTarget.classList.toggle('active', grid.visible); });
 document.querySelector('#wireButton').addEventListener('click', (event) => {
@@ -1622,6 +1691,7 @@ window.WoWSViewerCore = {
   frameModel,
   orientObjForViewer,
   normalizeModelMaterials,
+  loadShip,
   loadAssemblyMetadata,
   loadModelMetadata,
   applyModelMetadata,
@@ -1637,4 +1707,4 @@ window.WoWSViewerCore = {
   setStatus,
   hostMessage,
 };
-hostMessage({ type: 'ready', version: '5.0.33' });
+hostMessage({ type: 'ready', version: '5.0.34' });

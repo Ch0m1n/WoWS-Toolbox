@@ -67,6 +67,13 @@ The release package includes a private CPython 3.10 runtime and Pillow. Blender 
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.34 consistent material preview
+
+- Applies one material policy to hull, superstructure, turrets, secondary and anti-aircraft weapons, radar, catapults, and every other OBJ part.
+- Prevents mixed OBJ face winding from flipping lighting normals on the camera-facing side, which could make one painted surface look like two different colors.
+- Prioritizes the original base-color texture by default. Extracted normal, roughness, and ambient-occlusion channels remain available through the optional **PBR detail preview** control.
+- Uses a broader neutral inspection light and safely releases hidden PBR textures when a model is closed.
+
 ## 5.0.33 viewer and PBR update
 
 - Extracts original-size base color plus normal, roughness, metalness, and ambient-occlusion companion textures when the selected client exposes them.
@@ -103,7 +110,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.33 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.34 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -215,7 +222,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.33 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.34 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
