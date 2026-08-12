@@ -1,6 +1,6 @@
 import { OBJLoader } from './vendor/OBJLoader.js';
 import { MTLLoader } from './vendor/MTLLoader.js';
-import { applyBarrelElevation, inferBarrelRig } from './weapon-kinematics.js?v=5.0.35';
+import { applyBarrelElevation, inferBarrelRig } from './weapon-kinematics.js?v=5.0.36';
 const core = window.WoWSViewerCore;
 
 if (core) {
@@ -28,6 +28,14 @@ if (core) {
   const turnLeftButton = document.querySelector('#turnLeftButton');
   const turnRightButton = document.querySelector('#turnRightButton');
   const resetPartButton = document.querySelector('#resetPartButton');
+  const partTransformPanel = document.querySelector('#partTransformPanel');
+  const partControlTitle = document.querySelector('#partControlTitle');
+  const partRotationStatus = document.querySelector('#partRotationStatus');
+  const partRotationInputs = {
+    x: document.querySelector('#partRotationX'),
+    y: document.querySelector('#partRotationY'),
+    z: document.querySelector('#partRotationZ'),
+  };
   const weaponPanel = document.querySelector('#weaponPanel');
   const weaponPivotStatus = document.querySelector('#weaponPivotStatus');
   const weaponTraverse = document.querySelector('#weaponTraverse');
@@ -222,6 +230,40 @@ if (core) {
     queueMicrotask(() => updateWeaponPanel(event.detail?.part));
   });
 
+  function rotationInputValues() {
+    return Object.fromEntries(
+      Object.entries(partRotationInputs).map(([axis, input]) => [axis, Number(input.value) || 0]),
+    );
+  }
+
+  function syncRotationInputs(part) {
+    const rotation = core.getPartRotationDegrees(part);
+    for (const axis of ['x', 'y', 'z']) {
+      partRotationInputs[axis].value = String(Number(rotation[axis].toFixed(1)));
+    }
+    return rotation;
+  }
+
+  function commitRotationInputs() {
+    const part = core.getSelected();
+    if (!part || multiSelection.size > 1) return;
+    const rotation = rotationInputValues();
+    core.recordObjectEdit([part], '파트 회전값', () => {
+      core.setPartRotationDegrees(part, rotation);
+    });
+    core.setStatus(`${part.userData.viewerLabel} · 회전 X ${degreeLabel(rotation.x)} / Y ${degreeLabel(rotation.y)} / Z ${degreeLabel(rotation.z)}`);
+    updateWeaponPanel(part);
+  }
+
+  Object.values(partRotationInputs).forEach((input) => {
+    input.addEventListener('change', commitRotationInputs);
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        input.blur();
+      }
+    });
+  });
   weaponTraverse.addEventListener('input', () => {
     weaponTraverseValue.textContent = degreeLabel(weaponTraverse.value);
   });
@@ -463,13 +505,28 @@ if (core) {
   }
 
   function updateWeaponPanel(part = core.getSelected()) {
-    const singleWeapon = Boolean(part && core.isWeaponPart(part) && multiSelection.size <= 1);
-    weaponPanel.hidden = !singleWeapon;
-    if (!singleWeapon) return;
-    core.ensurePartPivot(part);
+    const singlePart = Boolean(part && multiSelection.size <= 1);
+    partTransformPanel.hidden = !singlePart;
+    weaponPanel.hidden = true;
+    if (!singlePart) return;
+
+    const approximatePivot = core.ensurePartPivot(part);
+    syncRotationInputs(part);
+    const weapon = core.isWeaponPart(part);
+    partControlTitle.textContent = weapon ? '무장 회전' : '파트 회전';
     weaponPivotStatus.textContent = part.userData.viewerPivotSource === 'model-report'
       ? '추출 엔티티 원점'
       : '형상 중심 자동 원점';
+    partRotationStatus.textContent = weapon
+      ? 'X·Y·Z 회전값과 아래 선회·포신 앙각을 따로 조절할 수 있어요.'
+      : 'X·Y·Z 값 또는 R 회전 도구로 이 파트를 자체 중심축 기준 회전해요.';
+    if (approximatePivot) {
+      partRotationStatus.textContent += ' 추출 원점이 없어 형상 중심을 사용해요.';
+    }
+
+    weaponPanel.hidden = !weapon;
+    if (!weapon) return;
+    weaponTypeStatus.textContent = part.userData.viewerType || '무장';
     const traverse = Number(part.userData.viewerTraverseDegrees || 0);
     weaponTraverse.value = String(Math.round(traverse));
     weaponTraverseValue.textContent = degreeLabel(traverse);
@@ -480,26 +537,26 @@ if (core) {
     barrelElevation.disabled = !rig.available;
     barrelDetectionStatus.textContent = rig.available
       ? `분리된 포신 형상 ${rig.componentCount}개 감지 · 자체 앙각축 사용`
-      : `${rig.reason} · 선회 기능은 그대로 사용할 수 있어요.`;
+      : `${rig.reason} · 이 OBJ에는 독립 포신 엔티티가 없어 포탑 선회만 사용할 수 있어요.`;
   }
 
   function rotateSelected(delta) {
-    const targets = activeTransformParts().filter((part) => core.isWeaponPart(part));
+    const targets = activeTransformParts();
     if (!targets.length) {
-      core.setStatus('먼저 회전할 무장 파트를 선택해 주세요');
+      core.setStatus('먼저 회전할 파트를 선택해 주세요');
       return;
     }
     let approximatePivots = 0;
     for (const part of targets) {
       approximatePivots += Number(core.ensurePartPivot(part));
     }
-    core.recordObjectEdit(targets, '무장 선회', () => {
+    core.recordObjectEdit(targets, '파트 회전', () => {
       for (const part of targets) core.rotatePartAroundUpAxis(part, delta);
     });
     const pivotNote = approximatePivots
       ? ` · 원점 정보가 없는 ${approximatePivots}개는 파트 중심축 사용`
       : ' · 추출 원점 사용';
-    core.setStatus(`${targets.length}개 무장을 자체 중심축으로 ${degreeLabel(THREE.MathUtils.radToDeg(delta))} 선회했어요${pivotNote}`);
+    core.setStatus(`${targets.length}개 파트를 자체 중심축으로 ${degreeLabel(THREE.MathUtils.radToDeg(delta))} 회전했어요${pivotNote}`);
   }
 
   function resetSelected() {
@@ -515,6 +572,7 @@ if (core) {
         if (part.userData.originalScale) part.scale.copy(part.userData.originalScale);
         part.userData.viewerTraverseDegrees = 0;
         part.userData.viewerApplyBarrelElevation?.(0);
+        part.userData.viewerRotationDegrees = { x: 0, y: 0, z: 0 };
       }
     });
     core.setStatus(`${targets.length}개 파트를 추출 위치로 되돌렸어요`);
@@ -777,6 +835,7 @@ if (core) {
     barrelElevation.value = '0';
     barrelElevationValue.textContent = '0°';
     barrelElevation.disabled = true;
+    partTransformPanel.hidden = true;
     transform.detach();
   }
 

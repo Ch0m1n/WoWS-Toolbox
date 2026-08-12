@@ -163,6 +163,7 @@
   display: none;
 }
 
+
 .weapon-control-head,
 .weapon-control label > span {
   display: flex;
@@ -198,6 +199,68 @@
 .weapon-control input:disabled {
   cursor: not-allowed;
   opacity: .35;
+}
+
+.rotation-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.rotation-fields label {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 13px minmax(0, 1fr) 10px;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 1px solid #294968;
+  border-radius: 6px;
+  background: rgba(5, 19, 34, .72);
+}
+
+.rotation-fields label:nth-child(1) span { color: #ef747b; }
+.rotation-fields label:nth-child(2) span { color: #70d7a6; }
+.rotation-fields label:nth-child(3) span { color: #69a7ff; }
+
+.rotation-fields input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: #edf6ff;
+  background: transparent;
+  font: 10px Consolas, monospace;
+  text-align: right;
+}
+
+.rotation-fields b {
+  color: #6f88a4;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.weapon-only-control {
+  display: grid;
+  gap: 8px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(69, 111, 157, .55);
+}
+
+.weapon-only-control[hidden] {
+  display: none;
+}
+
+.weapon-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.weapon-subhead strong {
+  color: #e8f3ff;
+  font-size: 9px;
 }
 
 .weapon-control p {

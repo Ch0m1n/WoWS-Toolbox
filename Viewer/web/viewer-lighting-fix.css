@@ -1,5 +1,8 @@
 .lighting-desk {
   position: relative;
+  touch-action: none;
+  user-select: none;
+  will-change: left, top;
   flex: 0 0 auto;
   margin: 10px 12px 8px;
   padding: 12px;
@@ -46,4 +49,43 @@
 .lighting-desk input:disabled {
   cursor: not-allowed;
   opacity: .38;
+}
+
+.lighting-desk.drag-positioned {
+  position: fixed;
+  right: auto;
+  margin: 0;
+}
+
+.lighting-desk.dragging {
+  cursor: grabbing;
+  box-shadow: 0 22px 58px rgba(0, 0, 0, .5), 0 0 0 1px rgba(97, 215, 219, .2);
+}
+
+.lighting-desk header {
+  cursor: grab;
+}
+
+.lighting-desk header:active {
+  cursor: grabbing;
+}
+
+.lighting-desk header .lighting-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.lighting-head-actions .drag-grip {
+  color: #5f86aa;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.lighting-desk label,
+.lighting-desk input,
+.lighting-desk button,
+.lighting-desk p {
+  user-select: auto;
+  touch-action: auto;
 }
