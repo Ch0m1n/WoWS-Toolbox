@@ -27,7 +27,8 @@ class ConverterTests(unittest.TestCase):
             texture.parent.mkdir()
             texture.write_bytes(b"DDS ")
             self.assertEqual(
-                convert.find_texture(root, "wherever/Turret.mfm", "_a.dds"), texture
+                convert.find_texture(root, "wherever/Turret.mfm", "_a.dds"),
+                texture.resolve(),
             )
 
     def test_find_texture_skinned_mfm_fallback(self):
