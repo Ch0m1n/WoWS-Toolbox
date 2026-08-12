@@ -128,6 +128,37 @@ class LodContractTests(unittest.TestCase):
             self.assertFalse(cache.exists())
 
 
+class ExporterFailureMessageTests(unittest.TestCase):
+    def test_unknown_rpc_type_has_update_guidance(self) -> None:
+        failure = MODULE.StreamedProcessError(
+            101,
+            ["engine"],
+            ["thread panicked", "Unrecognized type FLOAT64"],
+        )
+        message = MODULE.exporter_failure_message(failure, "함선 모델")
+        self.assertIn("FLOAT64", message)
+        self.assertIn("업데이트", message)
+
+    def test_missing_geometry_names_current_build_resource(self) -> None:
+        failure = MODULE.StreamedProcessError(
+            1,
+            ["engine"],
+            ["Could not open geometry: content/gameplay/ship/REMOVED.geometry"],
+        )
+        message = MODULE.exporter_failure_message(failure, "함선 모델")
+        self.assertIn("현재 게임 빌드", message)
+        self.assertIn("REMOVED.geometry", message)
+
+
+class HullSelectionCommandTests(unittest.TestCase):
+    def test_hull_upgrade_is_passed_to_model_and_armor_commands(self) -> None:
+        source = (BACKEND / "extract_ship.py").read_text(encoding="utf-8")
+        self.assertGreaterEqual(
+            source.count('*(["--hull", args.hull_upgrade] if args.hull_upgrade else [])'),
+            2,
+        )
+
+
 class ArmorSidecarPublicationTests(unittest.TestCase):
     def test_failed_exact_conversion_preserves_blender_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

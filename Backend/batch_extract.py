@@ -175,6 +175,7 @@ def item_namespace(common: dict, item: dict) -> SimpleNamespace:
         ship_resource=str(item.get("ship_resource", "")),
         run_slug=run_slug,
         ship_index=str(item.get("ship_index", "")),
+        hull_upgrade=str(item.get("hull_upgrade", "")),
         display_name=str(item.get("display_name", "")),
         oodle_dll=p(common.get("oodle_dll")),
         cache_root=p(common.get("cache_root")),
@@ -298,6 +299,10 @@ def item_contract(args: SimpleNamespace, index: int) -> dict:
     else:
         if not args.ship_index:
             errors.append("함선 IDX 식별자가 비어 있어요")
+        if ".." in args.hull_upgrade or any(
+            separator in args.hull_upgrade for separator in ("/", "\\")
+        ):
+            errors.append("선체 업그레이드 식별자가 안전하지 않아요")
         for engine_name in ("wowsunpack.exe", "native_glb_export.py"):
             if not (args.toolbox_root / "Backend" / engine_name).is_file():
                 errors.append(f"추출 엔진이 없어요: {engine_name}")
