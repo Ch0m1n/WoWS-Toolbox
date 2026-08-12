@@ -50,8 +50,8 @@ if (-not (Test-Path -LiteralPath $OutputPath -PathType Leaf)) {
 }
 
 $version = (Get-Item -LiteralPath $OutputPath).VersionInfo
-if ($version.FileVersion.Trim() -ne '5.0.31.0' -or
-    $version.ProductVersion.Trim() -ne '5.0.31') {
+if ($version.FileVersion.Trim() -ne '5.0.32.0' -or
+    $version.ProductVersion.Trim() -ne '5.0.32') {
     throw "Launcher version metadata is wrong: $($version.FileVersion) / $($version.ProductVersion)"
 }
 Write-Host "Launcher ready: $OutputPath"

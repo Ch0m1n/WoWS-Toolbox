@@ -28,7 +28,7 @@ catch {
         Add-Content -LiteralPath $logPath -Value $details -Encoding utf8
     }
     catch {
-        $logPath = '(오류 로그도 저장하지 못했어요)'
+        $logPath = '(오류 로그도 저장하지 못했습니다)'
     }
 
     $message = if ($script:WoWSToolboxLanguage -eq 'en') {
@@ -42,7 +42,7 @@ Error log: $logPath
     }
     else {
 @"
-WoWS 도구를 시작하지 못했어요.
+WoWS Toolbox를 시작하지 못했습니다.
 
 $($_.Exception.Message)
 

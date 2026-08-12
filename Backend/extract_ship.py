@@ -113,6 +113,36 @@ def validate_output_child(output_root: Path, output_dir: Path) -> Path:
     return resolved
 
 
+class StreamedProcessError(subprocess.CalledProcessError):
+    def __init__(self, returncode: int, command: list[str], output_tail: list[str]):
+        super().__init__(returncode, command)
+        self.output_tail = tuple(output_tail)
+
+
+def exporter_failure_message(failure: BaseException, label: str) -> str:
+    if isinstance(failure, StreamedProcessError):
+        tail = "\n".join(failure.output_tail)
+        match = re.search(r"Unrecognized type\s+([A-Z0-9_]+)", tail)
+        if match:
+            return (
+                f"현재 게임 빌드가 사용하는 RPC 타입 {match.group(1)}을 "
+                "내보내기 엔진이 인식하지 못합니다. 설정에서 WoWS Toolbox "
+                "업데이트를 확인해 주세요."
+            )
+        missing = re.search(r"Could not open geometry:\s*([^\r\n]+)", tail)
+        if missing:
+            return (
+                f"{label}에 필요한 선체 geometry가 현재 게임 빌드에 없습니다: "
+                f"{missing.group(1).strip()}"
+            )
+        if "panicked at" in tail:
+            return (
+                f"{label} 내보내기 엔진 내부 오류가 발생했습니다. "
+                "설정에서 WoWS Toolbox 업데이트를 확인해 주세요."
+            )
+    return str(failure)
+
+
 def run_stream(
     command: list[str],
     *,
@@ -131,6 +161,7 @@ def run_stream(
     )
     assert process.stdout is not None
     lines: queue.Queue[str | None] = queue.Queue()
+    output_tail: list[str] = []
 
     def read_output() -> None:
         try:
@@ -160,12 +191,14 @@ def run_stream(
             if line is None:
                 break
             rendered = line.rstrip()
+            output_tail.append(rendered)
+            del output_tail[:-30]
             if label:
                 rendered = f"[{label}] {rendered}"
             print(translate_line(rendered), flush=True)
         code = process.wait()
         if code:
-            raise subprocess.CalledProcessError(code, command)
+            raise StreamedProcessError(code, command, output_tail)
     finally:
         if process.poll() is None:
             process.terminate()
@@ -620,6 +653,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
                 args.ship_index,
                 "--lod",
                 str(args.lod),
+                *(["--hull", args.hull_upgrade] if args.hull_upgrade else []),
                 "--output",
                 str(glb),
             ],
@@ -637,6 +671,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
                 args.ship_index,
                 "--lod",
                 str(args.lod),
+                *(["--hull", args.hull_upgrade] if args.hull_upgrade else []),
                 "--no-textures",
                 "--armor-json",
                 str(armor_metadata),
@@ -692,6 +727,9 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
     model_failure = export_errors.get("model")
     if model_failure is not None:
         glb.unlink(missing_ok=True)
+        message = exporter_failure_message(model_failure, "함선 모델")
+        if message != str(model_failure):
+            raise RuntimeError(message) from model_failure
         raise model_failure
     if not valid_glb(glb):
         raise RuntimeError("중간 GLB가 만들어지지 않았거나 손상됐어요")
@@ -834,6 +872,7 @@ def main() -> int:
     parser.add_argument("--ship-resource", default="")
     parser.add_argument("--run-slug", default="")
     parser.add_argument("--ship-index", default="")
+    parser.add_argument("--hull-upgrade", default="")
     parser.add_argument("--display-name", default="")
     parser.add_argument("--oodle-dll", type=Path)
     parser.add_argument("--cache-root", type=Path)

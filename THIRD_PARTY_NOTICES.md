@@ -79,15 +79,15 @@ viewer sidecar and is not merged into the editable OBJ.
 
 Local modifications add current Korabli executable recognition, split
 visual/node layouts, `_ports.visual` hardpoint merging, GameParams/assets-bin
-overrides, package codec dispatch, dynamically loaded Oodle decoding and
-ship-specific export fixes. The MIT license text is reproduced by the package's
-root `LICENSE`.
+overrides, package codec dispatch, dynamically loaded Oodle decoding, RPC
+`FLOAT64` support for current PC builds and ship-specific export fixes. The MIT
+license text is reproduced by the package's root `LICENSE`.
 
 Packaged SHA-256 values:
 
 ```text
-8585575248041A888691986D9CB0F496B60B3BC4FE6E78CE161DD422866934C7  Backend/wowsunpack.exe
-8585575248041A888691986D9CB0F496B60B3BC4FE6E78CE161DD422866934C7  Backend/wowsunpack_armor.exe
+8DE5121B9321D05F1E4AD709B7B116EB521671B0B9AB63CC614784B077E6A6F4  Backend/wowsunpack.exe
+8DE5121B9321D05F1E4AD709B7B116EB521671B0B9AB63CC614784B077E6A6F4  Backend/wowsunpack_armor.exe
 ```
 
 The Oodle runtime itself is proprietary external software. It is not copied,
@@ -158,4 +158,4 @@ replays, animation data, names, and other game content remain assets of their
 respective rights holders. Users must supply files from their own installation
 and follow the game's terms and applicable law. This notice is not legal advice.
 
-CPython and Pillow are bundled under their licenses. PowerShell 5.1/7 is provided by Windows or the user. Blender is not required or invoked by WoWS Toolbox 5.0.30. The WebView2 bootstrapper is redistributed as described above; the WebView2 Runtime is supplied by Microsoft. Oodle runtimes are never redistributed and must come from the user's legally installed software.
+CPython and Pillow are bundled under their licenses. PowerShell 5.1/7 is provided by Windows or the user. Blender is not required or invoked by WoWS Toolbox 5.0.32. The WebView2 bootstrapper is redistributed as described above; the WebView2 Runtime is supplied by Microsoft. Oodle runtimes are never redistributed and must come from the user's legally installed software.

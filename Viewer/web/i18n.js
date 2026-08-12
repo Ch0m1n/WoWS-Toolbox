@@ -4,7 +4,43 @@
   const language = new URLSearchParams(window.location.search).get('lang') === 'ko' ? 'ko' : 'en';
   document.documentElement.lang = language;
   window.WoWSToolboxLanguage = language;
-  if (language !== 'en') return;
+  const formalKoreanReplacements = [
+    [/열어볼까요\?/g, '열어보시겠습니까?'],
+    [/추출할까요\?/g, '추출하시겠습니까?'],
+    [/업데이트할까요\?/g, '업데이트하시겠습니까?'],
+    [/확인할까요\?/g, '확인하시겠습니까?'],
+    [/하시겠어요\?/g, '하시겠습니까?'],
+    [/할까요\?/g, '하시겠습니까?'],
+    [/열까요\?/g, '여시겠습니까?'],
+    [/비울까요\?/g, '비우시겠습니까?'],
+    [/닫을까요\?/g, '닫으시겠습니까?'],
+    [/됐어요/g, '되었습니다'], [/되었어요/g, '되었습니다'], [/했어요/g, '했습니다'],
+    [/왔어요/g, '왔습니다'], [/갔어요/g, '갔습니다'], [/났어요/g, '났습니다'],
+    [/찾았어요/g, '찾았습니다'], [/고쳤어요/g, '고쳤습니다'], [/새로고쳤어요/g, '새로고쳤습니다'],
+    [/남겼어요/g, '남겼습니다'], [/넘었어요/g, '넘었습니다'], [/커졌어요/g, '커졌습니다'],
+    [/만들었어요/g, '만들었습니다'], [/비웠어요/g, '비웠습니다'], [/끝났어요/g, '끝났습니다'], [/열었어요/g, '열었습니다'],
+    [/닫았어요/g, '닫았습니다'], [/켰어요/g, '켰습니다'], [/껐어요/g, '껐습니다'],
+    [/보였어요/g, '보였습니다'], [/아니에요/g, '아닙니다'], [/이에요/g, '입니다'],
+    [/거예요/g, '것입니다'], [/예요/g, '입니다'], [/돼요/g, '됩니다'],
+    [/있어요/g, '있습니다'], [/없어요/g, '없습니다'], [/않아요/g, '않습니다'],
+    [/맞아요/g, '맞습니다'], [/해요/g, '합니다'], [/보여요/g, '보입니다'],
+    [/열어요/g, '엽니다'], [/읽어요/g, '읽습니다'], [/내보내요/g, '내보냅니다'],
+    [/골라요/g, '고릅니다'], [/남겨요/g, '남깁니다'], [/줄여요/g, '줄입니다'],
+    [/비워요/g, '비웁니다'], [/지워요/g, '지웁니다'], [/바꿔요/g, '바꿉니다'],
+    [/닫아요/g, '닫습니다'], [/켜요/g, '켭니다'], [/꺼요/g, '끕니다'],
+    [/넣어요/g, '넣습니다'], [/받아요/g, '받습니다'], [/끝나요/g, '끝납니다'],
+    [/남아요/g, '남습니다'], [/넘어요/g, '넘습니다'], [/달라요/g, '다릅니다'],
+    [/나타나요/g, '나타납니다'], [/돌아가요/g, '돌아갑니다'], [/들어가요/g, '들어갑니다'],
+    [/가져와요/g, '가져옵니다'], [/골라주세요/g, '선택해 주세요'], [/골라 주세요/g, '선택해 주세요']
+  ];
+
+  function formalizeKorean(text) {
+    let result = text;
+    for (const [pattern, replacement] of formalKoreanReplacements) {
+      result = result.replace(pattern, replacement);
+    }
+    return result;
+  }
 
   const exact = new Map(Object.entries({
     '모델을 열어 주세요': 'Open a model',
@@ -146,6 +182,7 @@
 
   function translate(text) {
     if (!text) return text;
+    if (language === 'ko') return formalizeKorean(text);
     const trimmed = text.trim();
     if (exact.has(trimmed)) {
       const prefix = text.slice(0, text.indexOf(trimmed));

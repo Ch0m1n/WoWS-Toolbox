@@ -126,9 +126,11 @@ foreach ($marker in @(
     'function Start-PersistentBatchExtraction', 'function Show-CompletionNotification',
     'OpenCompareModelButton', 'FormatCombo', 'TextureCombo', 'LodCombo',
     'LanguageCombo', 'Convert-XamlToUiLanguage', 'Get-WoWSToolboxLanguageMarker',
+    'function Update-DynamicUiLanguage',
+    '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.31',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.32',
     'ConvertTo-ValidatedQueueEntries',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -147,6 +149,25 @@ foreach ($marker in @(
     'digest', 'Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256'
 )) {
     if (-not $guiText.Contains($marker)) { throw "Modern queue marker missing: $marker" }
+}
+$localizationScript = Join-Path $PSScriptRoot 'GUI\Localization.ps1'
+$localizationText = Get-Content -Raw -LiteralPath $localizationScript
+if (-not $localizationText.Contains('function Convert-ToFormalKoreanText')) {
+    throw 'Formal Korean localization function is missing.'
+}
+. $localizationScript
+Set-WoWSToolboxLanguage 'ko'
+$formalKoreanSamples = @(
+    (Get-UiText '설정을 저장했어요.' 'Settings saved.'),
+    (Convert-ToUiText '대기열이 비어 있어요.'),
+    (Convert-XamlToUiLanguage '<TextBlock Text="모델을 열면 개별 파트가 여기에 표시돼요."/>'),
+    (Convert-ToUiText '업데이트할까요?')
+)
+if ($formalKoreanSamples[0] -ne '설정을 저장했습니다.' -or
+    $formalKoreanSamples[1] -ne '대기열이 비어 있습니다.' -or
+    $formalKoreanSamples[2] -notmatch '표시됩니다' -or
+    $formalKoreanSamples[3] -ne '업데이트하시겠습니까?') {
+    throw "Formal Korean localization acceptance failed: $($formalKoreanSamples -join ' | ')"
 }
 if ($guiText.Contains('[action] { Send-ViewerMessage $message }')) {
     throw 'Unsafe deferred viewer message callback returned.'
@@ -295,6 +316,11 @@ $backendExporter = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Backe
 $legendsRepack = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Backend\blender_repack_obj_v5.py')
 if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerI18n -notmatch 'get\(''lang''\) === ''ko'' \? ''ko'' : ''en''' -or
+    $viewerI18n -notmatch 'formalKoreanReplacements' -or
+    $viewerI18n -notmatch 'language === ''ko''.*formalizeKorean' -or
+    $viewerIndex -match 'v=5\.0\.30' -or
+    $viewerScript -notmatch "version: '5\.0\.32'" -or
+    $advanced -match 'v=5\.0\.30' -or
     $viewerCss -notmatch '#app \{[^}]*grid-template-rows: minmax\(0, 1fr\);[^}]*overflow: hidden' -or
     $viewerCss -notmatch '\.inspector \{[^}]*min-height: 0;[^}]*overflow: hidden;' -or
     $viewerScript -notmatch "from './vendor/three\.module\.js'" -or
@@ -337,8 +363,8 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerScript -notmatch 'mesh.renderOrder = ARMOR_RENDER_ORDER_BASE \+ groupIndex' -or
     $viewerScript -notmatch 'normalizeModelMaterials' -or
     $viewerScript -notmatch 'viewerMaterialPolicy' -or
-    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.30' -or
-    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.30' -or
+    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.32' -or
+    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.32' -or
     $viewerScript -notmatch 'loadAssemblyMetadata' -or
     $viewerScript -notmatch 'matrixRowsDeterminant' -or
     $viewerScript -notmatch 'assembly-mirrored-double-sided-v2' -or
@@ -433,8 +459,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.31.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.31') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.32.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.32') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -523,8 +549,16 @@ $threeModule = Get-Item -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\vendor
 $notices = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'THIRD_PARTY_NOTICES.md')
 if ($threeCore.Length -lt 1000000 -or $threeModule.Length -lt 500000 -or
     $notices -notmatch '1\.0\.4078\.44' -or $notices -notmatch '0\.185\.1' -or
-    $notices -notmatch 'Backend/wowsunpack_armor\.exe') {
+    $notices -notmatch 'Backend/wowsunpack_armor\.exe' -or
+    $notices -notmatch 'RPC\s+`FLOAT64`\s+support') {
     throw 'Dependency or license acceptance failed.'
+}
+$expectedExporterHash = '8DE5121B9321D05F1E4AD709B7B116EB521671B0B9AB63CC614784B077E6A6F4'
+foreach ($relative in @('Backend\wowsunpack.exe', 'Backend\wowsunpack_armor.exe')) {
+    $actualHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $relative) -Algorithm SHA256).Hash
+    if ($actualHash -ne $expectedExporterHash) {
+        throw "Bundled exporter hash is wrong: $relative"
+    }
 }
 
 Write-Host '9/9 SHA-256 manifest verification'
@@ -562,8 +596,8 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.31 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.32 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.31 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.32 self-tests passed.'
 }

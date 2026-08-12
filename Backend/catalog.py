@@ -99,6 +99,59 @@ def _model_path(value: Any) -> str:
     return ""
 
 
+def _string_values(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value] if value else []
+    if isinstance(value, (list, tuple)):
+        return [item for item in value if isinstance(item, str) and item]
+    return []
+
+
+def _pc_hull_candidates(data: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Return (upgrade, component, model path) in deterministic loadout order."""
+    candidates: list[tuple[str, str, str]] = []
+    upgrades = _dict(data.get("ShipUpgradeInfo"))
+    for upgrade_name, upgrade_value in sorted(upgrades.items(), key=lambda item: str(item[0])):
+        upgrade = _dict(upgrade_value)
+        if upgrade.get("ucType") != "_Hull":
+            continue
+        components = _dict(upgrade.get("components"))
+        for component_name in _string_values(components.get("hull")):
+            component = _dict(data.get(component_name))
+            model_path = component.get("model")
+            if isinstance(model_path, str) and model_path.lower().endswith(".model"):
+                candidates.append((str(upgrade_name), component_name, model_path))
+
+    # A few special/event records do not expose ShipUpgradeInfo. Only accept a
+    # direct ship model here; recursively scanning the whole record can mistake
+    # a finder, director, or weapon model for the hull.
+    if not candidates:
+        direct_model = data.get("model")
+        if (
+            isinstance(direct_model, str)
+            and direct_model.lower().endswith(".model")
+            and "/ship/" in direct_model.replace("\\", "/").lower()
+        ):
+            candidates.append(("", "", direct_model))
+
+    seen: set[tuple[str, str]] = set()
+    result: list[tuple[str, str, str]] = []
+    for upgrade_name, component_name, model_path in candidates:
+        marker = (upgrade_name.casefold(), model_path.replace("\\", "/").casefold())
+        if marker not in seen:
+            seen.add(marker)
+            result.append((upgrade_name, component_name, model_path))
+    return result
+
+
+def _model_geometry_directory(model_path: str) -> str:
+    normalized = model_path.replace("\\", "/").strip().lower()
+    if not normalized:
+        return ""
+    directory = normalized.rsplit("/", 1)[0]
+    return "/" + directory.lstrip("/")
+
+
 def _fallback_name(param_key: str, index: str) -> str:
     tail = param_key
     if tail.startswith(index + "_"):
@@ -114,6 +167,11 @@ def pc_catalog(game_dir: Path, language: str, source: str) -> list[dict[str, Any
     raw = extract_entry(game_dir, entry)
     params = root_params(decode_game_params(raw))
     translations, translation_language = _translation(game_dir, language)
+    geometry_directories = {
+        key.rsplit("/", 1)[0]
+        for key in entries
+        if key.endswith(".geometry") and "/ship/" in key
+    }
 
     rows: list[dict[str, Any]] = []
     for param_key, param_value in params.items():
@@ -139,14 +197,20 @@ def pc_catalog(game_dir: Path, language: str, source: str) -> list[dict[str, Any
         except (TypeError, ValueError):
             tier = 0
 
-        model_path = ""
-        for key, item in data.items():
-            if str(key).endswith("_Hull"):
-                model_path = _model_path(item)
-                if model_path:
-                    break
-        if not model_path:
-            model_path = _model_path(data)
+        hull_candidates = _pc_hull_candidates(data)
+        selected_hull = next(
+            (
+                candidate
+                for candidate in hull_candidates
+                if _model_geometry_directory(candidate[2]) in geometry_directories
+            ),
+            None,
+        )
+        supported = selected_hull is not None
+        diagnostic_hull = selected_hull or (
+            hull_candidates[0] if hull_candidates else ("", "", "")
+        )
+        hull_upgrade, hull_component, model_path = diagnostic_hull
         resource = ""
         if model_path:
             normalized = model_path.replace("\\", "/")
@@ -171,8 +235,18 @@ def pc_catalog(game_dir: Path, language: str, source: str) -> list[dict[str, Any
                 "GameParamsKey": str(param_key),
                 "GameParamsIndex": index,
                 "ModelPath": model_path,
+                "HullUpgrade": hull_upgrade,
+                "HullComponent": hull_component,
                 "Id": data.get("id"),
-                "Supported": bool(model_path),
+                "Supported": supported,
+                "ArchiveHullVerified": supported,
+                "UnsupportedReason": (
+                    "현재 게임 빌드에 선체 geometry가 없어요"
+                    if hull_candidates and not supported
+                    else "선체 모델 정보를 찾지 못했어요"
+                    if not hull_candidates
+                    else ""
+                ),
             }
         )
 

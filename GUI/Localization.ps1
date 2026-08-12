@@ -105,7 +105,7 @@ $script:WoWSToolboxEnglishText = [ordered]@{
     '선체·주함포·부포·대공포·어뢰를 형식별 개별 오브젝트로 저장해요.' = 'Saves hull, main guns, secondary guns, AA guns, and torpedoes as separate objects for each format.'
     '여러 함선을 대기열에 담아 선체와 무장을 선택한 형식으로 내보내요.' = 'Queue multiple ships and export hulls and weapons in the selected format.'
     '파트별 OBJ와 계층·원점 보존 GLB를 함께 저장해요.' = 'Saves part-based OBJ and hierarchy/origin-preserving GLB files.'
-    'WoWS Toolbox 5.0.31 · 비공식 커뮤니티 도구' = 'WoWS Toolbox 5.0.31 · Unofficial community tool'
+    'WoWS Toolbox 5.0.32 · 비공식 커뮤니티 도구' = 'WoWS Toolbox 5.0.32 · Unofficial community tool'
     '설정을 저장했어요.' = 'Settings saved.'
     '인터페이스 언어' = 'Interface language'
     '언어 변경은 프로그램을 다시 열 때 적용돼요.' = 'Language changes apply the next time the program starts.'
@@ -175,19 +175,96 @@ function Set-WoWSToolboxLanguage {
     $script:WoWSToolboxLanguage = if ($normalized -eq 'ko') { 'ko' } else { 'en' }
 }
 
+function Convert-ToFormalKoreanText {
+    param([AllowEmptyString()] [string] $Text)
+    if ([string]::IsNullOrEmpty($Text)) { return $Text }
+
+    $result = $Text
+    foreach ($pair in @(
+        @('열어볼까요?', '열어보시겠습니까?'),
+        @('추출할까요?', '추출하시겠습니까?'),
+        @('업데이트할까요?', '업데이트하시겠습니까?'),
+        @('확인할까요?', '확인하시겠습니까?'),
+        @('하시겠어요?', '하시겠습니까?'),
+        @('할까요?', '하시겠습니까?'),
+        @('열까요?', '여시겠습니까?'),
+        @('비울까요?', '비우시겠습니까?'),
+        @('닫을까요?', '닫으시겠습니까?'),
+        @('됐어요', '되었습니다'),
+        @('되었어요', '되었습니다'),
+        @('했어요', '했습니다'),
+        @('왔어요', '왔습니다'),
+        @('갔어요', '갔습니다'),
+        @('났어요', '났습니다'),
+        @('찾았어요', '찾았습니다'),
+        @('고쳤어요', '고쳤습니다'),
+        @('새로고쳤어요', '새로고쳤습니다'),
+        @('남겼어요', '남겼습니다'),
+        @('넘었어요', '넘었습니다'),
+        @('커졌어요', '커졌습니다'),
+        @('만들었어요', '만들었습니다'),
+        @('비웠어요', '비웠습니다'),
+        @('끝났어요', '끝났습니다'),
+        @('열었어요', '열었습니다'),
+        @('닫았어요', '닫았습니다'),
+        @('켰어요', '켰습니다'),
+        @('껐어요', '껐습니다'),
+        @('보였어요', '보였습니다'),
+        @('아니에요', '아닙니다'),
+        @('이에요', '입니다'),
+        @('거예요', '것입니다'),
+        @('예요', '입니다'),
+        @('돼요', '됩니다'),
+        @('있어요', '있습니다'),
+        @('없어요', '없습니다'),
+        @('않아요', '않습니다'),
+        @('맞아요', '맞습니다'),
+        @('해요', '합니다'),
+        @('보여요', '보입니다'),
+        @('열어요', '엽니다'),
+        @('읽어요', '읽습니다'),
+        @('내보내요', '내보냅니다'),
+        @('골라요', '고릅니다'),
+        @('남겨요', '남깁니다'),
+        @('줄여요', '줄입니다'),
+        @('비워요', '비웁니다'),
+        @('지워요', '지웁니다'),
+        @('바꿔요', '바꿉니다'),
+        @('닫아요', '닫습니다'),
+        @('켜요', '켭니다'),
+        @('꺼요', '끕니다'),
+        @('넣어요', '넣습니다'),
+        @('받아요', '받습니다'),
+        @('끝나요', '끝납니다'),
+        @('남아요', '남습니다'),
+        @('넘어요', '넘습니다'),
+        @('달라요', '다릅니다'),
+        @('나타나요', '나타납니다'),
+        @('돌아가요', '돌아갑니다'),
+        @('들어가요', '들어갑니다'),
+        @('가져와요', '가져옵니다'),
+        @('골라주세요', '선택해 주세요'),
+        @('골라 주세요', '선택해 주세요')
+    )) {
+        $result = $result.Replace([string] $pair[0], [string] $pair[1])
+    }
+    return $result
+}
+
 function Get-UiText {
     param(
         [Parameter(Mandatory)] [AllowEmptyString()] [string] $Korean,
         [Parameter(Mandatory)] [AllowEmptyString()] [string] $English
     )
     if ($script:WoWSToolboxLanguage -eq 'en') { return $English }
-    return $Korean
+    return (Convert-ToFormalKoreanText $Korean)
 }
 
 function Convert-ToUiText {
     param([AllowEmptyString()] [string] $Text)
-    if ($script:WoWSToolboxLanguage -ne 'en' -or [string]::IsNullOrEmpty($Text)) {
-        return $Text
+    if ([string]::IsNullOrEmpty($Text)) { return $Text }
+    if ($script:WoWSToolboxLanguage -ne 'en') {
+        return (Convert-ToFormalKoreanText $Text)
     }
     if ($script:WoWSToolboxEnglishText.Contains($Text)) {
         return [string] $script:WoWSToolboxEnglishText[$Text]
@@ -246,7 +323,9 @@ function Convert-ToUiText {
 
 function Convert-XamlToUiLanguage {
     param([Parameter(Mandatory)] [string] $Xaml)
-    if ($script:WoWSToolboxLanguage -ne 'en') { return $Xaml }
+    if ($script:WoWSToolboxLanguage -ne 'en') {
+        return (Convert-ToFormalKoreanText $Xaml)
+    }
     $result = $Xaml
     foreach ($pair in $script:WoWSToolboxEnglishText.GetEnumerator()) {
         $source = '="' + [string] $pair.Key + '"'

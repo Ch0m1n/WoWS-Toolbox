@@ -112,6 +112,27 @@ class ItemContractTests(unittest.TestCase):
         )
         self.assertTrue(BATCH.item_contract(args, 1)["ok"])
 
+    def test_pc_hull_upgrade_is_preserved_and_unsafe_value_is_rejected(self) -> None:
+        common = {
+            "toolbox_root": str(BACKEND.parent),
+            "output_root": str(BACKEND.parent / "output"),
+            "formats": "obj",
+        }
+        item = {
+            "source": "pc",
+            "game_dir": str(BACKEND.parent),
+            "ship_index": "PTEST001",
+            "hull_upgrade": "B_UPGRADE",
+            "display_name": "Test Ship",
+        }
+        args = BATCH.item_namespace(common, item)
+        self.assertEqual(args.hull_upgrade, "B_UPGRADE")
+        self.assertTrue(BATCH.item_contract(args, 1)["ok"])
+        args.hull_upgrade = "../unsafe"
+        result = BATCH.item_contract(args, 1)
+        self.assertFalse(result["ok"])
+        self.assertIn("안전하지", result["message"])
+
     def test_unsafe_legends_model_path_is_rejected(self) -> None:
         args = SimpleNamespace(
             source="legends",

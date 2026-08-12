@@ -1,6 +1,6 @@
 import { OBJLoader } from './vendor/OBJLoader.js';
 import { MTLLoader } from './vendor/MTLLoader.js';
-import { applyBarrelElevation, inferBarrelRig } from './weapon-kinematics.js?v=5.0.30';
+import { applyBarrelElevation, inferBarrelRig } from './weapon-kinematics.js?v=5.0.32';
 const core = window.WoWSViewerCore;
 
 if (core) {

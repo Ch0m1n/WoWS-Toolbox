@@ -11,9 +11,9 @@ using System.Windows.Forms;
 [assembly: AssemblyCompany("WoWS Toolbox contributors")]
 [assembly: AssemblyProduct("WoWS Toolbox")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 WoWS Toolbox contributors")]
-[assembly: AssemblyVersion("5.0.31.0")]
-[assembly: AssemblyFileVersion("5.0.31.0")]
-[assembly: AssemblyInformationalVersion("5.0.31")]
+[assembly: AssemblyVersion("5.0.32.0")]
+[assembly: AssemblyFileVersion("5.0.32.0")]
+[assembly: AssemblyInformationalVersion("5.0.32")]
 
 namespace WoWSToolboxLauncher
 {
@@ -54,7 +54,7 @@ namespace WoWSToolboxLauncher
                     english,
                     english
                         ? "The WoWS Toolbox startup script is missing:\n\n" + scriptPath
-                        : "WoWS Toolbox 시작 스크립트를 찾지 못했어요:\n\n" + scriptPath
+                        : "WoWS Toolbox 시작 스크립트를 찾지 못했습니다:\n\n" + scriptPath
                 );
                 return 20;
             }
@@ -64,7 +64,7 @@ namespace WoWSToolboxLauncher
                     english,
                     english
                         ? "Windows PowerShell 5.1 or PowerShell 7 was not found."
-                        : "Windows PowerShell 5.1 또는 PowerShell 7을 찾지 못했어요."
+                        : "Windows PowerShell 5.1 또는 PowerShell 7을 찾지 못했습니다."
                 );
                 return 21;
             }
@@ -99,7 +99,7 @@ namespace WoWSToolboxLauncher
                     english,
                     english
                         ? "WoWS Toolbox could not be started.\n\n" + error.Message
-                        : "WoWS Toolbox를 시작하지 못했어요.\n\n" + error.Message
+                        : "WoWS Toolbox를 시작하지 못했습니다.\n\n" + error.Message
                 );
                 return 22;
             }

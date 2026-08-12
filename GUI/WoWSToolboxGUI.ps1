@@ -324,7 +324,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.31'
+$script:AppVersion = '5.0.32'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -881,7 +881,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.31"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.32"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1323,7 +1323,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.31 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.32 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -1407,8 +1407,8 @@ foreach ($name in $controlNames) {
 if ($SelfTest) {
     $sourceCombo = $window.FindName('SourceCombo')
     [void] $sourceCombo.ApplyTemplate()
-    $updateFixtureJson = '{"tag_name":"v5.0.31","name":"WoWS Toolbox 5.0.31","draft":false,"prerelease":false,"html_url":"https://github.com/Ch0m1n/WoWS-Toolbox/releases/tag/v5.0.31","assets":[{"name":"WoWS-Toolbox-Setup-5.0.31.exe","browser_download_url":"https://github.com/Ch0m1n/WoWS-Toolbox/releases/download/v5.0.31/WoWS-Toolbox-Setup-5.0.31.exe","digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}]}'
-    $updateFixture = ConvertFrom-WoWSToolboxReleaseJson -CurrentVersion '5.0.30' -Json $updateFixtureJson
+    $updateFixtureJson = '{"tag_name":"v5.0.32","name":"WoWS Toolbox 5.0.32","draft":false,"prerelease":false,"html_url":"https://github.com/Ch0m1n/WoWS-Toolbox/releases/tag/v5.0.32","assets":[{"name":"WoWS-Toolbox-Setup-5.0.32.exe","browser_download_url":"https://github.com/Ch0m1n/WoWS-Toolbox/releases/download/v5.0.32/WoWS-Toolbox-Setup-5.0.32.exe","digest":"sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}]}'
+    $updateFixture = ConvertFrom-WoWSToolboxReleaseJson -CurrentVersion '5.0.31' -Json $updateFixtureJson
     [pscustomobject] @{
         ok = $true
         language = $script:WoWSToolboxLanguage
@@ -1423,7 +1423,7 @@ if ($SelfTest) {
             $null -ne $window.FindName('CheckUpdateButton')
         auto_update_default = [string] $script:Settings.AutoCheckUpdates
         update_release_parser_ok = $updateFixture.UpdateAvailable -and
-            $updateFixture.Installable -and $updateFixture.Version -eq '5.0.31'
+            $updateFixture.Installable -and $updateFixture.Version -eq '5.0.32'
         queue_controls_present =
             $null -ne $window.FindName('QueueList') -and
             $null -ne $window.FindName('RemoveQueueButton') -and
@@ -2167,7 +2167,7 @@ function Test-SettingsPaths {
         $problems.Add($outputProblem)
     }
     if ($problems.Count -eq 0) {
-        $controls.SettingsStatus.Text = '경로 검사를 통과했어요.'
+        $controls.SettingsStatus.Text = Convert-ToUiText '경로 검사를 통과했어요.'
         $controls.SettingsStatus.Foreground =
             [Windows.Media.BrushConverter]::new().ConvertFrom('#6EE7B7')
         return $true
@@ -2236,7 +2236,7 @@ function Start-CatalogRefresh {
     $script:CatalogRefreshOutput = $output
     $script:PendingPicker = $OpenPickerAfter
     $controls.ProgressStage.Text = '함선 목록을 읽는 중'
-    $controls.ProgressMessage.Text = '게임 패키지는 수정하지 않고 인덱스와 번역 데이터만 읽어요.'
+    $controls.ProgressMessage.Text = Convert-ToUiText '게임 패키지는 수정하지 않고 인덱스와 번역 데이터만 읽어요.'
     $controls.MainProgress.IsIndeterminate = $true
     Add-Log "$(Get-SourceDisplay $source) 함선 목록 새로고침을 시작해요."
     $catalogCompletion = {
@@ -2252,7 +2252,7 @@ function Start-CatalogRefresh {
         }
         Load-CatalogFile -Source $catalogSource -Path $catalogOutput
         $controls.ProgressStage.Text = '함선 목록 준비 완료'
-        $controls.ProgressMessage.Text =
+        $controls.ProgressMessage.Text = Convert-ToUiText
             "$($script:Catalogs[$catalogSource].Count)개 항목에서 원하는 함선을 고를 수 있어요."
         $controls.MainProgress.Value = 100
         if ($script:PendingPicker) {
@@ -2836,12 +2836,12 @@ function Test-ExtractionReady {
     }
     if ($problems.Count -gt 0) {
         $controls.ProgressStage.Text = '추출 준비 필요'
-        $controls.ProgressMessage.Text = $problems -join ' · '
+        $controls.ProgressMessage.Text = Convert-ToUiText ($problems -join ' · ')
         Add-Log ($problems -join ' · ') -ErrorLine
         return $false
     }
     $controls.ProgressStage.Text = '대기열 준비 완료'
-    $controls.ProgressMessage.Text =
+    $controls.ProgressMessage.Text = Convert-ToUiText
         "$($script:ExtractionQueue.Count)척을 차례대로 선택한 편집 형식으로 내보낼 준비가 됐어요."
     Add-Log "대기열 $($script:ExtractionQueue.Count)척 준비 검사를 통과했어요."
     return $true
@@ -2869,6 +2869,8 @@ function Show-CompletionNotification {
         [string] $Kind = 'Info'
     )
     if ([string] $script:Settings.NotifyComplete -ne 'true') { return }
+    $Title = Convert-ToUiText $Title
+    $Message = Convert-ToUiText $Message
     try {
         if ($null -ne $script:NotifyTimer) {
             $script:NotifyTimer.Stop()
@@ -2923,7 +2925,7 @@ function Finish-BatchExtraction {
 
     if ($Cancelled) {
         $controls.ProgressStage.Text = '대기열 추출 취소됨'
-        $controls.ProgressMessage.Text =
+        $controls.ProgressMessage.Text = Convert-ToUiText
             "성공 ${successCount}척 · 실패/미완료 항목은 대기열에 남겼어요. 부분 출력은 자동 삭제하지 않았어요."
         Set-TopStatus '취소됨' '#FBBF24'
         Add-Log "대기열 취소: 성공 $successCount / 전체 $total"
@@ -2934,7 +2936,7 @@ function Finish-BatchExtraction {
     $controls.MainProgress.Value = 100
     if ($failureCount -eq 0) {
         $controls.ProgressStage.Text = '대기열 추출 완료'
-        $controls.ProgressMessage.Text = "${successCount}척을 모두 저장했어요."
+        $controls.ProgressMessage.Text = Convert-ToUiText "${successCount}척을 모두 저장했어요."
         Set-TopStatus '완료' '#34D399'
         Add-Log "대기열 완료: $successCount / $total"
         Show-CompletionNotification -Title 'WoWS Toolbox 추출 완료' `
@@ -2952,7 +2954,7 @@ function Finish-BatchExtraction {
             $_.Entry.Ship.LocalizedName
         }) -join ', '
         $controls.ProgressStage.Text = '일부 함선 추출 실패'
-        $controls.ProgressMessage.Text =
+        $controls.ProgressMessage.Text = Convert-ToUiText
             "성공 ${successCount}척 · 실패 ${failureCount}척 · 실패 항목만 대기열에 남겼어요."
         Set-TopStatus '일부 실패' '#F87171'
         Add-Log "대기열 종료: 성공 $successCount / 실패 $failureCount — $failedNames" -ErrorLine
@@ -3047,7 +3049,7 @@ function Start-NextBatchExtraction {
     $controls.MainProgress.IsIndeterminate = $false
     $controls.MainProgress.Value = [math]::Round(100 * $script:BatchIndex / $total, 1)
     $controls.ProgressStage.Text = "[$position/$total] $($ship.LocalizedName) 준비 중"
-    $controls.ProgressMessage.Text =
+    $controls.ProgressMessage.Text = Convert-ToUiText
         "$(Get-SourceDisplay $source)에서 이 함선에 필요한 리소스만 읽어요."
     Add-Log "[$position/$total] 추출 시작: $($ship.LocalizedName) / $(Get-SourceDisplay $source)"
     Start-ToolProcess -Operation "extract:${source}:$position/$total" `
@@ -3167,10 +3169,10 @@ function Send-ModelToViewer {
         $script:PendingViewerModel = $resolved
         $script:ViewerReady = $false
         $controls.ViewerPathLabel.Text = $resolved
-        $controls.ViewerStatus.Text = '새 모델 폴더를 뷰어에 연결하는 중이에요...'
+        $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.31&lang=' +
+            'https://viewer.local/index.html?app=5.0.32&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -3205,7 +3207,7 @@ function Send-ModelToViewer {
     $script:ViewerModelPath = $resolved
     $script:PendingViewerModel = ''
     $controls.ViewerPathLabel.Text = $resolved
-    $controls.ViewerStatus.Text = '모델 데이터를 읽는 중이에요...'
+    $controls.ViewerStatus.Text = Convert-ToUiText '모델 데이터를 읽는 중이에요...'
     $controls.OpenViewerFolderButton.IsEnabled = $true
 }
 
@@ -3251,7 +3253,7 @@ function Send-CompareModelToViewer {
     }
     Send-ViewerMessage $message
     $script:ViewerComparePath = $resolved
-    $controls.ViewerStatus.Text = '비교 모델을 읽는 중이에요...'
+    $controls.ViewerStatus.Text = Convert-ToUiText '비교 모델을 읽는 중이에요...'
 }
 function Open-ModelInViewer {
     param([Parameter(Mandatory)] [string] $ObjPath)
@@ -3280,7 +3282,7 @@ function Open-ModelInViewer {
     }
     $script:PendingViewerModel = $resolved
     $controls.ViewerPathLabel.Text = $resolved
-    $controls.ViewerStatus.Text = '3D 뷰어를 준비하는 중이에요...'
+    $controls.ViewerStatus.Text = Convert-ToUiText '3D 뷰어를 준비하는 중이에요...'
     Set-TopStatus '모델 로딩 중' '#60A5FA'
     $controls.OpenViewerFolderButton.IsEnabled = $true
     $controls.NavViewer.IsChecked = $true
@@ -3316,12 +3318,12 @@ function Handle-ViewerWebMessage {
         $message = $MessageArgs.WebMessageAsJson | ConvertFrom-Json
         switch ([string] $message.type) {
             'html-ready' {
-                $controls.ViewerStatus.Text = '3D 모듈을 불러오는 중이에요...'
+                $controls.ViewerStatus.Text = Convert-ToUiText '3D 모듈을 불러오는 중이에요...'
             }
             'ready' {
                 $script:ViewerReady = $true
                 $script:ViewerInitializing = $false
-                $controls.ViewerStatus.Text = '뷰어 준비 완료 · OBJ 파일을 열어 주세요.'
+                $controls.ViewerStatus.Text = Convert-ToUiText '뷰어 준비 완료 · OBJ 파일을 열어 주세요.'
                 if (-not [string]::IsNullOrWhiteSpace($script:PendingViewerModel)) {
                     Send-ModelToViewer $script:PendingViewerModel
                 }
@@ -3346,7 +3348,7 @@ function Handle-ViewerWebMessage {
             'warning' {
                 $warning = [string] $message.message
                 if ($warning.Length -gt 500) { $warning = $warning.Substring(0, 500) + '…' }
-                $controls.ViewerStatus.Text = "뷰어 경고: $warning"
+                $controls.ViewerStatus.Text = Convert-ToUiText "뷰어 경고: $warning"
                 Add-Log "뷰어 경고: $warning"
             }
             'compareLoaded' {
@@ -3424,12 +3426,12 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.31&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.32&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }
     $script:ViewerInitializing = $true
-    $controls.ViewerStatus.Text = '오프라인 3D 엔진을 시작하는 중이에요...'
+    $controls.ViewerStatus.Text = Convert-ToUiText '오프라인 3D 엔진을 시작하는 중이에요...'
     try {
         [IO.Directory]::CreateDirectory($script:ViewerUserDataRoot) | Out-Null
         $environmentTask = [Microsoft.Web.WebView2.Core.CoreWebView2Environment]::CreateAsync(
@@ -3440,7 +3442,7 @@ function Initialize-ModelViewer {
         $viewerEnvironment = $environmentTask.GetAwaiter().GetResult()
         $script:ViewerInitTask =
             $controls.ModelWebView.EnsureCoreWebView2Async($viewerEnvironment)
-        $controls.ViewerStatus.Text = '뷰어 컨트롤을 연결하는 중이에요...'
+        $controls.ViewerStatus.Text = Convert-ToUiText '뷰어 컨트롤을 연결하는 중이에요...'
         $controllerDeadline = (Get-Date).AddSeconds(15)
         while (-not $script:ViewerInitTask.IsCompleted -and
             (Get-Date) -lt $controllerDeadline) {
@@ -3492,7 +3494,7 @@ function Recover-GuiError {
     try {
         $controls.MainProgress.IsIndeterminate = $false
         $controls.ProgressStage.Text = '작업 오류'
-        $controls.ProgressMessage.Text = "${Context}: $message"
+        $controls.ProgressMessage.Text = Convert-ToUiText "${Context}: $message"
         Set-TopStatus '오류' '#F87171'
     }
     catch {}
@@ -3675,6 +3677,7 @@ function New-BatchManifest {
             ship_resource = Get-OptionalShipValue -Ship $ship -Name 'ShipResource'
             run_slug = if ($entry.Source -eq 'legends') { Get-SafeRunSlug $ship } else { '' }
             ship_index = if ($entry.Source -ne 'legends') { [string] $ship.GameParamsIndex } else { '' }
+            hull_upgrade = if ($entry.Source -ne 'legends') { Get-OptionalShipValue -Ship $ship -Name 'HullUpgrade' } else { '' }
             ship_code = [string] $ship.ShipCode
             nation = [string] $ship.Nation
             ship_class = [string] $ship.ShipClass
@@ -3752,7 +3755,7 @@ function Start-PersistentBatchExtraction {
     $script:LastOutputDir = ''
     $controls.MainProgress.Value = 0
     $controls.ProgressStage.Text = '대기열 엔진 시작 중'
-    $controls.ProgressMessage.Text = '게임 빌드·디스크·메모리를 먼저 확인해요.'
+    $controls.ProgressMessage.Text = Convert-ToUiText '게임 빌드·디스크·메모리를 먼저 확인해요.'
     Set-BusyState
     Start-ToolProcess -Operation 'batch-extract-v5' -Arguments @(
         '-B', $script:BatchExtractScript,
@@ -3818,7 +3821,7 @@ function Handle-ProcessLine {
         try {
             $compat = $text.Substring(9) | ConvertFrom-Json
             $buildText = if ($null -ne $compat.build) { " 빌드 $($compat.build)" } else { '' }
-            $controls.ProgressMessage.Text = "$($compat.source)$buildText — $($compat.message)"
+            $controls.ProgressMessage.Text = Convert-ToUiText "$($compat.source)$buildText — $($compat.message)"
         }
         catch {}
     }
@@ -3863,7 +3866,7 @@ function Handle-ProcessLine {
                         ExitCode = 1
                         Message = [string] $event.message
                     })
-                    $controls.ProgressMessage.Text = "$($event.name) 실패 — $($event.message)"
+                    $controls.ProgressMessage.Text = Convert-ToUiText "$($event.name) 실패 — $($event.message)"
                 }
                 'paused' {
                     $controls.ProgressStage.Text = '대기열 일시 정지'
@@ -4064,7 +4067,7 @@ function Auto-DetectPaths {
     )
     $oodle = Find-OodleRuntime
     if (-not [string]::IsNullOrWhiteSpace($oodle)) { $controls.OodlePathBox.Text = $oodle }
-    $controls.SettingsStatus.Text = '자동 탐색 결과를 채웠어요. 경로 검사 후 저장해 주세요.'
+    $controls.SettingsStatus.Text = Convert-ToUiText '자동 탐색 결과를 채웠어요. 경로 검사 후 저장해 주세요.'
 }
 
 function New-DiagnosticsZip {
@@ -4211,9 +4214,9 @@ $controls.PauseButton.Add_Click({
     $script:BatchPaused = -not $script:BatchPaused
     Write-BatchControl -Paused $script:BatchPaused
     $controls.PauseButton.Content = if ($script:BatchPaused) { '계속' } else { '일시 정지' }
-    $controls.ProgressMessage.Text = if ($script:BatchPaused) {
+    $controls.ProgressMessage.Text = Convert-ToUiText (if ($script:BatchPaused) {
         '현재 함선은 마친 뒤 다음 항목 앞에서 멈춰요.'
-    } else { '대기열을 다시 진행해요.' }
+    } else { '대기열을 다시 진행해요.' })
 })
 $controls.FormatCombo.Add_SelectionChanged({ Sync-UiToSettings; Save-Settings })
 $controls.TextureCombo.Add_SelectionChanged({ Sync-UiToSettings; Save-Settings })
@@ -4246,12 +4249,21 @@ $controls.ClearCacheButton.Add_Click({
 })
 $controls.DiagnosticsButton.Add_Click({ New-DiagnosticsZip })
 function Update-DynamicUiLanguage {
-    if ($script:WoWSToolboxLanguage -ne 'en') { return }
-    foreach ($name in @(
-        'TopTitle', 'TopSubtitle', 'TopStatusText', 'CurrentGamePathText',
-        'SelectedShipName', 'SelectedShipMeta', 'ProgressStage', 'ProgressMessage',
-        'ViewerPathLabel', 'ViewerStatus', 'SettingsStatus', 'CacheInfoText'
-    )) {
+    $dynamicTextControls = if ($script:WoWSToolboxLanguage -eq 'en') {
+        @(
+            'TopTitle', 'TopSubtitle', 'TopStatusText', 'CurrentGamePathText',
+            'SelectedShipName', 'SelectedShipMeta', 'ProgressStage', 'ProgressMessage',
+            'ViewerPathLabel', 'ViewerStatus', 'SettingsStatus', 'CacheInfoText'
+        )
+    }
+    else {
+        @(
+            'TopSubtitle', 'TopStatusText', 'SelectedShipName', 'SelectedShipMeta',
+            'ProgressStage', 'ProgressMessage', 'ViewerStatus', 'SettingsStatus',
+            'CacheInfoText'
+        )
+    }
+    foreach ($name in $dynamicTextControls) {
         $control = $controls[$name]
         if ($null -ne $control -and $null -ne $control.PSObject.Properties['Text']) {
             $control.Text = Convert-ToUiText ([string] $control.Text)
@@ -4373,7 +4385,7 @@ $controls.CancelButton.Add_Click({
     if ($script:BatchActive) {
         $script:CancelRequested = $true
         Write-BatchControl -Cancel $true
-        $controls.ProgressMessage.Text = '현재 함선 뒤에서 안전하게 중단하도록 요청했어요.'
+        $controls.ProgressMessage.Text = Convert-ToUiText '현재 함선 뒤에서 안전하게 중단하도록 요청했어요.'
     }
     elseif ($null -ne $script:ActiveRunner) {
         $script:CancelRequested = $true
@@ -4412,12 +4424,12 @@ $controls.FindOodleButton.Add_Click({
     Sync-UiToSettings
     $found = Find-OodleRuntime
     if ([string]::IsNullOrWhiteSpace($found)) {
-        $controls.SettingsStatus.Text =
+        $controls.SettingsStatus.Text = Convert-ToUiText
             'Oodle 런타임을 자동으로 찾지 못했어요. 직접 선택해 주세요.'
     }
     else {
         $controls.OodlePathBox.Text = $found
-        $controls.SettingsStatus.Text = "Oodle 런타임을 찾았어요: $found"
+        $controls.SettingsStatus.Text = Convert-ToUiText "Oodle 런타임을 찾았어요: $found"
     }
 })
 $controls.ValidateSettingsButton.Add_Click({ [void] (Test-SettingsPaths) })
@@ -4437,7 +4449,7 @@ $controls.SaveSettingsButton.Add_Click({
     Save-Settings
     Update-OutputLabel
     Update-CurrentGamePathUi
-    $controls.SettingsStatus.Text = '설정을 저장했어요.'
+    $controls.SettingsStatus.Text = Convert-ToUiText '설정을 저장했어요.'
     Add-Log '설정을 저장했어요.'
 })
 

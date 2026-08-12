@@ -1,7 +1,7 @@
 #define MyAppName "WoWS Toolbox"
-#define MyAppVersion "5.0.31"
+#define MyAppVersion "5.0.32"
 #define MyAppPublisher "WoWS Toolbox contributors"
-#define ReleaseRoot "..\..\..\outputs\WoWS-Toolbox-v5.0.31"
+#define ReleaseRoot "..\..\..\outputs\WoWS-Toolbox-v5.0.32"
 
 [Setup]
 AppId={{88AA1660-CC89-4EDA-9895-BC051E8CAD26}
@@ -11,7 +11,7 @@ AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppCopyright=Copyright (c) 2026 WoWS Toolbox contributors
 AppComments=Unofficial WoWS-family model extraction and inspection toolbox
-VersionInfoVersion=5.0.31.0
+VersionInfoVersion=5.0.32.0
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription={#MyAppName} Installer
 VersionInfoCompany={#MyAppPublisher}
@@ -52,27 +52,27 @@ ko.ViewReadme=한국어/영어 빠른 사용법 README.txt 열기
 en.MainShortcut=WoWS Toolbox model toolbox
 ko.MainShortcut=WoWS Toolbox 함선 모델 도구
 en.ShortcutGroup=Choose which shortcuts to create:
-ko.ShortcutGroup=만들 바로가기를 선택해요:
+ko.ShortcutGroup=생성할 바로가기를 선택합니다:
 en.CreateStartMenuShortcut=Create a Start menu shortcut
 ko.CreateStartMenuShortcut=시작 메뉴 바로가기 만들기
 en.CreateDesktopShortcut=Create a desktop shortcut
 ko.CreateDesktopShortcut=바탕화면 바로가기 만들기
 en.MissingRuntimeTitle=Required runtime not found
 en.MissingRuntimeBody=The following required command was not found in PATH:%n%n%1%n%nWoWS Toolbox may not start until it is installed. Continue installation anyway?
-ko.MissingRuntimeTitle=필수 실행 환경을 찾지 못했어요
-ko.MissingRuntimeBody=PATH에서 다음 필수 명령을 찾지 못했어요:%n%n%1%n%n설치하기 전에는 WoWS Toolbox가 실행되지 않을 수 있어요. 그래도 설치를 계속할까요?
+ko.MissingRuntimeTitle=필수 실행 환경을 찾지 못했습니다
+ko.MissingRuntimeBody=PATH에서 다음 필수 명령을 찾지 못했습니다:%n%n%1%n%n설치하기 전에는 WoWS Toolbox를 실행할 수 없습니다. 그래도 설치를 계속하시겠습니까?
 en.MissingPowerShell=Windows PowerShell 5.1 or PowerShell 7 was not found. WoWS Toolbox cannot start on this Windows installation.
-ko.MissingPowerShell=Windows PowerShell 5.1 또는 PowerShell 7을 찾지 못했어요. 이 Windows 설치에서는 WoWS Toolbox를 실행할 수 없어요.
+ko.MissingPowerShell=Windows PowerShell 5.1 또는 PowerShell 7을 찾지 못했습니다. 이 Windows 설치에서는 WoWS Toolbox를 실행할 수 없습니다.
 en.InstallingWebView2=Installing the Microsoft Edge WebView2 Runtime for the 3D viewer...
-ko.InstallingWebView2=3D 뷰어에 필요한 Microsoft Edge WebView2 Runtime을 설치하는 중...
+ko.InstallingWebView2=3D 뷰어에 필요한 Microsoft Edge WebView2 Runtime을 설치하는 중입니다...
 en.WebView2Note=Microsoft Edge WebView2 Runtime is installed only when it is missing.
-ko.WebView2Note=Microsoft Edge WebView2 Runtime이 없을 때만 설치해요.
+ko.WebView2Note=Microsoft Edge WebView2 Runtime이 없을 때만 설치합니다.
 en.WebView2InstallFailed=WebView2 Runtime could not be verified after setup. Model extraction still works, but the integrated 3D viewer may be unavailable until WebView2 is installed.
-ko.WebView2InstallFailed=설치 뒤 WebView2 Runtime을 확인하지 못했어요. 모델 추출은 가능하지만 WebView2를 설치하기 전에는 내장 3D 뷰어를 쓰지 못할 수 있어요.
+ko.WebView2InstallFailed=설치 후 WebView2 Runtime을 확인하지 못했습니다. 모델 추출은 가능하지만 WebView2를 설치하기 전에는 내장 3D 뷰어를 사용하지 못할 수 있습니다.
 en.UpgradeWelcome=WoWS Toolbox %1 is already installed.%n%nSetup will update it to %2 in the same folder. Your settings, cache, and exported models will be kept.
-ko.UpgradeWelcome=WoWS Toolbox %1이(가) 이미 설치되어 있어요.%n%n같은 폴더에서 %2 버전으로 업데이트하며 설정, 캐시와 추출 모델은 그대로 보존해요.
+ko.UpgradeWelcome=WoWS Toolbox %1이(가) 이미 설치되어 있습니다.%n%n같은 폴더에서 %2 버전으로 업데이트하며 설정, 캐시와 추출 모델은 그대로 보존합니다.
 en.CloseAppForUpdate=Close WoWS Toolbox before installing or updating, then click Next again. This prevents the embedded WebView2 process from being terminated forcibly.
-ko.CloseAppForUpdate=설치 또는 업데이트 전에 WoWS Toolbox를 정상적으로 닫고 다시 다음을 눌러 주세요. 내장 WebView2 프로세스가 강제로 종료되는 오류를 막기 위한 절차예요.
+ko.CloseAppForUpdate=설치 또는 업데이트 전에 WoWS Toolbox를 정상적으로 닫고 다시 다음을 눌러 주세요. 내장 WebView2 프로세스가 강제로 종료되는 오류를 막기 위한 절차입니다.
 
 [Tasks]
 Name: "startmenuicon"; Description: "{cm:CreateStartMenuShortcut}"; GroupDescription: "{cm:ShortcutGroup}"; Flags: checkedonce
