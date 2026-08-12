@@ -130,7 +130,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.34',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.35',
     'ConvertTo-ValidatedQueueEntries',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -144,6 +144,8 @@ foreach ($marker in @(
     'ModelWebView.Dispose()', 'function Write-JsonAtomic',
     'Local\WoWSToolbox.Gui.v1', 'function Update-QualityControls',
     'AutoUpdateCheck', 'CheckUpdateButton', 'function Start-UpdateCheck',
+    'Test-Path -LiteralPath $InitialPath -PathType Container',
+    '$initial = [string] $script:Settings.OutputPath',
     'PYTHONIOENCODING',
     'api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest',
     'digest', 'Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256'
@@ -322,7 +324,7 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerI18n -notmatch 'formalKoreanReplacements' -or
     $viewerI18n -notmatch 'language === ''ko''.*formalizeKorean' -or
     $viewerIndex -match 'v=5\.0\.30' -or
-    $viewerScript -notmatch "version: '5\.0\.34'" -or
+    $viewerScript -notmatch "version: '5\.0\.35'" -or
     $advanced -match 'v=5\.0\.30' -or
     $viewerCss -notmatch '#app \{[^}]*grid-template-rows: minmax\(0, 1fr\);[^}]*overflow: hidden' -or
     $viewerCss -notmatch '\.inspector \{[^}]*min-height: 0;[^}]*overflow: hidden;' -or
@@ -372,13 +374,17 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerScript -notmatch 'AgXToneMapping' -or
     $viewerScript -notmatch 'createStandardViewerMaterial' -or
     $viewerScript -notmatch 'roughnessMap' -or
-    $viewerScript -notmatch "LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v3'" -or
+    $viewerScript -notmatch "LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v4'" -or
     $viewerScript -notmatch 'metalnessMap: null' -or
     $viewerScript -notmatch 'normalStrengthControl' -or
     $viewerIndex -notmatch 'id="lightingPanel"' -or
     $viewerIndex -notmatch 'id="normalStrengthControl"' -or
     $viewerIndex -notmatch 'id="pbrPreviewControl"' -or
     $viewerScript -notmatch 'viewerPbrChannels' -or
+    $viewerIndex -notmatch 'id="albedoPreviewControl"' -or
+    $viewerScript -notmatch 'applyAlbedoPreview' -or
+    $viewerScript -notmatch 'albedoPreview: false' -or
+    $viewerI18n -notmatch "'알베도 검사': 'Albedo inspection'" -or
     $viewerScript -notmatch 'pbrPreview: false' -or
     $viewerScript -notmatch 'setMaterialPbrPreview\(standard, pbrPreviewEnabled\)' -or
     $viewerScript -notmatch 'Object\.values\(material\.userData\?\.viewerPbrChannels' -or
@@ -388,14 +394,19 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerVendor -notmatch 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
     $viewerIndex -notmatch '조명과 표면' -or
     $viewerLightingCss -notmatch '\.lighting-desk' -or
-    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.34' -or
-    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.34' -or
+    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.35' -or
+    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.35' -or
     $viewerScript -notmatch 'loadAssemblyMetadata' -or
     $viewerScript -notmatch 'matrixRowsDeterminant' -or
     $viewerScript -notmatch 'assembly-mirrored-stable-double-sided-v3' -or
     $viewerScript -notmatch 'unverified-obj-stable-double-sided-v4' -or
-    $viewerScript -notmatch 'verified-obj-stable-double-sided-v1' -or
+    $viewerScript -notmatch 'verified-native-front-sided-v2' -or
     $viewerScript -notmatch 'THREE\.DoubleSide' -or
+    $viewerScript -notmatch 'ARMOR_GHOST_MODEL_TYPES' -or
+    $viewerScript -notmatch 'ensureArmorDepthProxy' -or
+    $viewerScript -notmatch 'colorWrite: false' -or
+    $viewerScript -notmatch 'side: THREE\.FrontSide' -or
+    $viewerScript -notmatch 'applyAdaptiveRenderQuality' -or
     $viewerScript -notmatch 'modelRadius / 100' -or
     $assemblerScript -notmatch '_repair_obj_mirrored_winding' -or
     $assemblerScript -notmatch 'mirrored_winding_corrected' -or
@@ -480,6 +491,10 @@ if ($backendExtractText -notmatch 'quality_contract' -or
     $nativeExportText -notmatch 'texture-max-size.+default=0') {
     throw 'Lossless LOD0/original-texture quality contract is missing.'
 }
+if ($nativeExportText -notmatch 'primitive_fingerprint' -or
+    $nativeExportText -notmatch 'seen_primitives') {
+    throw 'Native duplicate-primitive compaction is missing.'
+}
 
 $launchGuiText = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'GUI\Launch-Gui.ps1')
 foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
@@ -488,8 +503,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.34.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.34') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.35.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.35') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -510,8 +525,8 @@ foreach ($marker in @('if (!File.Exists(marker)) return "en";',
 $installerDefinition = Join-Path $PSScriptRoot 'Installer\WoWS-Toolbox.iss'
 if (Test-Path -LiteralPath $installerDefinition -PathType Leaf) {
     $installerText = Get-Content -Raw -LiteralPath $installerDefinition
-    foreach ($marker in @('Name: "startmenuicon"', 'Name: "desktopicon"',
-        'Filename: "{app}\WoWS Toolbox.exe"', 'Tasks: startmenuicon',
+    foreach ($marker in @('Name: "desktopicon"',
+        'Filename: "{app}\WoWS Toolbox.exe"', 'Name: "{app}"; Attribs: notcontentindexed',
         'Tasks: desktopicon', 'CloseApplications=no',
         'RestartApplications=no', 'UpgradeWelcome', 'InstalledVersion',
         'PrepareToInstall', 'FindWindowByWindowName', 'CloseAppForUpdate',
@@ -520,8 +535,13 @@ if (Test-Path -LiteralPath $installerDefinition -PathType Leaf) {
     }
     if ($installerText -notmatch 'AppId=\{\{88AA1660-CC89-4EDA-9895-BC051E8CAD26\}' -or
         $installerText -match 'CloseApplications=force' -or
-        $installerText -match 'RestartApplications=yes') {
+        $installerText -match 'RestartApplications=yes' -or
+        $installerText -match 'Filename: "\{app\}\\WoWS Toolbox\.exe"[^\r\n]*Tasks: startmenuicon') {
         throw 'Installer in-place update identity or graceful close policy is wrong.'
+    }
+    $buildReleaseText = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Build-Release.ps1')
+    if ($buildReleaseText -notmatch 'FileAttributes]::NotContentIndexed') {
+        throw 'Release output folders are not excluded from Windows Search indexing.'
     }
     if ($installerText -match 'Filename: "\{app\}\\WoWS-Toolbox-GUI\.cmd"') {
         throw 'Installer still routes a shortcut or post-install launch through CMD.'
@@ -582,7 +602,7 @@ if ($threeCore.Length -lt 1000000 -or $threeModule.Length -lt 500000 -or
     $notices -notmatch 'RPC\s+`FLOAT64`\s+support') {
     throw 'Dependency or license acceptance failed.'
 }
-$expectedExporterHash = '8DE5121B9321D05F1E4AD709B7B116EB521671B0B9AB63CC614784B077E6A6F4'
+$expectedExporterHash = '52C33F741F0E9109B8AA24F9AF6FCB0920690FCEEB353C0BB8F437FF07FABFE5'
 foreach ($relative in @('Backend\wowsunpack.exe', 'Backend\wowsunpack_armor.exe')) {
     $actualHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $relative) -Algorithm SHA256).Hash
     if ($actualHash -ne $expectedExporterHash) {
@@ -628,8 +648,8 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.34 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.35 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.34 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.35 self-tests passed.'
 }

@@ -2,7 +2,7 @@
 
 [CmdletBinding()]
 param(
-    [string] $Version = '5.0.34',
+    [string] $Version = '5.0.35',
     [string] $OutputRoot = (Join-Path $PSScriptRoot '..\..\outputs'),
     [switch] $CreateZip
 )
@@ -13,11 +13,21 @@ $ErrorActionPreference = 'Stop'
 $sourceRoot = (Resolve-Path -LiteralPath $PSScriptRoot).Path
 [IO.Directory]::CreateDirectory($OutputRoot) | Out-Null
 $outputRootPath = (Resolve-Path -LiteralPath $OutputRoot).Path
+$outputRootAttributes = [IO.File]::GetAttributes($outputRootPath)
+[IO.File]::SetAttributes(
+    $outputRootPath,
+    ($outputRootAttributes -bor [IO.FileAttributes]::NotContentIndexed)
+)
 $releaseRoot = Join-Path $outputRootPath "WoWS-Toolbox-v$Version"
 if (Test-Path -LiteralPath $releaseRoot) {
     throw "Release target already exists; refusing to overwrite: $releaseRoot"
 }
 [IO.Directory]::CreateDirectory($releaseRoot) | Out-Null
+$releaseRootAttributes = [IO.File]::GetAttributes($releaseRoot)
+[IO.File]::SetAttributes(
+    $releaseRoot,
+    ($releaseRootAttributes -bor [IO.FileAttributes]::NotContentIndexed)
+)
 
 foreach ($directory in @(
     'Backend',
@@ -67,6 +77,7 @@ foreach ($relativeRoot in @('Backend', 'BlenderExtractor', 'FullAssembly', 'GUI'
         Remove-Item -Recurse -Force
 }
 
+
 $buildInfo = [ordered]@{
     schema = 'wows-toolbox-build/v1'
     version = $Version
@@ -94,6 +105,17 @@ $manifestLines = Get-ChildItem -LiteralPath $releaseRoot -File -Recurse |
     [string[]] $manifestLines,
     [Text.UTF8Encoding]::new($false)
 )
+# Windows Search treats every portable launcher under a development output
+# folder as a separate installed app. Mark the complete release tree so only
+# the installer-created Start menu shortcut is presented as the application.
+Get-ChildItem -LiteralPath $releaseRoot -Recurse -Force -ErrorAction Stop |
+    ForEach-Object {
+        $attributes = [IO.File]::GetAttributes($_.FullName)
+        [IO.File]::SetAttributes(
+            $_.FullName,
+            ($attributes -bor [IO.FileAttributes]::NotContentIndexed)
+        )
+    }
 
 if ($CreateZip) {
     $zipPath = Join-Path $outputRootPath "WoWS-Toolbox-v$Version.zip"

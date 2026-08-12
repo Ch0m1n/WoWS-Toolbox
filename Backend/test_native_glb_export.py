@@ -24,7 +24,7 @@ NATIVE.Image.new("RGBA", (1, 1), (255, 0, 0, 255)).save(_png_stream, format="PNG
 PNG = _png_stream.getvalue()
 
 
-def synthetic_glb(path: Path) -> None:
+def synthetic_glb(path: Path, *, duplicate_hull_primitive: bool = False) -> None:
     binary = bytearray()
     views = []
 
@@ -64,7 +64,7 @@ def synthetic_glb(path: Path) -> None:
             {"name": "HP_AGM_1 (TestGun)", "mesh": 1, "scale": [-1, 1, 1]},
         ],
         "meshes": [
-            {"name": "Hull", "primitives": [primitive]},
+            {"name": "Hull", "primitives": [primitive, primitive] if duplicate_hull_primitive else [primitive]},
             {"name": "Gun", "primitives": [primitive]},
         ],
         "materials": [
@@ -171,6 +171,33 @@ class NativeGlbExportTests(unittest.TestCase):
             else:
                 os.environ["WOWS_TOOLBOX_LANGUAGE"] = old
 
+
+    def test_skips_duplicate_primitive_references_within_one_part(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "duplicate.glb"
+            synthetic_glb(source, duplicate_hull_primitive=True)
+            args = SimpleNamespace(
+                input=source,
+                output=root / "duplicate.obj",
+                report=root / "export.json",
+                formats="obj",
+                texture_max_size=0,
+                texture_library=None,
+                pbr_exporter=None,
+                pbr_game_dir=None,
+                pbr_cache=None,
+            )
+            report = NATIVE.build(args)
+            obj = args.output.read_text(encoding="utf-8")
+            self.assertEqual(report["object_count"], 2)
+            self.assertEqual(obj.count("f "), 2)
+
+    def test_catapult_hardpoint_is_classified_as_aircraft(self) -> None:
+        self.assertEqual(
+            NATIVE.classify_part("HP_AC_1 (AC001_Catapult_1)"),
+            "aircraft",
+        )
 
 if __name__ == "__main__":
     unittest.main()

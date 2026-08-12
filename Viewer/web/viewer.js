@@ -14,6 +14,7 @@ const exposureControl = document.querySelector('#exposureControl');
 const keyLightControl = document.querySelector('#keyLightControl');
 const environmentControl = document.querySelector('#environmentControl');
 const pbrPreviewControl = document.querySelector('#pbrPreviewControl');
+const albedoPreviewControl = document.querySelector('#albedoPreviewControl');
 const normalStrengthControl = document.querySelector('#normalStrengthControl');
 const azimuthControl = document.querySelector('#azimuthControl');
 const elevationControl = document.querySelector('#elevationControl');
@@ -120,10 +121,11 @@ const undoHistory = [];
 const redoHistory = [];
 let pendingTransformEdit = null;
 const BACKGROUND_VISIBILITY_KEY = 'wows-toolbox-viewer-background';
-const LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v3';
-const LIGHTING_DEFAULTS = Object.freeze({ exposure: 1, key: 0.72, environment: 1, normalStrength: 0.2, pbrPreview: false, azimuth: 32, elevation: 48 });
+const LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v4';
+const LIGHTING_DEFAULTS = Object.freeze({ exposure: 1, key: 0.72, environment: 1, normalStrength: 0.2, pbrPreview: false, albedoPreview: false, azimuth: 32, elevation: 48 });
 let activeNormalStrength = LIGHTING_DEFAULTS.normalStrength;
 let pbrPreviewEnabled = LIGHTING_DEFAULTS.pbrPreview;
+let albedoPreviewEnabled = LIGHTING_DEFAULTS.albedoPreview;
 const viewerMaterialUpgrades = new WeakMap();
 let backgroundVisible = true;
 const ARMOR_GHOST_RENDER_ORDER = 100;
@@ -213,6 +215,44 @@ function applyPbrPreview(enabled) {
   pbrPreviewControl.checked = pbrPreviewEnabled;
   normalStrengthControl.disabled = !pbrPreviewEnabled;
 }
+function applyAlbedoPreview(enabled) {
+  albedoPreviewEnabled = Boolean(enabled);
+  if (!modelContent) {
+    albedoPreviewControl.checked = albedoPreviewEnabled;
+    return;
+  }
+  modelContent.traverse((node) => {
+    if (!node.isMesh) return;
+    if (node.userData.viewerArmorDepthProxy) return;
+    const materials = Array.isArray(node.material) ? node.material : [node.material];
+    const replaced = materials.map((material) => {
+      if (!material) return material;
+      if (albedoPreviewEnabled) {
+        if (material.userData.viewerAlbedoPreview) return material;
+        if (material.userData.viewerAlbedoMaterial) return material.userData.viewerAlbedoMaterial;
+        const albedo = new THREE.MeshBasicMaterial({
+          name: `${material.name || 'Material'}_Albedo`,
+          color: material.map ? 0xffffff : material.color,
+          map: material.map || null,
+          alphaMap: material.alphaMap || null,
+          opacity: material.opacity,
+          transparent: material.transparent,
+          alphaTest: material.alphaTest,
+          side: material.side,
+          depthWrite: material.depthWrite,
+          vertexColors: material.vertexColors,
+        });
+        albedo.userData = { viewerLitMaterial: material, viewerAlbedoPreview: true };
+        material.userData.viewerAlbedoMaterial = albedo;
+        albedo.toneMapped = false;
+        return albedo;
+      }
+      return material.userData.viewerLitMaterial || material;
+    });
+    node.material = Array.isArray(node.material) ? replaced : replaced[0];
+  });
+  albedoPreviewControl.checked = albedoPreviewEnabled;
+}
 
 function applyLightingSettings(settings, persist = true) {
   const state = {
@@ -221,6 +261,7 @@ function applyLightingSettings(settings, persist = true) {
     environment: clampLighting(settings.environment, 0, 2, LIGHTING_DEFAULTS.environment),
     normalStrength: clampLighting(settings.normalStrength, 0, 1, LIGHTING_DEFAULTS.normalStrength),
     pbrPreview: settings.pbrPreview === true || settings.pbrPreview === 'true',
+    albedoPreview: settings.albedoPreview === true || settings.albedoPreview === 'true',
     azimuth: clampLighting(settings.azimuth, -180, 180, LIGHTING_DEFAULTS.azimuth),
     elevation: clampLighting(settings.elevation, 5, 85, LIGHTING_DEFAULTS.elevation),
   };
@@ -228,10 +269,12 @@ function applyLightingSettings(settings, persist = true) {
   keyLight.intensity = state.key;
   hemisphereLight.intensity = state.environment * 1.1;
   ambientLight.intensity = state.environment * 0.78;
-  rimLight.intensity = 0.18 * (0.35 + state.environment * 0.65);
-  fillLight.intensity = 0.7 * (0.25 + state.environment * 0.75);
+  // Environment zero means zero: no hidden fill/rim contribution may remain.
+  rimLight.intensity = state.environment * 0.18;
+  fillLight.intensity = state.environment * 0.7;
   applyNormalStrength(state.normalStrength);
   applyPbrPreview(state.pbrPreview);
+  applyAlbedoPreview(state.albedoPreview);
   const azimuth = THREE.MathUtils.degToRad(state.azimuth);
   const elevation = THREE.MathUtils.degToRad(state.elevation);
   const horizontal = Math.cos(elevation) * 14;
@@ -240,6 +283,7 @@ function applyLightingSettings(settings, persist = true) {
   keyLightControl.value = String(state.key);
   environmentControl.value = String(state.environment);
   pbrPreviewControl.checked = state.pbrPreview;
+  albedoPreviewControl.checked = state.albedoPreview;
   normalStrengthControl.disabled = !state.pbrPreview;
   normalStrengthControl.value = String(state.normalStrength);
   azimuthControl.value = String(state.azimuth);
@@ -255,7 +299,7 @@ function applyLightingSettings(settings, persist = true) {
 }
 
 function currentLightingSettings() {
-  return { exposure: exposureControl.value, key: keyLightControl.value, environment: environmentControl.value, normalStrength: normalStrengthControl.value, pbrPreview: pbrPreviewControl.checked, azimuth: azimuthControl.value, elevation: elevationControl.value };
+  return { exposure: exposureControl.value, key: keyLightControl.value, environment: environmentControl.value, normalStrength: normalStrengthControl.value, pbrPreview: pbrPreviewControl.checked, albedoPreview: albedoPreviewControl.checked, azimuth: azimuthControl.value, elevation: elevationControl.value };
 }
 
 function showLoading(title, detail) {
@@ -358,8 +402,13 @@ function matrixRowsDeterminant(rows) {
 }
 
 function normalizeAssemblyMetadata(data) {
-  const nativeCorrected = data?.engine === 'native_python_obj/v1'
-    && data?.combined_obj?.checks?.native_no_blender === true;
+  const nativeCorrected = (
+    data?.engine === 'native_python_obj/v1'
+      && data?.combined_obj?.checks?.native_no_blender === true
+  ) || (
+    data?.engine === 'native_python_glb_obj/v1'
+      && data?.native_no_blender === true
+  );
   const corrected = nativeCorrected
     || data?.combined_obj?.checks?.mirrored_winding_corrected === true;
   const records = Array.isArray(data?.mounts?.records) ? data.mounts.records : [];
@@ -380,8 +429,13 @@ async function loadAssemblyMetadata(url) {
   if (!response.ok) throw new Error(`조립 방향 데이터 HTTP ${response.status}`);
   const data = await response.json();
   const legacy = Array.isArray(data?.mounts?.records);
-  const native = data?.engine === 'native_python_obj/v1'
-    && data?.combined_obj?.checks?.native_no_blender === true;
+  const native = (
+    data?.engine === 'native_python_obj/v1'
+      && data?.combined_obj?.checks?.native_no_blender === true
+  ) || (
+    data?.engine === 'native_python_glb_obj/v1'
+      && data?.native_no_blender === true
+  );
   if (!data || (!legacy && !native)) {
     throw new Error('지원하지 않는 조립 방향 데이터 형식이에요.');
   }
@@ -442,12 +496,17 @@ function normalizeModelMaterials(root, assemblyMetadata = null) {
     });
     const reportMirrored = isAssemblyMirroredNode(node, assemblyMetadata);
     const unverifiedObj = !assemblyMetadata;
+    const needsDoubleSide = reportMirrored || unverifiedObj;
     const windingPolicy = reportMirrored
       ? 'assembly-mirrored-stable-double-sided-v3'
-      : (unverifiedObj ? 'unverified-obj-stable-double-sided-v4' : 'verified-obj-stable-double-sided-v1');
-    // Apply the same stable two-sided policy to every extracted part. Source
-    // winding varies within hull, weapons, sensors, catapults, and detail meshes.
-    mirroredPartMaterials += cloneNodeMaterialsForSide(node, THREE.DoubleSide, windingPolicy);
+      : (unverifiedObj ? 'unverified-obj-stable-double-sided-v4' : 'verified-native-front-sided-v2');
+    // Native exports repair negative-determinant winding while writing the OBJ.
+    // Double-sided native meshes expose the far side through transparent armor mode.
+    mirroredPartMaterials += cloneNodeMaterialsForSide(
+      node,
+      needsDoubleSide ? THREE.DoubleSide : THREE.FrontSide,
+      windingPolicy,
+    );
   });
   return normalized.size + mirroredPartMaterials;
 }
@@ -462,6 +521,7 @@ function disposeMaterial(material) {
   for (const value of Object.values(material.userData?.viewerPbrChannels || {})) {
     if (value?.isTexture) textures.add(value);
   }
+  material.userData?.viewerAlbedoMaterial?.dispose?.();
   textures.forEach((texture) => texture.dispose());
   material.dispose?.();
 }
@@ -469,9 +529,13 @@ function disposeMaterial(material) {
 function disposeObject3D(root) {
   if (!root) return;
   root.traverse((node) => {
-    node.geometry?.dispose?.();
+    if (node.userData?.viewerArmorDepthProxy) {
+      node.material?.dispose?.();
+      return;
+    }
     if (Array.isArray(node.material)) node.material.forEach(disposeMaterial);
     else disposeMaterial(node.material);
+    node.geometry?.dispose?.();
   });
   root.removeFromParent?.();
 }
@@ -711,6 +775,9 @@ function clearModel(invalidateLoads = true) {
   transform.detach();
   selectionBox.visible = false;
   selected = null;
+  if (albedoPreviewEnabled) applyAlbedoPreview(false);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(viewportShell.clientWidth, viewportShell.clientHeight, false);
   if (shipRoot) disposeObject3D(shipRoot);
   shipRoot = null;
   modelContent = null;
@@ -744,15 +811,15 @@ function getPartLabel(node, index) {
 
 function classifyPart(name) {
   const token = name.toUpperCase();
-  if (/(VERTICAL_LAUNCH|GUIDED_MISSILE|MISSILE_LAUNCHER|HP_[AB]GR|VLS)/.test(token)) return '미사일';
-  if (/(HP_[AB]GS|SECONDARY_ARTILLERY|SECONDARY|SECGUN|CASEMATE)/.test(token)) return '부포';
-  if (/(HP_[AB]GA|ANTIAIR|ANTI_AIR|AIR_DEFENSE|AA_|AAGUN|MACHINEGUN)/.test(token)) return '대공포';
-  if (/(HP_[AB]GT|TORPEDO|TTUBE|TORP)/.test(token)) return '어뢰';
-  if (/(HP_[AB]D|HP_ARS|RADAR|DIRECTOR|RANGEFINDER|SENSOR)/.test(token)) return '레이더';
-  if (/(HP_[AB]GM|MAIN_GUN|MAIN_ARTILLERY|MAIN_BATTERY|TURRET|SHIPMAT_PBS_GUN)/.test(token)) return '주함포';
+  if (/(VERTICAL_LAUNCH|GUIDED_MISSILE|MISSILE_LAUNCHER|HP_[A-Z]GR|VLS)/.test(token)) return '미사일';
+  if (/(HP_[A-Z]GS|SECONDARY_ARTILLERY|SECONDARY|SECGUN|CASEMATE)/.test(token)) return '부포';
+  if (/(HP_[A-Z]GA|ANTIAIR|ANTI_AIR|AIR_DEFENSE|AA_|AAGUN|MACHINEGUN)/.test(token)) return '대공포';
+  if (/(HP_[A-Z]GT|TORPEDO|TTUBE|TORP)/.test(token)) return '어뢰';
+  if (/(HP_[A-Z](?:D|F|RS)|RADAR|DIRECTOR|RANGEFINDER|SENSOR)/.test(token)) return '레이더';
+  if (/(HP_[A-Z]GM|MAIN_GUN|MAIN_ARTILLERY|MAIN_BATTERY|TURRET|SHIPMAT_PBS_GUN)/.test(token)) return '주함포';
   if (/^HULL_|(^|[^A-Z])[A-Z]SC\d{3}|SHIPMAT_PBS_HULL/.test(token)) return '선체';
   if (/(DECK|SUPERSTRUCTURE|DECKHOUSE|BRIDGE)/.test(token)) return '상부구조';
-  if (/(AIRCRAFT|PLANE|CATAPULT)/.test(token)) return '항공기';
+  if (/(HP_[A-Z]C|AIRCRAFT|AIR_ARMAMENT|PLANE|CATAPULT)/.test(token)) return '항공기';
   if (/(FLAG|ROPE|WIRE|ANCHOR|DECOR)/.test(token)) return '장식';
   return '기타';
 }
@@ -787,13 +854,13 @@ async function loadModelMetadata(url) {
         part?.hardpoint || '',
       ].join(' ').toLowerCase();
       if (token.includes('hull')) return 'hull';
-      if (token.includes('main_artillery') || token.includes('hp_agm')) return 'main_gun';
-      if (token.includes('secondary_artillery') || token.includes('hp_ags')) return 'secondary';
-      if (token.includes('air_defense') || token.includes('hp_aga')) return 'anti_air';
+      if (token.includes('main_artillery') || /hp_[a-z]gm/.test(token)) return 'main_gun';
+      if (token.includes('secondary_artillery') || /hp_[a-z]gs/.test(token)) return 'secondary';
+      if (token.includes('air_defense') || /hp_[a-z]ga/.test(token)) return 'anti_air';
       if (token.includes('torpedo')) return 'torpedo';
       if (token.includes('missile')) return 'missile_launcher';
       if (token.includes('radar') || token.includes('director')) return 'radar_sensor';
-      if (token.includes('air_armament') || token.includes('aircraft')) return 'aircraft';
+      if (token.includes('air_armament') || token.includes('aircraft') || /hp_[a-z]c/.test(token)) return 'aircraft';
       if (token.includes('misc')) return 'decoration';
       return 'other';
     };
@@ -886,6 +953,15 @@ function triangleCount() {
     return sum + (geometry.index ? geometry.index.count / 3 : (geometry.attributes.position?.count || 0) / 3);
   }, 0);
 }
+function applyAdaptiveRenderQuality(triangles) {
+  const ratio = triangles > 1500000
+    ? 1
+    : (triangles > 600000 ? Math.min(window.devicePixelRatio, 1.25) : Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(ratio);
+  renderer.setSize(viewportShell.clientWidth, viewportShell.clientHeight, false);
+  return ratio;
+}
+
 
 function renderPartList() {
   const query = partSearch.value.trim().toLocaleLowerCase('ko');
@@ -956,14 +1032,50 @@ function selectPart(part) {
     detail: { part: selected },
   }));
 }
+function ensureArmorDepthProxy(node) {
+  if (node.userData.viewerArmorDepthProxyObject) return node.userData.viewerArmorDepthProxyObject;
+  const depthMaterial = new THREE.MeshBasicMaterial({
+    colorWrite: false,
+    depthWrite: true,
+    depthTest: true,
+    side: THREE.FrontSide,
+    blending: THREE.NoBlending,
+  });
+  const proxy = new THREE.Mesh(node.geometry, depthMaterial);
+  proxy.name = (node.name || 'Part') + '_ARMOR_DEPTH';
+  proxy.userData.viewerArmorDepthProxy = true;
+  proxy.frustumCulled = node.frustumCulled;
+  proxy.renderOrder = ARMOR_GHOST_RENDER_ORDER - 2;
+  proxy.visible = false;
+  node.add(proxy);
+  node.userData.viewerArmorDepthProxyObject = proxy;
+  return proxy;
+}
+
+
+const ARMOR_GHOST_MODEL_TYPES = new Set(['선체', '상부구조']);
 
 function setModelGhost(enabled) {
   if (!modelContent) return;
   modelContent.traverse((node) => {
     if (!node.isMesh) return;
+    if (node.userData.viewerArmorDepthProxy) return;
     if (node.userData.viewerRenderOrder === undefined) {
       node.userData.viewerRenderOrder = node.renderOrder;
     }
+    if (enabled && node.userData.viewerArmorVisibility === undefined) {
+      node.userData.viewerArmorVisibility = node.visible;
+    }
+    if (enabled) {
+      node.visible = ARMOR_GHOST_MODEL_TYPES.has(node.userData.viewerType)
+        ? node.userData.viewerArmorVisibility
+        : false;
+    } else if (node.userData.viewerArmorVisibility !== undefined) {
+      node.visible = node.userData.viewerArmorVisibility;
+      delete node.userData.viewerArmorVisibility;
+    }
+    const depthProxy = ensureArmorDepthProxy(node);
+    depthProxy.visible = enabled && node.visible;
     node.renderOrder = enabled
       ? ARMOR_GHOST_RENDER_ORDER
       : node.userData.viewerRenderOrder;
@@ -973,15 +1085,16 @@ function setModelGhost(enabled) {
         material.userData.viewerOpacity = material.opacity;
         material.userData.viewerTransparent = material.transparent;
         material.userData.viewerDepthWrite = material.depthWrite;
+        material.userData.viewerSide = material.side;
       }
       material.opacity = enabled ? 0.13 : material.userData.viewerOpacity;
       material.transparent = enabled ? true : material.userData.viewerTransparent;
       material.depthWrite = enabled ? false : material.userData.viewerDepthWrite;
+      material.side = enabled ? THREE.FrontSide : material.userData.viewerSide;
       material.needsUpdate = true;
     });
   });
 }
-
 function setDisplayMode(mode) {
   if (mode === 'armor' && !armorData) mode = 'model';
   displayMode = mode;
@@ -1199,11 +1312,11 @@ async function loadArmor(url, loadId) {
     geometry.computeVertexNormals();
     const material = new THREE.MeshBasicMaterial({
       color: bucket.color,
-      side: THREE.DoubleSide,
+      side: THREE.FrontSide,
       transparent: true,
       opacity: Number(armorOpacity.value) / 100,
-      depthTest: true,
-      depthWrite: false,
+      depthTest: false,
+      depthWrite: true,
       polygonOffset: true,
       polygonOffsetFactor: -1,
     });
@@ -1458,6 +1571,7 @@ async function loadShip(message) {
     modelContent.name = 'MODEL_ROOT';
     modelContent.add(root);
     const axisOrientation = orientObjForViewer(modelContent, root, modelMetadata);
+    applyAlbedoPreview(albedoPreviewEnabled);
     shipRoot.add(modelContent);
     scene.add(shipRoot);
     let armorLoaded = false;
@@ -1483,6 +1597,7 @@ async function loadShip(message) {
     frameModel();
     const triangles = Math.round(triangleCount());
     const armorText = armorLoaded ? ` · 장갑 ${armorData.triangle_count.toLocaleString()}` : '';
+    applyAdaptiveRenderQuality(triangles);
     meshStats.textContent = `파트 ${parts.length.toLocaleString()} · 삼각형 ${triangles.toLocaleString()}${armorText}`;
     setStatus(armorLoaded ? '모델·장갑 준비 완료' : '모델 준비 완료 · 장갑 데이터 없음');
     hideLoading();
@@ -1544,6 +1659,7 @@ lightingButton.addEventListener('click', () => {
 for (const control of [exposureControl, keyLightControl, environmentControl, normalStrengthControl, azimuthControl, elevationControl]) {
   control.addEventListener('input', () => applyLightingSettings(currentLightingSettings()));
 }
+albedoPreviewControl.addEventListener('change', () => applyLightingSettings(currentLightingSettings()));
 pbrPreviewControl.addEventListener('change', () => applyLightingSettings(currentLightingSettings()));
 lightingReset.addEventListener('click', () => { applyLightingSettings(LIGHTING_DEFAULTS); setStatus('조명 기본값을 복원했습니다.'); });
 document.querySelector('#gridButton').addEventListener('click', (event) => { grid.visible = !grid.visible; event.currentTarget.classList.toggle('active', grid.visible); });
@@ -1707,4 +1823,4 @@ window.WoWSViewerCore = {
   setStatus,
   hostMessage,
 };
-hostMessage({ type: 'ready', version: '5.0.34' });
+hostMessage({ type: 'ready', version: '5.0.35' });

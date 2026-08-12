@@ -67,6 +67,14 @@ The release package includes a private CPython 3.10 runtime and Pillow. Blender 
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.35 indexed materials, armor occlusion, and mounted aircraft equipment
+
+- Adds an **Albedo inspection** viewer mode that bypasses lighting and PBR channels, making texture errors distinguishable from lighting.
+- Prevents far-side model surfaces and weapon mounts from bleeding through the transparent armor view.
+- Exports `airArmament` and `depthCharges` component models, including the two catapults declared by North Dakota's client data.
+- Uses the full-resolution `_art` texture for indexed ship materials instead of the tiny `_a` lookup map that made Moonsund appear brick-patterned.
+- Removes duplicate primitive references during OBJ conversion and automatically lowers viewer pixel density for unusually dense ships.
+
 ## 5.0.34 consistent material preview
 
 - Applies one material policy to hull, superstructure, turrets, secondary and anti-aircraft weapons, radar, catapults, and every other OBJ part.
@@ -110,7 +118,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.34 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.35 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -222,7 +230,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.34 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.35 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 

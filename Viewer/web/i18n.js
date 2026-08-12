@@ -63,6 +63,8 @@
     '기본값은 원본 색상 우선이며 모든 파트에 동일하게 적용됩니다.': 'The default prioritizes source color and applies consistently to every part.',
     '방위': 'Azimuth',
     '고도': 'Elevation',
+    '알베도 검사': 'Albedo inspection',
+    '모든 광원과 PBR 채널을 무시하고 원본 색상 텍스처만 표시합니다.': 'Show only the source color texture, ignoring all lights and PBR channels.',
     'PBR 채널과 표면 굴곡을 확인하는 비파괴 미리보기 설정이에요.': 'Non-destructive preview controls for inspecting PBR channels and surface relief.',
     '표시 설정만 바뀌며 원본 OBJ와 텍스처는 수정되지 않습니다.': 'Only the preview changes; the source OBJ and textures are not modified.',
     '조명 기본값을 복원했습니다.': 'Lighting defaults restored.',
