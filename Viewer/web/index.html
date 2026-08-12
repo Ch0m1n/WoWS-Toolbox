@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://model.local https://compare.local; img-src 'self' https://model.local https://compare.local data: blob:; style-src 'self'; script-src 'self'; connect-src 'self' https://model.local https://compare.local; worker-src 'self' blob:;" />
   <title>WoWS Ship Model Viewer</title>
-  <link rel="stylesheet" href="./viewer.css?v=5.0.32" />
-  <link rel="stylesheet" href="./viewer-v5.css?v=5.0.32" />
-
+  <link rel="stylesheet" href="./viewer.css?v=5.0.33.1" />
+  <link rel="stylesheet" href="./viewer-v5.css?v=5.0.33.1" />
+  <link rel="stylesheet" href="./viewer-lighting-fix.css?v=5.0.33.1" />
 </head>
 <body>
   <main id="app">
@@ -29,6 +29,7 @@
           <button id="armorModeButton" class="tool" disabled>장갑</button>
           <span class="divider"></span>
           <button id="backgroundButton" class="tool active" aria-pressed="true" title="배경 표시 전환 (B)">배경</button>
+          <button id="lightingButton" class="tool active" aria-expanded="true" aria-controls="lightingPanel">조명</button>
           <button id="gridButton" class="tool active">격자</button>
           <button id="wireButton" class="tool">와이어</button>
           <button id="clipButton" class="tool">단면</button>
@@ -68,6 +69,18 @@
         <em id="visibleCount">0 / 0</em>
       </header>
       <div class="inspector-content">
+      <section id="lightingPanel" class="lighting-desk" aria-label="뷰어 조명 조절">
+        <header><div><span>LIGHTING DESK</span><strong>조명과 표면</strong></div><button id="lightingReset" type="button">기본값</button></header>
+        <label><span>노출 <output id="exposureValue" for="exposureControl">0.98</output></span><input id="exposureControl" type="range" min="0.4" max="1.8" step="0.01" value="0.98" /></label>
+        <label><span>주광 <output id="keyLightValue" for="keyLightControl">1.45</output></span><input id="keyLightControl" type="range" min="0" max="4" step="0.05" value="1.45" /></label>
+        <label><span>환경광 <output id="environmentValue" for="environmentControl">1.00</output></span><input id="environmentControl" type="range" min="0" max="2" step="0.02" value="1" /></label>
+        <label><span>표면 굴곡 <output id="normalStrengthValue" for="normalStrengthControl">0.35</output></span><input id="normalStrengthControl" type="range" min="0" max="1" step="0.01" value="0.35" /></label>
+        <div class="lighting-axis">
+          <label><span>방위 <output id="azimuthValue" for="azimuthControl">32°</output></span><input id="azimuthControl" type="range" min="-180" max="180" step="1" value="32" /></label>
+          <label><span>고도 <output id="elevationValue" for="elevationControl">48°</output></span><input id="elevationControl" type="range" min="5" max="85" step="1" value="48" /></label>
+        </div>
+        <p>표시 설정만 바뀌며 원본 OBJ와 텍스처는 수정되지 않습니다.</p>
+      </section>
       <div id="waterlinePanel" class="waterline-control" hidden>
         <span>해수면 높이 <output id="waterlineValue" for="waterlinePosition">Y 0.000</output></span>
         <input id="waterlinePosition" type="range" min="-100" max="100" step="1" value="0" aria-label="해수면 높이" />
@@ -137,10 +150,9 @@
       </footer>
     </aside>
   </main>
-  <script src="./i18n.js?v=5.0.32"></script>
-  <script src="./diagnostics.js?v=5.0.32"></script>
-  <script type="module" src="./viewer.js?v=5.0.32"></script>
-  <script type="module" src="./viewer-advanced.js?v=5.0.32"></script>
+  <script src="./i18n.js?v=5.0.33.1"></script>
+  <script src="./diagnostics.js?v=5.0.33.1"></script>
+  <script type="module" src="./viewer.js?v=5.0.33.1"></script>
+  <script type="module" src="./viewer-advanced.js?v=5.0.33.1"></script>
 </body>
 </html>
-

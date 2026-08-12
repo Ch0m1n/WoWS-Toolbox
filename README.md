@@ -67,11 +67,18 @@ The release package includes a private CPython 3.10 runtime and Pillow. Blender 
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.33 viewer and PBR update
+
+- Extracts original-size base color plus normal, roughness, metalness, and ambient-occlusion companion textures when the selected client exposes them.
+- Keeps the inferred game `_mg` channel in the export while avoiding a misleading metallic preview that made painted turrets appear split into black and white regions.
+- Uses a neutral AgX studio rig without hard self-shadowing and exposes lighting and surface-detail controls directly in the viewer inspector.
+- Corrects viewer waterline placement for translated ship roots and adds extraction, manifest, and viewer regression checks.
+
 ## Quality and format notes
 
 - Legends exports use the verified LOD0 render set and original-size base-color texture policy.
 - PC and Korabli honor the requested LOD only when that LOD exists. The extractor reports an error instead of silently substituting a different LOD.
-- OBJ/MTL output carries base-color textures. It is not a complete export of every proprietary in-game shader channel.
+- OBJ/MTL output carries base color and supported PBR companion textures. Proprietary in-game shader behavior is approximated and may not map one-to-one to standard desktop materials.
 - Some internal, animated, streamed, or unsupported model formats may not resolve.
 - Armor data availability and precision depend on the selected client and build.
 - Viewer edits are temporary inspection edits; they are not written back to the source OBJ.
@@ -96,7 +103,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.32 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.33 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -208,7 +215,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.32 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.33 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 

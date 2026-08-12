@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 
 [CmdletBinding()]
 param([string] $Python = 'python')
@@ -130,7 +130,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.32',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.33',
     'ConvertTo-ValidatedQueueEntries',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -307,6 +307,7 @@ foreach ($file in Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -File -Filte
 Write-Host '5/9 Offline viewer, armor, comparison, and analysis checks'
 $viewerIndex = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\index.html')
 $viewerCss = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\viewer.css')
+$viewerLightingCss = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\viewer-lighting-fix.css')
 $viewerScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\viewer.js')
 $viewerI18n = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\i18n.js')
 $advanced = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\viewer-advanced.js')
@@ -319,7 +320,7 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerI18n -notmatch 'formalKoreanReplacements' -or
     $viewerI18n -notmatch 'language === ''ko''.*formalizeKorean' -or
     $viewerIndex -match 'v=5\.0\.30' -or
-    $viewerScript -notmatch "version: '5\.0\.32'" -or
+    $viewerScript -notmatch "version: '5\.0\.33'" -or
     $advanced -match 'v=5\.0\.30' -or
     $viewerCss -notmatch '#app \{[^}]*grid-template-rows: minmax\(0, 1fr\);[^}]*overflow: hidden' -or
     $viewerCss -notmatch '\.inspector \{[^}]*min-height: 0;[^}]*overflow: hidden;' -or
@@ -362,9 +363,21 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerScript -notmatch 'material.forceSinglePass = true' -or
     $viewerScript -notmatch 'mesh.renderOrder = ARMOR_RENDER_ORDER_BASE \+ groupIndex' -or
     $viewerScript -notmatch 'normalizeModelMaterials' -or
-    $viewerScript -notmatch 'viewerMaterialPolicy' -or
-    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.32' -or
-    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.32' -or
+    $viewerScript -notmatch "viewerMaterialPolicy === 'paint-v4'" -or
+    $viewerScript -notmatch 'getMaxAnisotropy' -or
+    $viewerScript -notmatch 'LinearMipmapLinearFilter' -or
+    $viewerScript -notmatch 'AgXToneMapping' -or
+    $viewerScript -notmatch 'createStandardViewerMaterial' -or
+    $viewerScript -notmatch 'roughnessMap' -or
+    $viewerScript -notmatch "LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v2'" -or
+    $viewerScript -notmatch 'metalnessMap: null' -or
+    $viewerScript -notmatch 'normalStrengthControl' -or
+    $viewerIndex -notmatch 'id="lightingPanel"' -or
+    $viewerIndex -notmatch 'id="normalStrengthControl"' -or
+    $viewerIndex -notmatch '조명과 표면' -or
+    $viewerLightingCss -notmatch '\.lighting-desk' -or
+    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.33' -or
+    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.33' -or
     $viewerScript -notmatch 'loadAssemblyMetadata' -or
     $viewerScript -notmatch 'matrixRowsDeterminant' -or
     $viewerScript -notmatch 'assembly-mirrored-double-sided-v2' -or
@@ -382,6 +395,8 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerScript -notmatch 'undoViewerEdit' -or
     $viewerScript -notmatch "addEventListener\('keydown'" -or
     $viewerIndex -notmatch 'Ctrl\+Z 취소' -or
+    $advanced -notmatch 'getModelContent\(\)\?\.position\?\.y' -or
+    $advanced -notmatch 'sourceWaterline \+ adjustment' -or
     $advanced -notmatch 'compareLoadSerial' -or
     $advanced -notmatch 'core\.recordObjectEdit' -or
     $advanced -notmatch "hostname !== 'compare\.local'" -or
@@ -422,6 +437,7 @@ $required = @(
     'Viewer\Runtime\Microsoft.Web.WebView2.Wpf.dll',
     'Viewer\Runtime\WebView2Loader.dll',
     'Viewer\web\index.html', 'Viewer\web\viewer.css', 'Viewer\web\viewer-v5.css',
+    'Viewer\web\viewer-lighting-fix.css',
     'Viewer\web\viewer.js', 'Viewer\web\viewer-advanced.js',
     'Viewer\web\weapon-kinematics.js', 'Branding\WoWS-Toolbox.ico',
     'Viewer\web\diagnostics.js', 'Viewer\web\vendor\three.module.js',
@@ -459,8 +475,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.32.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.32') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.33.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.33') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -581,11 +597,14 @@ $expectedFiles = @(Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -File -Forc
     Where-Object {
         if ($_.FullName -eq $manifest) { return $false }
         $relative = [IO.Path]::GetRelativePath($PSScriptRoot, $_.FullName).Replace('\','/')
-        return -not $relative.StartsWith('.git/', [StringComparison]::OrdinalIgnoreCase)
-            -and -not $relative.StartsWith('.test-', [StringComparison]::OrdinalIgnoreCase)
-            -and -not $relative.StartsWith('output/', [StringComparison]::OrdinalIgnoreCase)
-            -and -not $relative.Contains('/__pycache__/')
-            -and -not $relative.Contains('/.pytest_cache/')
+        return (
+            (-not $relative.StartsWith('.git/', [StringComparison]::OrdinalIgnoreCase)) -and
+            (-not $relative.StartsWith('.test-', [StringComparison]::OrdinalIgnoreCase)) -and
+            (-not $relative.StartsWith('test-results/', [StringComparison]::OrdinalIgnoreCase)) -and
+            (-not $relative.StartsWith('output/', [StringComparison]::OrdinalIgnoreCase)) -and
+            (-not $relative.Contains('/__pycache__/')) -and
+            (-not $relative.Contains('/.pytest_cache/'))
+        )
     })
 if ($seen.Count -ne $expectedFiles.Count) {
     throw "Manifest count mismatch: manifest=$($seen.Count), files=$($expectedFiles.Count)"
@@ -596,8 +615,8 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.32 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.33 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.32 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.33 self-tests passed.'
 }

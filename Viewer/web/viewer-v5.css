@@ -211,6 +211,21 @@
   display: grid;
 }
 
+.lighting-desk { position: absolute; z-index: 7; top: 66px; right: 18px; width: min(340px, calc(100% - 36px)); padding: 13px; border: 1px solid #31557f; border-radius: 10px; background: linear-gradient(150deg, rgba(15,36,61,.97), rgba(5,16,29,.98)); box-shadow: 0 18px 50px rgba(0,0,0,.38); }
+.lighting-desk[hidden] { display: none; }
+.lighting-desk header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; }
+.lighting-desk header div { display: grid; gap: 2px; }
+.lighting-desk header span { color: #61d7db; font-size: 8px; letter-spacing: .2em; }
+.lighting-desk header strong { color: #edf5ff; font-size: 12px; }
+.lighting-desk header button { height: 25px; padding: 0 9px; border: 1px solid #31557f; border-radius: 6px; color: #9db4ce; background: #0a192b; cursor: pointer; font-size: 9px; }
+.lighting-desk > label, .lighting-axis label { display: grid; gap: 5px; margin-top: 8px; color: #9fb4cc; font-size: 9px; }
+.lighting-desk label span { display: flex; justify-content: space-between; gap: 12px; }
+.lighting-desk output { color: #72c9ff; font-variant-numeric: tabular-nums; }
+.lighting-desk input { width: 100%; accent-color: #4f98ef; }
+.lighting-axis { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.lighting-desk p { margin: 10px 0 0; color: #667f9b; font-size: 8px; line-height: 1.45; }
+
 .compare-badge {
   color: #69d8ff;
 }
+

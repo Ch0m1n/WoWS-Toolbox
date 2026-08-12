@@ -15,6 +15,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Mapping, Sequence
 
+from PIL import Image, ImageOps
+
 
 VISIBILITY_PROFILES = {
     "harbor_dock": {"dock": True, "overlay": False},
@@ -422,6 +424,30 @@ def materialize_texture(source: Path, texture_dir: Path, cache: dict[str, str]) 
     return relative
 
 
+def split_metallic_gloss_texture(source: Path, texture_dir: Path) -> dict[str, str]:
+    """Publish the original MG map plus DCC-friendly roughness/metalness maps."""
+
+    texture_dir.mkdir(parents=True, exist_ok=True)
+    digest = sha256(source)
+    targets = {
+        "metallic_gloss": texture_dir / f"{digest}_metallic_gloss.png",
+        "roughness": texture_dir / f"{digest}_roughness.png",
+        "metalness": texture_dir / f"{digest}_metalness.png",
+    }
+    if not all(path.is_file() for path in targets.values()):
+        with Image.open(source) as opened:
+            rgba = opened.convert("RGBA")
+            red, green, _blue, _alpha = rgba.split()
+            rgba.save(targets["metallic_gloss"], format="PNG", compress_level=3)
+            Image.merge("RGB", (ImageOps.invert(red),) * 3).save(
+                targets["roughness"], format="PNG", compress_level=3
+            )
+            Image.merge("RGB", (green,) * 3).save(
+                targets["metalness"], format="PNG", compress_level=3
+            )
+    return {role: f"textures/{path.name}" for role, path in targets.items()}
+
+
 def write_mtl(
     output: Path,
     assets: Mapping[str, ModelAsset],
@@ -445,12 +471,16 @@ def write_mtl(
             mapped: dict[str, str] = {}
             for channel, source_value in maps.items():
                 channel = str(channel)
-                if channel not in {"a", "n", "ao"}:
+                if channel not in {"a", "n", "ao", "mg"}:
                     continue
                 if isinstance(source_value, str) and source_value:
-                    mapped[channel] = materialize_texture(
-                        Path(source_value), texture_dir, texture_cache
-                    )
+                    source_path = Path(source_value)
+                    if channel == "mg":
+                        mapped.update(split_metallic_gloss_texture(source_path, texture_dir))
+                    else:
+                        mapped[channel] = materialize_texture(
+                            source_path, texture_dir, texture_cache
+                        )
             properties = {
                 str(item.get("name")): item.get("value")
                 for item in material.get("properties", [])
@@ -472,6 +502,8 @@ def write_mtl(
                     "Ns 32.000000",
                     "d 1.000000",
                     "illum 2",
+                    "Pr 1" if "roughness" in mapped else "Pr 0.72",
+                    "Pm 1" if "metalness" in mapped else "Pm 0",
                     f"# wows_fx {fx_name or 'unknown'}",
                     f"# wows_double_sided {bool(properties.get('doubleSided', False))}",
                 ]
@@ -484,6 +516,11 @@ def write_mtl(
                 blocks.append(f"map_Bump {mapped['n']}")
             if "ao" in mapped:
                 blocks.append(f"map_Ka {mapped['ao']}")
+            if "roughness" in mapped:
+                blocks.append("# wows_pbr_contract R=gloss G=metalness roughness=1-R")
+                blocks.append(f"map_Pr {mapped['roughness']}")
+            if "metalness" in mapped:
+                blocks.append(f"map_Pm {mapped['metalness']}")
     output.write_text("\n".join(blocks) + "\n", encoding="utf-8", newline="\n")
     return material_names, object_materials, len(set(texture_cache.values()))
 

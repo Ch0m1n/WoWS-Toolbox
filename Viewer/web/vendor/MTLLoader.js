@@ -426,6 +426,24 @@ class MaterialCreator {
 
 					break;
 
+				case 'map_pr':
+
+					setMapForType( 'roughnessMap', value );
+
+					break;
+
+				case 'map_pm':
+
+					setMapForType( 'metalnessMap', value );
+
+					break;
+
+				case 'map_ka':
+
+					setMapForType( 'aoMap', value );
+
+					break;
+
 				case 'map_ke':
 
 					// Emissive map
@@ -508,7 +526,17 @@ class MaterialCreator {
 
 		}
 
-		this.materials[ materialName ] = new MeshPhongMaterial( params );
+		const wowsPbr = {
+			roughnessMap: params.roughnessMap || null,
+			metalnessMap: params.metalnessMap || null,
+			aoMap: params.aoMap || null
+		};
+		delete params.roughnessMap;
+		delete params.metalnessMap;
+		delete params.aoMap;
+		const material = new MeshPhongMaterial( params );
+		material.userData.wowsPbr = wowsPbr;
+		this.materials[ materialName ] = material;
 		return this.materials[ materialName ];
 
 	}

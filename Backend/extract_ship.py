@@ -755,6 +755,19 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
         str(args.texture_max_size),
         "--texture-library",
         str(cache_base / "SharedTextures"),
+        "--pbr-exporter",
+        str(exporter),
+        "--pbr-game-dir",
+        str(args.game_dir),
+        "--pbr-cache",
+        str(
+            cache_base
+            / "PBRMaps"
+            / args.source
+            / str(build)
+            / exporter_fingerprint
+            / ("original" if args.texture_max_size == 0 else f"max-{args.texture_max_size}")
+        ),
     ]
     prefetch_event = getattr(args, "prefetch_event", None)
     if prefetch_event is not None:

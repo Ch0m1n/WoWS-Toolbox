@@ -16,6 +16,8 @@ from typing import Iterable, Iterator
 
 from PIL import Image
 
+import pbr_materials as PBR
+
 
 COMPONENTS = {
     5120: ("b", 1),
@@ -326,7 +328,7 @@ def export_textures(
                 Image.Resampling.LANCZOS,
             )
             resized += 1
-        converted.save(target, format="PNG", optimize=True)
+        converted.save(target, format="PNG", compress_level=3)
         linked += int(publish_shared_texture(target, library))
         mapping[index] = f"textures/{target.name}"
         paths.append(str(target))
@@ -368,7 +370,12 @@ def material_texture_index(document: dict, material: dict) -> int | None:
     return int(basis["source"]) if "source" in basis else None
 
 
-def write_mtl(document: dict, target: Path, image_paths: dict[int, str]) -> list[str]:
+def write_mtl(
+    document: dict,
+    target: Path,
+    image_paths: dict[int, str],
+    pbr_contract: dict | None = None,
+) -> list[str]:
     materials = document.get("materials", [])
     names = unique_names(
         [str(item.get("name") or f"Material_{index:03d}") for index, item in enumerate(materials)],
@@ -379,9 +386,17 @@ def write_mtl(document: dict, target: Path, image_paths: dict[int, str]) -> list
         for index, material in enumerate(materials):
             pbr = material.get("pbrMetallicRoughness", {})
             factor = list(pbr.get("baseColorFactor", (1.0, 1.0, 1.0, 1.0))) + [1.0] * 4
+            pbr_entry = None
+            if isinstance(pbr_contract, dict):
+                entries = pbr_contract.get("materials")
+                if isinstance(entries, list) and index < len(entries) and isinstance(entries[index], dict):
+                    pbr_entry = entries[index]
+            pbr_maps = pbr_entry.get("maps", {}) if pbr_entry else {}
             output.write(f"\nnewmtl {names[index]}\n")
             output.write(f"Kd {factor[0]:.6g} {factor[1]:.6g} {factor[2]:.6g}\n")
             output.write("Ka 0 0 0\nKs 0.02 0.02 0.02\nNs 16\nillum 2\n")
+            output.write("Pr 1\n" if pbr_maps.get("roughness") else "Pr 0.72\n")
+            output.write("Pm 1\n" if pbr_maps.get("metalness") else "Pm 0\n")
             if factor[3] < 0.999:
                 output.write(f"d {factor[3]:.6g}\n")
             image_index = material_texture_index(document, material)
@@ -389,6 +404,16 @@ def write_mtl(document: dict, target: Path, image_paths: dict[int, str]) -> list
                 output.write(f"map_Kd {image_paths[image_index]}\n")
                 if str(material.get("alphaMode", "OPAQUE")) != "OPAQUE":
                     output.write(f"map_d {image_paths[image_index]}\n")
+            if pbr_maps:
+                output.write("# wows_pbr_contract R=gloss G=metalness roughness=1-R\n")
+                if pbr_maps.get("normal"):
+                    output.write(f"norm {pbr_maps['normal']}\n")
+                if pbr_maps.get("roughness"):
+                    output.write(f"map_Pr {pbr_maps['roughness']}\n")
+                if pbr_maps.get("metalness"):
+                    output.write(f"map_Pm {pbr_maps['metalness']}\n")
+                if pbr_maps.get("ao"):
+                    output.write(f"map_Ka {pbr_maps['ao']}\n")
     return names
 
 
@@ -528,7 +553,47 @@ def build(args: argparse.Namespace) -> dict:
             max(0, args.texture_max_size),
             args.texture_library,
         )
-    material_names = write_mtl(document, args.output.with_suffix(".mtl"), image_paths)
+    pbr_contract = None
+    pbr_exporter = getattr(args, "pbr_exporter", None)
+    pbr_game_dir = getattr(args, "pbr_game_dir", None)
+    pbr_cache = getattr(args, "pbr_cache", None)
+    if "obj" in formats and pbr_exporter and pbr_game_dir and pbr_cache:
+        progress(
+            "texture",
+            54,
+            "고해상도 노멀·거칠기·금속성·AO 맵을 준비하는 중",
+            "Preparing high-resolution normal, roughness, metalness, and AO maps",
+        )
+        try:
+            pbr_contract = PBR.prepare_pbr_materials(
+                document,
+                exporter=Path(pbr_exporter),
+                game_dir=Path(pbr_game_dir),
+                texture_dir=args.output.parent / "textures",
+                work_dir=args.output.parent / ".work",
+                cache_root=Path(pbr_cache),
+                max_size=max(0, args.texture_max_size),
+            )
+            args.output.with_suffix(".pbr.json").write_text(
+                json.dumps(pbr_contract, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as error:
+            print(
+                "[WARN] "
+                + text(
+                    f"PBR 보조 채널을 준비하지 못해 기본 색상으로 계속해요: {error}",
+                    f"PBR supplemental channels were unavailable; continuing with base color: {error}",
+                ),
+                flush=True,
+            )
+            pbr_contract = None
+    material_names = write_mtl(
+        document,
+        args.output.with_suffix(".mtl"),
+        image_paths,
+        pbr_contract,
+    )
     objects: list[dict] = []
     vertices = triangle_count = 0
     if "obj" in formats:
@@ -578,6 +643,13 @@ def build(args: argparse.Namespace) -> dict:
         "texture_max_size": args.texture_max_size,
         "textures_resized": resized,
         "textures_shared": linked,
+        "pbr": {
+            "available": bool(pbr_contract and pbr_contract.get("coverage", {}).get("pbr_materials")),
+            "sidecar": str(args.output.with_suffix(".pbr.json")) if pbr_contract else None,
+            "coverage": pbr_contract.get("coverage", {}) if pbr_contract else {},
+            "source_contract": pbr_contract.get("source_contract", {}) if pbr_contract else {},
+            "texture_files": pbr_contract.get("texture_files", []) if pbr_contract else [],
+        },
         "object_count": len(objects),
         "object_names": [item["name"] for item in objects],
         "vertex_count": vertices,
@@ -608,12 +680,21 @@ def main() -> int:
     parser.add_argument("--formats", default="obj")
     parser.add_argument("--texture-max-size", type=int, default=0)
     parser.add_argument("--texture-library", type=Path)
+    parser.add_argument("--pbr-exporter", type=Path)
+    parser.add_argument("--pbr-game-dir", type=Path)
+    parser.add_argument("--pbr-cache", type=Path)
     args = parser.parse_args()
     args.input = args.input.resolve()
     args.output = args.output.resolve()
     args.report = args.report.resolve()
     if args.texture_library:
         args.texture_library = args.texture_library.resolve()
+    if args.pbr_exporter:
+        args.pbr_exporter = args.pbr_exporter.resolve()
+    if args.pbr_game_dir:
+        args.pbr_game_dir = args.pbr_game_dir.resolve()
+    if args.pbr_cache:
+        args.pbr_cache = args.pbr_cache.resolve()
     build(args)
     return 0
 

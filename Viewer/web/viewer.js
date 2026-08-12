@@ -7,6 +7,15 @@ import { MTLLoader } from './vendor/MTLLoader.js';
 const canvas = document.querySelector('#viewport');
 const viewportShell = document.querySelector('.viewport-shell');
 const backgroundButton = document.querySelector('#backgroundButton');
+const lightingButton = document.querySelector('#lightingButton');
+const lightingPanel = document.querySelector('#lightingPanel');
+const lightingReset = document.querySelector('#lightingReset');
+const exposureControl = document.querySelector('#exposureControl');
+const keyLightControl = document.querySelector('#keyLightControl');
+const environmentControl = document.querySelector('#environmentControl');
+const normalStrengthControl = document.querySelector('#normalStrengthControl');
+const azimuthControl = document.querySelector('#azimuthControl');
+const elevationControl = document.querySelector('#elevationControl');
 const modelName = document.querySelector('#modelName');
 const emptyState = document.querySelector('#emptyState');
 const loading = document.querySelector('#loading');
@@ -31,10 +40,11 @@ const inspectorTitle = document.querySelector('.inspector-head strong');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.NeutralToneMapping;
-renderer.toneMappingExposure = 1.08;
+renderer.toneMapping = THREE.AgXToneMapping;
+renderer.toneMappingExposure = 0.98;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const maxTextureAnisotropy = renderer.capabilities.getMaxAnisotropy();
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 50000);
@@ -47,16 +57,21 @@ orbit.minDistance = 0.05;
 orbit.maxDistance = 50000;
 orbit.target.set(0, 0, 0);
 
-scene.add(new THREE.AmbientLight(0xffffff, 1.3));
-scene.add(new THREE.HemisphereLight(0xf3f5f8, 0x526174, 1.35));
-const keyLight = new THREE.DirectionalLight(0xffffff, 2.15);
+// Keep the default studio neutral and directional. The previous ambient-heavy
+// rig washed the source albedo into a pale flat surface and could be mistaken
+// for a lower-resolution texture even though the original PNG was loaded.
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.52);
+scene.add(ambientLight);
+const hemisphereLight = new THREE.HemisphereLight(0xf0f4fa, 0x435466, 0.9);
+scene.add(hemisphereLight);
+const keyLight = new THREE.DirectionalLight(0xfffbf3, 1.45);
 keyLight.position.set(6, 10, 8);
-keyLight.castShadow = true;
+keyLight.castShadow = false;
 scene.add(keyLight);
-const rimLight = new THREE.DirectionalLight(0xd9e5f5, 0.72);
+const rimLight = new THREE.DirectionalLight(0xdbe8f7, 0.28);
 rimLight.position.set(-8, 4, -7);
 scene.add(rimLight);
-const fillLight = new THREE.DirectionalLight(0xffffff, 0.58);
+const fillLight = new THREE.DirectionalLight(0xf2f6ff, 0.48);
 fillLight.position.set(0, -2, 8);
 scene.add(fillLight);
 
@@ -104,6 +119,10 @@ const undoHistory = [];
 const redoHistory = [];
 let pendingTransformEdit = null;
 const BACKGROUND_VISIBILITY_KEY = 'wows-toolbox-viewer-background';
+const LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v2';
+const LIGHTING_DEFAULTS = Object.freeze({ exposure: 0.98, key: 1.45, environment: 1, normalStrength: 0.35, azimuth: 32, elevation: 48 });
+let activeNormalStrength = LIGHTING_DEFAULTS.normalStrength;
+const viewerMaterialUpgrades = new WeakMap();
 let backgroundVisible = true;
 const ARMOR_GHOST_RENDER_ORDER = 100;
 const ARMOR_RENDER_ORDER_BASE = 1000;
@@ -135,6 +154,71 @@ function setBackgroundVisible(visible, { persist = true, announce = false } = {}
   if (announce) setStatus(backgroundVisible ? '배경 표시' : '배경 숨김');
 }
 
+function clampLighting(value, minimum, maximum, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(maximum, Math.max(minimum, number)) : fallback;
+}
+
+function readLightingSettings() {
+  try { return { ...LIGHTING_DEFAULTS, ...JSON.parse(localStorage.getItem(LIGHTING_SETTINGS_KEY) || '{}') }; }
+  catch (_) { return { ...LIGHTING_DEFAULTS }; }
+}
+
+function applyNormalStrength(value) {
+  activeNormalStrength = value;
+  const visited = new Set();
+  scene.traverse((node) => {
+    if (!node.isMesh) return;
+    const materials = Array.isArray(node.material) ? node.material : [node.material];
+    for (const material of materials.filter(Boolean)) {
+      if (visited.has(material) || !material.normalMap || !material.normalScale) continue;
+      visited.add(material);
+      material.normalScale.set(activeNormalStrength, activeNormalStrength);
+      material.needsUpdate = true;
+    }
+  });
+}
+
+function applyLightingSettings(settings, persist = true) {
+  const state = {
+    exposure: clampLighting(settings.exposure, 0.4, 1.8, LIGHTING_DEFAULTS.exposure),
+    key: clampLighting(settings.key, 0, 4, LIGHTING_DEFAULTS.key),
+    environment: clampLighting(settings.environment, 0, 2, LIGHTING_DEFAULTS.environment),
+    normalStrength: clampLighting(settings.normalStrength, 0, 1, LIGHTING_DEFAULTS.normalStrength),
+    azimuth: clampLighting(settings.azimuth, -180, 180, LIGHTING_DEFAULTS.azimuth),
+    elevation: clampLighting(settings.elevation, 5, 85, LIGHTING_DEFAULTS.elevation),
+  };
+  renderer.toneMappingExposure = state.exposure;
+  keyLight.intensity = state.key;
+  hemisphereLight.intensity = state.environment * 0.9;
+  ambientLight.intensity = state.environment * 0.52;
+  rimLight.intensity = 0.28 * (0.35 + state.environment * 0.65);
+  fillLight.intensity = 0.48 * (0.25 + state.environment * 0.75);
+  applyNormalStrength(state.normalStrength);
+  const azimuth = THREE.MathUtils.degToRad(state.azimuth);
+  const elevation = THREE.MathUtils.degToRad(state.elevation);
+  const horizontal = Math.cos(elevation) * 14;
+  keyLight.position.set(Math.sin(azimuth) * horizontal, Math.sin(elevation) * 14, Math.cos(azimuth) * horizontal);
+  exposureControl.value = String(state.exposure);
+  keyLightControl.value = String(state.key);
+  environmentControl.value = String(state.environment);
+  normalStrengthControl.value = String(state.normalStrength);
+  azimuthControl.value = String(state.azimuth);
+  elevationControl.value = String(state.elevation);
+  document.querySelector('#exposureValue').value = state.exposure.toFixed(2);
+  document.querySelector('#keyLightValue').value = state.key.toFixed(2);
+  document.querySelector('#environmentValue').value = state.environment.toFixed(2);
+  document.querySelector('#normalStrengthValue').value = state.normalStrength.toFixed(2);
+  document.querySelector('#azimuthValue').value = `${Math.round(state.azimuth)}°`;
+  document.querySelector('#elevationValue').value = `${Math.round(state.elevation)}°`;
+  if (persist) { try { localStorage.setItem(LIGHTING_SETTINGS_KEY, JSON.stringify(state)); } catch (_) {} }
+  return state;
+}
+
+function currentLightingSettings() {
+  return { exposure: exposureControl.value, key: keyLightControl.value, environment: environmentControl.value, normalStrength: normalStrengthControl.value, azimuth: azimuthControl.value, elevation: elevationControl.value };
+}
+
 function showLoading(title, detail) {
   loadingTitle.textContent = title;
   loadingDetail.textContent = detail;
@@ -143,9 +227,32 @@ function showLoading(title, detail) {
 
 function hideLoading() { loading.hidden = true; }
 
+function createStandardViewerMaterial(material) {
+  if (!material?.isMeshPhongMaterial) return material;
+  if (viewerMaterialUpgrades.has(material)) return viewerMaterialUpgrades.get(material);
+  const pbr = material.userData?.wowsPbr || {};
+  if (!pbr.roughnessMap && !pbr.metalnessMap && !pbr.aoMap && !material.normalMap && !material.bumpMap) return material;
+  if (pbr.roughnessMap) pbr.roughnessMap.channel = 0;
+  if (pbr.aoMap) pbr.aoMap.channel = 0;
+  const standard = new THREE.MeshStandardMaterial({
+    name: material.name, color: material.color, map: material.map, alphaMap: material.alphaMap,
+    normalMap: material.normalMap || material.bumpMap || null, roughnessMap: pbr.roughnessMap || null,
+    metalnessMap: null, aoMap: pbr.aoMap || null, roughness: pbr.roughnessMap ? 1 : 0.72,
+    metalness: 0, opacity: material.opacity, transparent: material.transparent,
+    alphaTest: material.alphaTest, side: material.side, depthWrite: material.depthWrite, vertexColors: material.vertexColors,
+  });
+  // _mg.G is retained in the export but only inferred as metalness. Without
+  // the game's proprietary shader/environment it creates false black/white paint.
+  standard.userData = { ...(material.userData || {}), viewerPbrMaterial: true, viewerMetalnessPreview: false };
+  standard.normalScale.set(activeNormalStrength, activeNormalStrength);
+  viewerMaterialUpgrades.set(material, standard);
+  material.dispose();
+  return standard;
+}
+
 function normalizeViewerMaterial(material) {
-  if (!material || material.userData.viewerMaterialPolicy === 'paint-v2') return false;
-  material.userData.viewerMaterialPolicy = 'paint-v2';
+  if (!material || material.userData.viewerMaterialPolicy === 'paint-v4') return false;
+  material.userData.viewerMaterialPolicy = 'paint-v4';
   material.userData.viewerSourceShininess = Number(material.shininess ?? 0);
   material.userData.viewerSourceSpecular = material.specular?.getHex?.() ?? null;
   if (material.map) {
@@ -153,15 +260,35 @@ function normalizeViewerMaterial(material) {
     material.color?.setRGB(1, 1, 1);
   }
   if (material.isMeshPhongMaterial) {
-    material.specular?.setRGB(0.025, 0.025, 0.025);
-    material.shininess = 16;
+    // Painted naval surfaces are mostly dielectric and fairly rough. Keeping
+    // the highlight broad and weak reveals albedo detail without a metallic cast.
+    material.specular?.setRGB(0.012, 0.012, 0.012);
+    material.shininess = 10;
   }
   if (material.bumpMap && !material.normalMap) {
     material.normalMap = material.bumpMap;
     material.bumpMap = null;
     material.normalMap.colorSpace = THREE.NoColorSpace;
-    material.normalScale?.set(0.62, 0.62);
+    material.normalScale?.set(activeNormalStrength, activeNormalStrength);
   }
+  const textures = new Set([
+    material.map,
+    material.alphaMap,
+    material.normalMap,
+    material.bumpMap,
+    material.specularMap,
+    material.emissiveMap,
+    material.roughnessMap,
+    material.metalnessMap,
+    material.aoMap,
+  ].filter(Boolean));
+  for (const texture of textures) {
+    texture.anisotropy = maxTextureAnisotropy;
+    texture.magFilter = THREE.LinearFilter;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.generateMipmaps = true;
+  }
+  material.dithering = true;
   material.needsUpdate = true;
   return true;
 }
@@ -239,7 +366,10 @@ function normalizeModelMaterials(root, assemblyMetadata = null) {
   let mirroredPartMaterials = 0;
   root?.traverse((node) => {
     if (!node.isMesh) return;
-    const materials = Array.isArray(node.material) ? node.material : [node.material];
+    const sourceMaterials = Array.isArray(node.material) ? node.material : [node.material];
+    const upgraded = sourceMaterials.map(createStandardViewerMaterial);
+    node.material = Array.isArray(node.material) ? upgraded : upgraded[0];
+    const materials = upgraded;
     materials.filter(Boolean).forEach((material) => {
       if (!normalized.has(material)) {
         normalizeViewerMaterial(material);
@@ -1338,6 +1468,15 @@ armorOpacity.addEventListener('input', () => {
 partSearch.addEventListener('input', renderPartList);
 document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => setView(button.dataset.view)));
 backgroundButton.addEventListener('click', () => setBackgroundVisible(!backgroundVisible, { announce: true }));
+lightingButton.addEventListener('click', () => {
+  lightingPanel.hidden = !lightingPanel.hidden;
+  lightingButton.classList.toggle('active', !lightingPanel.hidden);
+  lightingButton.setAttribute('aria-expanded', String(!lightingPanel.hidden));
+});
+for (const control of [exposureControl, keyLightControl, environmentControl, normalStrengthControl, azimuthControl, elevationControl]) {
+  control.addEventListener('input', () => applyLightingSettings(currentLightingSettings()));
+}
+lightingReset.addEventListener('click', () => { applyLightingSettings(LIGHTING_DEFAULTS); setStatus('조명 기본값을 복원했습니다.'); });
 document.querySelector('#gridButton').addEventListener('click', (event) => { grid.visible = !grid.visible; event.currentTarget.classList.toggle('active', grid.visible); });
 document.querySelector('#wireButton').addEventListener('click', (event) => {
   wireframe = !wireframe;
@@ -1426,13 +1565,15 @@ document.querySelector('#isolateButton').addEventListener('click', (event) => {
   updateSelectionBox();
 });
 
-window.chrome?.webview?.addEventListener('message', (event) => {
+function receiveViewerMessage(event) {
   const message = event.data;
   if (!message || typeof message !== 'object') return;
   if (message.type === 'loadModel') loadShip(message);
   else if (message.type === 'setView') setView(message.view || 'perspective');
   else if (message.type === 'clear') { clearModel(); emptyState.classList.remove('hidden'); modelName.textContent = '모델을 열어 주세요'; }
-});
+}
+window.chrome?.webview?.addEventListener('message', receiveViewerMessage);
+
 
 function resize() {
   const width = viewportShell.clientWidth;
@@ -1453,6 +1594,7 @@ function animate() {
 resize();
 animate();
 setBackgroundVisible(readBackgroundVisibility(), { persist: false });
+applyLightingSettings(readLightingSettings(), false);
 ready = true;
 setStatus('뷰어 준비됨');
 window.WoWSViewerCore = {
@@ -1495,4 +1637,4 @@ window.WoWSViewerCore = {
   setStatus,
   hostMessage,
 };
-hostMessage({ type: 'ready', version: '5.0.32' });
+hostMessage({ type: 'ready', version: '5.0.33' });
