@@ -105,6 +105,9 @@ class NativeGlbExportTests(unittest.TestCase):
                 formats="obj",
                 texture_max_size=1024,
                 texture_library=root / "shared",
+                pbr_exporter=None,
+                pbr_game_dir=None,
+                pbr_cache=None,
             )
             report = NATIVE.build(args)
             self.assertTrue(report["ok"])
@@ -124,6 +127,29 @@ class NativeGlbExportTests(unittest.TestCase):
             cached_bytes = shared.read_bytes()
             texture.write_bytes(b"user-edited")
             self.assertEqual(shared.read_bytes(), cached_bytes)
+
+    def test_mtl_emits_pbr_channel_contract(self) -> None:
+        document = {
+            "materials": [{"name": "Paint", "pbrMetallicRoughness": {}}],
+            "textures": [],
+            "images": [],
+        }
+        contract = {
+            "materials": [{"maps": {
+                "normal": "textures/paint_normal.png",
+                "roughness": "textures/paint_roughness.png",
+                "metalness": "textures/paint_metalness.png",
+                "ao": "textures/paint_ao.png",
+            }}]
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            target = Path(temporary) / "ship.mtl"
+            NATIVE.write_mtl(document, target, {}, contract)
+            result = target.read_text(encoding="utf-8")
+            self.assertIn("norm textures/paint_normal.png", result)
+            self.assertIn("map_Pr textures/paint_roughness.png", result)
+            self.assertIn("map_Pm textures/paint_metalness.png", result)
+            self.assertIn("map_Ka textures/paint_ao.png", result)
 
     def test_english_runtime_lines_contain_no_hangul(self) -> None:
         old = os.environ.get("WOWS_TOOLBOX_LANGUAGE")

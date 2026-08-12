@@ -1,6 +1,6 @@
 import { OBJLoader } from './vendor/OBJLoader.js';
 import { MTLLoader } from './vendor/MTLLoader.js';
-import { applyBarrelElevation, inferBarrelRig } from './weapon-kinematics.js?v=5.0.32';
+import { applyBarrelElevation, inferBarrelRig } from './weapon-kinematics.js?v=5.0.33';
 const core = window.WoWSViewerCore;
 
 if (core) {
@@ -730,12 +730,17 @@ if (core) {
 
   function updateWaterline() {
     const radius = Math.max(core.getModelRadius(), 0.01);
-    const height = (Number(waterlinePosition.value) / 100) * radius;
+    // OBJ coordinates place the source waterline at Y=0. The core recenters
+    // modelContent for camera framing, so the water plane must inherit that
+    // translation before applying the user's relative adjustment.
+    const sourceWaterline = Number(core.getModelContent()?.position?.y || 0);
+    const adjustment = (Number(waterlinePosition.value) / 100) * radius;
+    const height = sourceWaterline + adjustment;
     waterline.scale.setScalar(radius * 1.8);
     waterline.position.y = height;
     waterline.visible = waterlineVisible && Boolean(core.getShipRoot());
     waterlineValue.textContent = `Y ${height.toFixed(3)}`;
-    waterlineButton.title = `해수면 표시 전환 · 현재 높이 Y ${height.toFixed(3)}`;
+    waterlineButton.title = `해수면 표시 전환 · 원본 기준 Y ${height.toFixed(3)}`;
   }
 
   function resetAdvancedState() {
@@ -813,5 +818,4 @@ if (core) {
   };
   buildCategories();
 }
-
 

@@ -17,6 +17,7 @@ function Test-ExcludedSourcePath {
         $normalized -eq 'MANIFEST.sha256' -or
         $normalized.StartsWith('.git/', [StringComparison]::OrdinalIgnoreCase) -or
         $normalized.StartsWith('.test-', [StringComparison]::OrdinalIgnoreCase) -or
+        $normalized.StartsWith('test-results/', [StringComparison]::OrdinalIgnoreCase) -or
         $normalized.StartsWith('output/', [StringComparison]::OrdinalIgnoreCase) -or
         $normalized.Contains('/__pycache__/') -or
         $normalized.Contains('/.pytest_cache/')
