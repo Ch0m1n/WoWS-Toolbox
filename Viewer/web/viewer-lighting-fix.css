@@ -16,3 +16,34 @@
     scrollbar-width: thin;
   }
 }
+
+.lighting-desk .lighting-toggle {
+  padding: 9px 10px;
+  border: 1px solid rgba(80, 143, 209, .5);
+  border-radius: 7px;
+  background: rgba(11, 29, 50, .72);
+}
+
+.lighting-desk .lighting-toggle > span {
+  align-items: center;
+  justify-content: flex-start;
+  color: #dcecff;
+  font-weight: 700;
+}
+
+.lighting-desk .lighting-toggle input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0 7px 0 0;
+}
+
+.lighting-desk .lighting-toggle small {
+  color: #7893b1;
+  font-size: 8px;
+  line-height: 1.45;
+}
+
+.lighting-desk input:disabled {
+  cursor: not-allowed;
+  opacity: .38;
+}

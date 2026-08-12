@@ -59,6 +59,8 @@
     '주광': 'Key light',
     '환경광': 'Environment',
     '표면 굴곡': 'Surface detail',
+    'PBR 상세 미리보기': 'PBR detail preview',
+    '기본값은 원본 색상 우선이며 모든 파트에 동일하게 적용됩니다.': 'The default prioritizes source color and applies consistently to every part.',
     '방위': 'Azimuth',
     '고도': 'Elevation',
     'PBR 채널과 표면 굴곡을 확인하는 비파괴 미리보기 설정이에요.': 'Non-destructive preview controls for inspecting PBR channels and surface relief.',
