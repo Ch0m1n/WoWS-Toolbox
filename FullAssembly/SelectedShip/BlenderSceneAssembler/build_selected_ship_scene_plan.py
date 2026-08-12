@@ -197,8 +197,8 @@ def build_plan(
     output_combined_obj: str | None = None,
     validation_json: str | None = None,
 ) -> dict[str, Any]:
-    assembly_path = Path(os.path.abspath(str(assembly_path)))
-    batch_summary_path = Path(os.path.abspath(str(batch_summary_path)))
+    assembly_path = Path(os.path.abspath(str(assembly_path))).resolve()
+    batch_summary_path = Path(os.path.abspath(str(batch_summary_path))).resolve()
     assembly = _load_json(assembly_path)
     summary = _load_json(batch_summary_path)
     _require_accepted_mapping(assembly)
