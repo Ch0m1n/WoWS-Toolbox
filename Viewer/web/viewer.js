@@ -9,6 +9,8 @@ const viewportShell = document.querySelector('.viewport-shell');
 const backgroundButton = document.querySelector('#backgroundButton');
 const lightingButton = document.querySelector('#lightingButton');
 const lightingPanel = document.querySelector('#lightingPanel');
+const lightingPanelHandle = document.querySelector('#lightingPanelHandle');
+const lightingPositionReset = document.querySelector('#lightingPositionReset');
 const lightingReset = document.querySelector('#lightingReset');
 const exposureControl = document.querySelector('#exposureControl');
 const keyLightControl = document.querySelector('#keyLightControl');
@@ -121,6 +123,9 @@ const undoHistory = [];
 const redoHistory = [];
 let pendingTransformEdit = null;
 const BACKGROUND_VISIBILITY_KEY = 'wows-toolbox-viewer-background';
+const LIGHTING_PANEL_POSITION_KEY = 'wows-toolbox-viewer-lighting-panel-v1';
+let lightingPanelDrag = null;
+const LIGHTING_PANEL_MARGIN = 8;
 const LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v4';
 const LIGHTING_DEFAULTS = Object.freeze({ exposure: 1, key: 0.72, environment: 1, normalStrength: 0.2, pbrPreview: false, albedoPreview: false, azimuth: 32, elevation: 48 });
 let activeNormalStrength = LIGHTING_DEFAULTS.normalStrength;
@@ -139,6 +144,100 @@ function setStatus(text, isError = false) {
   statusText.textContent = text;
   statusDot.classList.toggle('error', isError);
 }
+function clampLightingPanelPosition(left, top) {
+  const rect = lightingPanel.getBoundingClientRect();
+  const maximumLeft = Math.max(LIGHTING_PANEL_MARGIN, window.innerWidth - rect.width - LIGHTING_PANEL_MARGIN);
+  const maximumTop = Math.max(LIGHTING_PANEL_MARGIN, window.innerHeight - rect.height - LIGHTING_PANEL_MARGIN);
+  return {
+    left: Math.min(maximumLeft, Math.max(LIGHTING_PANEL_MARGIN, Number(left) || 0)),
+    top: Math.min(maximumTop, Math.max(LIGHTING_PANEL_MARGIN, Number(top) || 0)),
+  };
+}
+
+function saveLightingPanelPosition(left, top) {
+  try {
+    localStorage.setItem(LIGHTING_PANEL_POSITION_KEY, JSON.stringify({ left, top }));
+  } catch (_) {}
+}
+
+function applyLightingPanelPosition(left, top, { persist = false } = {}) {
+  const position = clampLightingPanelPosition(left, top);
+  lightingPanel.classList.add('drag-positioned');
+  lightingPanel.style.left = `${position.left}px`;
+  lightingPanel.style.top = `${position.top}px`;
+  lightingPanel.style.right = 'auto';
+  if (persist) saveLightingPanelPosition(position.left, position.top);
+  return position;
+}
+
+function resetLightingPanelPosition({ persist = true } = {}) {
+  lightingPanel.classList.remove('drag-positioned', 'dragging');
+  lightingPanel.style.removeProperty('left');
+  lightingPanel.style.removeProperty('top');
+  lightingPanel.style.removeProperty('right');
+  if (persist) {
+    try { localStorage.removeItem(LIGHTING_PANEL_POSITION_KEY); } catch (_) {}
+  }
+}
+
+function restoreLightingPanelPosition() {
+  try {
+    const value = JSON.parse(localStorage.getItem(LIGHTING_PANEL_POSITION_KEY) || 'null');
+    if (Number.isFinite(value?.left) && Number.isFinite(value?.top)) {
+      applyLightingPanelPosition(value.left, value.top);
+    }
+  } catch (_) {
+    resetLightingPanelPosition({ persist: false });
+  }
+}
+
+function keepLightingPanelInView() {
+  if (lightingPanel.hidden || !lightingPanel.classList.contains('drag-positioned')) return;
+  const rect = lightingPanel.getBoundingClientRect();
+  applyLightingPanelPosition(rect.left, rect.top, { persist: true });
+}
+
+function beginLightingPanelDrag(event) {
+  if (event.button !== 0 || event.target.closest('button, input, label')) return;
+  const rect = lightingPanel.getBoundingClientRect();
+  lightingPanelDrag = {
+    pointerId: event.pointerId,
+    offsetX: event.clientX - rect.left,
+    offsetY: event.clientY - rect.top,
+  };
+  applyLightingPanelPosition(rect.left, rect.top);
+  lightingPanel.classList.add('dragging');
+  lightingPanelHandle.setPointerCapture?.(event.pointerId);
+  event.preventDefault();
+}
+
+function moveLightingPanel(event) {
+  if (!lightingPanelDrag || lightingPanelDrag.pointerId !== event.pointerId) return;
+  applyLightingPanelPosition(
+    event.clientX - lightingPanelDrag.offsetX,
+    event.clientY - lightingPanelDrag.offsetY,
+  );
+  event.preventDefault();
+}
+
+function endLightingPanelDrag(event) {
+  if (!lightingPanelDrag || lightingPanelDrag.pointerId !== event.pointerId) return;
+  const rect = lightingPanel.getBoundingClientRect();
+  applyLightingPanelPosition(rect.left, rect.top, { persist: true });
+  lightingPanel.classList.remove('dragging');
+  lightingPanelDrag = null;
+  try { lightingPanelHandle.releasePointerCapture?.(event.pointerId); } catch (_) {}
+}
+
+lightingPanelHandle.addEventListener('pointerdown', beginLightingPanelDrag);
+lightingPanelHandle.addEventListener('pointermove', moveLightingPanel);
+lightingPanelHandle.addEventListener('pointerup', endLightingPanelDrag);
+lightingPanelHandle.addEventListener('pointercancel', endLightingPanelDrag);
+lightingPositionReset.addEventListener('click', () => {
+  resetLightingPanelPosition();
+  setStatus('조명 패널 위치를 초기화했어요');
+});
+
 
 function readBackgroundVisibility() {
   try { return localStorage.getItem(BACKGROUND_VISIBILITY_KEY) !== 'hidden'; }
@@ -579,6 +678,7 @@ function applySnapshot(snapshot) {
     entry.object.quaternion.copy(entry.quaternion);
     entry.object.scale.copy(entry.scale);
     entry.object.visible = entry.visible;
+    entry.object.userData.viewerRotationDegrees = getPartRotationDegrees(entry.object);
     entry.object.userData.viewerTraverseDegrees = entry.traverseDegrees;
     entry.object.userData.viewerBarrelDegrees = entry.barrelDegrees;
     entry.object.userData.viewerApplyBarrelElevation?.(entry.barrelDegrees);
@@ -690,35 +790,64 @@ function normalizeDegrees(value) {
   while (normalized < -180) normalized += 360;
   return normalized;
 }
+function getPartRotationDegrees(object) {
+  if (!object?.isObject3D) return { x: 0, y: 0, z: 0 };
+  rememberOriginalTransform(object);
+  const delta = object.userData.originalQuaternion.clone().invert()
+    .multiply(object.quaternion).normalize();
+  const euler = new THREE.Euler().setFromQuaternion(delta, 'XYZ');
+  return {
+    x: normalizeDegrees(THREE.MathUtils.radToDeg(euler.x)),
+    y: normalizeDegrees(THREE.MathUtils.radToDeg(euler.y)),
+    z: normalizeDegrees(THREE.MathUtils.radToDeg(euler.z)),
+  };
+}
+
+function setPartRotationDegrees(object, rotation = {}) {
+  if (!object?.isObject3D) return false;
+  ensurePartPivot(object);
+  rememberOriginalTransform(object);
+  const value = {
+    x: normalizeDegrees(rotation.x),
+    y: normalizeDegrees(rotation.y),
+    z: normalizeDegrees(rotation.z),
+  };
+  const euler = new THREE.Euler(
+    THREE.MathUtils.degToRad(value.x),
+    THREE.MathUtils.degToRad(value.y),
+    THREE.MathUtils.degToRad(value.z),
+    'XYZ',
+  );
+  object.quaternion.copy(object.userData.originalQuaternion)
+    .multiply(new THREE.Quaternion().setFromEuler(euler));
+  object.userData.viewerRotationDegrees = value;
+  if (isViewerWeaponPart(object)) {
+    object.userData.viewerTraverseDegrees = value[getPartUpAxisName(object)];
+  }
+  object.updateMatrix();
+  object.updateMatrixWorld(true);
+  return true;
+}
 
 function setPartTraverseDegrees(object, degrees) {
   if (!isViewerWeaponPart(object)) return false;
-  ensurePartPivot(object);
-  rememberOriginalTransform(object);
   const value = normalizeDegrees(degrees);
-  object.quaternion.copy(object.userData.originalQuaternion);
-  object.rotateOnAxis(getPartUpAxis(object), THREE.MathUtils.degToRad(value));
-  object.userData.viewerTraverseDegrees = value;
-  return true;
+  const rotation = getPartRotationDegrees(object);
+  rotation[getPartUpAxisName(object)] = value;
+  return setPartRotationDegrees(object, rotation);
 }
 
 function rotatePartAroundUpAxis(object, deltaRadians) {
-  if (!isViewerWeaponPart(object)) return false;
-  ensurePartPivot(object);
-  rememberOriginalTransform(object);
-  object.rotateOnAxis(getPartUpAxis(object), deltaRadians);
-  object.userData.viewerTraverseDegrees = normalizeDegrees(
-    Number(object.userData.viewerTraverseDegrees || 0) + THREE.MathUtils.radToDeg(deltaRadians),
-  );
-  return true;
+  if (!object?.isObject3D) return false;
+  const rotation = getPartRotationDegrees(object);
+  const axis = getPartUpAxisName(object);
+  rotation[axis] = normalizeDegrees(rotation[axis] + THREE.MathUtils.radToDeg(deltaRadians));
+  return setPartRotationDegrees(object, rotation);
 }
 
 function traverseDegreesFromQuaternion(object) {
-  if (!isViewerWeaponPart(object) || !object.userData.originalQuaternion) return 0;
-  const delta = object.userData.originalQuaternion.clone().invert().multiply(object.quaternion).normalize();
-  const axis = getPartUpAxis(object);
-  const sine = delta.x * axis.x + delta.y * axis.y + delta.z * axis.z;
-  return normalizeDegrees(THREE.MathUtils.radToDeg(2 * Math.atan2(sine, delta.w)));
+  if (!isViewerWeaponPart(object)) return 0;
+  return getPartRotationDegrees(object)[getPartUpAxisName(object)];
 }
 
 function beginTransformEdit() {
@@ -732,8 +861,9 @@ function commitTransformEdit() {
   if (!pendingTransformEdit?.length) return;
   const before = pendingTransformEdit;
   pendingTransformEdit = null;
-  if (transform.getMode() === 'rotate' && isViewerWeaponPart(transform.object)) {
-    transform.object.userData.viewerTraverseDegrees = traverseDegreesFromQuaternion(transform.object);
+  if (transform.getMode() === 'rotate' && transform.object) {
+    transform.object.userData.viewerRotationDegrees = getPartRotationDegrees(transform.object);
+    if (isViewerWeaponPart(transform.object)) transform.object.userData.viewerTraverseDegrees = traverseDegreesFromQuaternion(transform.object);
   }
   const after = snapshotObjects(before.map((entry) => entry.object));
   const label = transform.getMode() === 'rotate' ? '파트 회전' : '파트 이동';
@@ -1655,6 +1785,7 @@ lightingButton.addEventListener('click', () => {
   lightingPanel.hidden = !lightingPanel.hidden;
   lightingButton.classList.toggle('active', !lightingPanel.hidden);
   lightingButton.setAttribute('aria-expanded', String(!lightingPanel.hidden));
+  if (!lightingPanel.hidden) keepLightingPanelInView();
 });
 for (const control of [exposureControl, keyLightControl, environmentControl, normalStrengthControl, azimuthControl, elevationControl]) {
   control.addEventListener('input', () => applyLightingSettings(currentLightingSettings()));
@@ -1767,6 +1898,7 @@ function resize() {
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
+  keepLightingPanelInView();
 }
 new ResizeObserver(resize).observe(viewportShell);
 
@@ -1779,6 +1911,7 @@ function animate() {
 resize();
 animate();
 setBackgroundVisible(readBackgroundVisibility(), { persist: false });
+restoreLightingPanelPosition();
 applyLightingSettings(readLightingSettings(), false);
 ready = true;
 setStatus('뷰어 준비됨');
@@ -1818,9 +1951,12 @@ window.WoWSViewerCore = {
   isWeaponPart: isViewerWeaponPart,
   getPartUpAxisName,
   setPartTraverseDegrees,
+  rememberOriginalTransform,
+  getPartRotationDegrees,
+  setPartRotationDegrees,
   rotatePartAroundUpAxis,
   loadResourceWithRetry,
   setStatus,
   hostMessage,
 };
-hostMessage({ type: 'ready', version: '5.0.35' });
+hostMessage({ type: 'ready', version: '5.0.36' });

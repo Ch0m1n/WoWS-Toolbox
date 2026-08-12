@@ -67,6 +67,14 @@ The release package includes a private CPython 3.10 runtime and Pillow. Blender 
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.36 part rotation and movable lighting controls
+
+- Shows X, Y, and Z rotation fields whenever one model part is selected, instead of hiding rotation controls unless the part is recognized as a weapon.
+- Keeps weapon traverse on the ship's extracted up axis without discarding rotation on the other two axes.
+- Exposes turret traverse and supported barrel elevation in the same selected-part card, with a clear explanation when the OBJ has no independently adjustable barrel geometry.
+- Makes the **Lighting & surface** panel draggable by its header, remembers its position, keeps it inside the visible window, and adds a position reset button.
+- Preserves Ctrl+Z/Ctrl+Y history for numeric part rotations, traverse, barrel elevation, and reset actions.
+
 ## 5.0.35 indexed materials, armor occlusion, and mounted aircraft equipment
 
 - Adds an **Albedo inspection** viewer mode that bypasses lighting and PBR channels, making texture errors distinguishable from lighting.
@@ -118,7 +126,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.35 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.36 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -230,7 +238,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.35 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.36 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
