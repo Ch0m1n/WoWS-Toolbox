@@ -1,4 +1,4 @@
-WoWS Toolbox 5.0.36
+WoWS Toolbox 5.0.38
 =======================================
 
 [한국어 빠른 사용법]
@@ -27,8 +27,9 @@ Windows 커뮤니티 도구입니다.
 
 5. 모델과 장갑 확인
    3D 모델 뷰어에서 "최근 추출 열기" 또는 "OBJ 파일 열기"를 사용합니다.
-   파트 선택·숨김·이동·회전, 포탑 선회·포신 앙각, 장갑 두께·구역,
-   해수면·단면·측정·비교 기능을 사용할 수 있습니다.
+   파트 선택·숨김·단독 보기·이동·원위치, 장갑 두께·구역,
+   해수면·단면·측정·비교 기능을 사용할 수 있습니다. 오른쪽 패널의
+   경계와 구분선을 드래그하면 너비와 각 영역 높이를 조절할 수 있습니다.
    뷰어에서 편집한 내용은 원본 OBJ에 저장되지 않습니다.
 
 6. 업데이트 확인
@@ -82,9 +83,9 @@ part-based OBJ models, and inspecting models and armor in the built-in viewer.
 
 5. Inspect models and armor
    In the 3D Model Viewer, use Open recent extraction or Open OBJ file.
-   You can select, hide, move, or rotate parts; traverse turrets and elevate
-   barrels; inspect armor thickness and zones; and use waterline, section,
-   measurement, and comparison tools. Viewer edits do not modify the source OBJ.
+   You can select, hide, isolate, move, or reset parts; inspect armor thickness
+   and zones; and use waterline, section, measurement, and comparison tools.
+   Drag inspector borders to resize its width and section heights.
 
 6. Check for updates
    In Settings > Updates, enable or disable Check automatically at startup.

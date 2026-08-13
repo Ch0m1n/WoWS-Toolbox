@@ -29,8 +29,7 @@ The selected game directory is treated as read-only. WoWS Toolbox writes caches 
 - Preserve editable OBJ object groups instead of merging the entire ship into one mesh
 - Export OBJ, MTL, and local base-color texture files without requiring Blender
 - Inspect models in the built-in offline WebView2/Three.js viewer
-- Select, hide, isolate, move, rotate, and undo part edits in the viewer
-- Rotate weapon mounts around their extracted entity origin and adjust supported gun barrels
+- Select, hide, isolate, move, reset, and undo part edits in the viewer
 - Display exact armor thickness metadata when the selected client exposes it
 - Show or hide the grid, background, waterline, wireframe, and armor overlays
 - Compare two extracted models
@@ -66,6 +65,22 @@ The application launcher and installer are currently unsigned. Windows SmartScre
 The release package includes a private CPython 3.10 runtime and Pillow. Blender and a system Python installation are not required. The installer carries Microsoft's signed WebView2 Evergreen bootstrapper and runs it only when WebView2 is missing.
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
+
+## 5.0.38 resizable part inspector and simplified editing
+
+- Makes the model viewer's right inspector width adjustable by dragging its left edge.
+- Adds draggable horizontal separators between search/categories, the selected-part card, and the scrolling part list. The layout is remembered per user.
+- Wraps category filters into visible rows with their own scrollbar, preventing controls below the search field from being clipped.
+- Removes the experimental arbitrary part rotation, weapon traverse, and barrel-elevation controls. They were unreliable for OBJ parts that do not preserve a complete articulated hierarchy.
+- Keeps stable inspection actions: move, isolate, hide, reset, Ctrl+Z, and Ctrl+Y.
+
+## 5.0.37 ship surface and texture selection repair
+
+- Restores stable double-sided rendering for every normal ship part. Mixed source winding no longer makes decks, turrets, catapults, or superstructure parts disappear and look like floating rows in the built-in viewer.
+- Keeps armor plates front-sided while using a colorless double-sided ship depth proxy, so the near-side armor remains visible without showing the opposite side through the ship.
+- Selects base-color textures adaptively: ordinary materials prefer the full `_a` paint texture, while indexed materials use `_art` only when `_a` is a tiny lookup image and `_art` is substantially larger.
+- Rebuilds both bundled PC/Korabli extraction binaries with regression tests for ordinary and indexed material layouts.
+- Marks exported part pivots explicitly as OBJ-space data and adds viewer/export contract checks.
 
 ## 5.0.36 part rotation and movable lighting controls
 
@@ -126,7 +141,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.36 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.38 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -183,8 +198,7 @@ WoWS Toolbox는 내 PC에 설치된 World of Warships 계열 게임에서 원하
 - 함선 전체를 하나로 합치지 않고 편집 가능한 OBJ 오브젝트 그룹 유지
 - Blender 없이 OBJ, MTL과 로컬 기본 색상 텍스처 출력
 - 오프라인 WebView2/Three.js 기반 3D 모델·장갑 뷰어
-- 파트 선택, 숨김, 단독 보기, 이동, 회전과 실행 취소
-- 무장 선회와 지원되는 포신 앙각 조절
+- 파트 선택, 숨김, 단독 보기, 이동, 원위치와 실행 취소
 - 지원 게임의 정확한 장갑 두께 표시
 - 격자, 배경, 해수면, 와이어프레임과 장갑 오버레이 전환
 - 두 추출 모델 비교
@@ -238,7 +252,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.36 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.38 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 

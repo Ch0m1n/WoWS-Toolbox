@@ -130,7 +130,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.36',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.38',
     'ConvertTo-ValidatedQueueEntries',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -315,7 +315,6 @@ $viewerVendor = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\w
 
 $viewerI18n = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\i18n.js')
 $advanced = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\viewer-advanced.js')
-$weaponKinematics = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\weapon-kinematics.js')
 $assemblerScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'FullAssembly\Ticonderoga1990\BlenderSceneAssembler\assemble_scene.py')
 $backendExporter = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Backend\blender_export_v5.py')
 $legendsRepack = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Backend\blender_repack_obj_v5.py')
@@ -324,7 +323,7 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerI18n -notmatch 'formalKoreanReplacements' -or
     $viewerI18n -notmatch 'language === ''ko''.*formalizeKorean' -or
     $viewerIndex -match 'v=5\.0\.30' -or
-    $viewerScript -notmatch "version: '5\.0\.36'" -or
+    $viewerScript -notmatch "version: '5\.0\.38'" -or
     $advanced -match 'v=5\.0\.30' -or
     $viewerCss -notmatch '#app \{[^}]*grid-template-rows: minmax\(0, 1fr\);[^}]*overflow: hidden' -or
     $viewerCss -notmatch '\.inspector \{[^}]*min-height: 0;[^}]*overflow: hidden;' -or
@@ -335,9 +334,14 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerIndex -notmatch 'id="waterlinePosition"' -or
     $viewerIndex -notmatch 'id="waterlineValue"' -or
     $viewerIndex -notmatch 'id="backgroundButton"' -or
-    $viewerIndex -notmatch 'id="weaponPanel"' -or
-    $viewerIndex -notmatch 'id="weaponTraverse"' -or
-    $viewerIndex -notmatch 'id="barrelElevation"' -or
+    $viewerIndex -match 'id="weaponPanel"' -or
+    $viewerIndex -match 'id="weaponTraverse"' -or
+    $viewerIndex -match 'id="barrelElevation"' -or
+    $viewerIndex -match 'id="rotateButton"' -or
+    $viewerIndex -notmatch 'id="inspectorResizeHandle"' -or
+    $viewerIndex -notmatch 'id="filterPane"' -or
+    $viewerIndex -notmatch 'id="selectionPane"' -or
+    $viewerIndex -notmatch 'class="pane-resizer"' -or
     $viewerCss -notmatch 'background-hidden' -or
     $viewerIndex -notmatch 'id="compareLayoutButton"' -or
     $viewerScript -notmatch 'wows-toolbox-armor-viewer/v2' -or
@@ -347,13 +351,15 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $advanced -notmatch 'effectiveArmor' -or
     $advanced -notmatch 'exactThicknessLabel' -or
     $advanced -notmatch 'SEA_SURFACE' -or
-    $advanced -notmatch 'rotateSelected' -or
+    $advanced -match 'rotateSelected' -or
     $advanced -notmatch 'measurePointerDown' -or
     $advanced -notmatch 'frameComparison' -or
     $advanced -notmatch 'resetAdvancedState' -or
-    $advanced -notmatch 'inferBarrelRig' -or
-    $advanced -notmatch 'applyBarrelElevation' -or
-    $advanced -notmatch 'updateWeaponPanel' -or
+    $advanced -match 'inferBarrelRig' -or
+    $advanced -match 'applyBarrelElevation' -or
+    $advanced -match 'updateWeaponPanel' -or
+    $advanced -notmatch 'INSPECTOR_LAYOUT_KEY' -or
+    $advanced -notmatch 'applyInspectorWidth' -or
     $viewerScript -notmatch 'wows-toolbox-native-object-layout/v1' -or
     $viewerScript -notmatch 'pivot_space' -or
     $viewerScript -notmatch 'applyModelMetadata' -or
@@ -394,34 +400,35 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerVendor -notmatch 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
     $viewerIndex -notmatch '조명과 표면' -or
     $viewerLightingCss -notmatch '\.lighting-desk' -or
-    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.36' -or
-    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.36' -or
+    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.38\.1' -or
+    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.38\.1' -or
     $viewerScript -notmatch 'loadAssemblyMetadata' -or
     $viewerScript -notmatch 'matrixRowsDeterminant' -or
     $viewerScript -notmatch 'assembly-mirrored-stable-double-sided-v3' -or
-    $viewerScript -notmatch 'unverified-obj-stable-double-sided-v4' -or
-    $viewerScript -notmatch 'verified-native-front-sided-v2' -or
+    $viewerScript -notmatch 'ship-surface-stable-double-sided-v5' -or
     $viewerScript -notmatch 'THREE\.DoubleSide' -or
     $viewerScript -notmatch 'ARMOR_GHOST_MODEL_TYPES' -or
     $viewerScript -notmatch 'ensureArmorDepthProxy' -or
     $viewerScript -notmatch 'colorWrite: false' -or
     $viewerScript -notmatch 'side: THREE\.FrontSide' -or
+    $viewerScript -notmatch 'depthWrite: false' -or
     $viewerScript -notmatch 'applyAdaptiveRenderQuality' -or
     $viewerScript -notmatch 'modelRadius / 100' -or
     $assemblerScript -notmatch '_repair_obj_mirrored_winding' -or
     $assemblerScript -notmatch 'mirrored_winding_corrected' -or
     $viewerScript -notmatch 'BACKGROUND_VISIBILITY_KEY' -or
     $viewerScript -notmatch 'setBackgroundVisible' -or
-    $viewerScript -notmatch 'ensurePartPivot' -or
-    $viewerScript -notmatch 'rotatePartAroundUpAxis' -or
-    $viewerScript -notmatch 'setPartTraverseDegrees' -or
+    $viewerScript -match 'ensurePartPivot' -or
+    $viewerScript -match 'rotatePartAroundUpAxis' -or
+    $viewerScript -match 'setPartTraverseDegrees' -or
+    $viewerScript -match "event\.code === 'KeyR'" -or
     $viewerScript -notmatch "event\.code === 'KeyB'" -or
     $viewerScript -notmatch 'undoViewerEdit' -or
-    $viewerScript -notmatch 'getPartRotationDegrees' -or
-    $viewerScript -notmatch 'setPartRotationDegrees' -or
+    $viewerScript -match 'getPartRotationDegrees' -or
+    $viewerScript -match 'setPartRotationDegrees' -or
     $viewerScript -notmatch 'LIGHTING_PANEL_POSITION_KEY' -or
     $viewerScript -notmatch 'beginLightingPanelDrag' -or
-    $viewerIndex -notmatch 'partRotationX' -or
+    $viewerIndex -match 'partRotationX' -or
     $viewerScript -notmatch "addEventListener\('keydown'" -or
     $viewerIndex -notmatch 'Ctrl\+Z 취소' -or
     $advanced -notmatch 'getModelContent\(\)\?\.position\?\.y' -or
@@ -445,13 +452,6 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $advanced -notmatch 'measureMode') {
     throw 'Offline advanced viewer source acceptance failed.'
 }
-if ($weaponKinematics -notmatch 'inferBarrelRig' -or
-    $weaponKinematics -notmatch 'componentCandidates' -or
-    $weaponKinematics -notmatch 'viewerBarrelDegrees' -or
-    $weaponKinematics -notmatch 'rotateVector' -or
-    $weaponKinematics -notmatch 'Uint32Array\.from') {
-    throw 'Weapon pivot and barrel kinematics source acceptance failed.'
-}
 
 Write-Host '6/9 Package structure and launcher checks'
 $required = @(
@@ -468,7 +468,7 @@ $required = @(
     'Viewer\web\index.html', 'Viewer\web\viewer.css', 'Viewer\web\viewer-v5.css',
     'Viewer\web\viewer-lighting-fix.css',
     'Viewer\web\viewer.js', 'Viewer\web\viewer-advanced.js',
-    'Viewer\web\weapon-kinematics.js', 'Branding\WoWS-Toolbox.ico',
+    'Branding\WoWS-Toolbox.ico',
     'Viewer\web\diagnostics.js', 'Viewer\web\vendor\three.module.js',
     'Viewer\web\vendor\three.core.js', 'Viewer\web\vendor\OrbitControls.js',
     'Viewer\web\vendor\TransformControls.js', 'Viewer\web\vendor\OBJLoader.js',
@@ -508,8 +508,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.36.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.36') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.38.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.38') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -607,7 +607,7 @@ if ($threeCore.Length -lt 1000000 -or $threeModule.Length -lt 500000 -or
     $notices -notmatch 'RPC\s+`FLOAT64`\s+support') {
     throw 'Dependency or license acceptance failed.'
 }
-$expectedExporterHash = '52C33F741F0E9109B8AA24F9AF6FCB0920690FCEEB353C0BB8F437FF07FABFE5'
+$expectedExporterHash = '0D471A922CFD975865618C36CEEC6F6226C0EC4298A24E519DBF46D8FC03452D'
 foreach ($relative in @('Backend\wowsunpack.exe', 'Backend\wowsunpack_armor.exe')) {
     $actualHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $relative) -Algorithm SHA256).Hash
     if ($actualHash -ne $expectedExporterHash) {
@@ -653,8 +653,8 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.36 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.38 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.36 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.38 self-tests passed.'
 }

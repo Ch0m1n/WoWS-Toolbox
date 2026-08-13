@@ -1,6 +1,5 @@
 import { OBJLoader } from './vendor/OBJLoader.js';
 import { MTLLoader } from './vendor/MTLLoader.js';
-import { applyBarrelElevation, inferBarrelRig } from './weapon-kinematics.js?v=5.0.36';
 const core = window.WoWSViewerCore;
 
 if (core) {
@@ -25,24 +24,15 @@ if (core) {
   const waterlineValue = document.querySelector('#waterlineValue');
   const compareLayoutButton = document.querySelector('#compareLayoutButton');
   const clearCompareButton = document.querySelector('#clearCompareButton');
-  const turnLeftButton = document.querySelector('#turnLeftButton');
-  const turnRightButton = document.querySelector('#turnRightButton');
   const resetPartButton = document.querySelector('#resetPartButton');
-  const partTransformPanel = document.querySelector('#partTransformPanel');
-  const partControlTitle = document.querySelector('#partControlTitle');
-  const partRotationStatus = document.querySelector('#partRotationStatus');
-  const partRotationInputs = {
-    x: document.querySelector('#partRotationX'),
-    y: document.querySelector('#partRotationY'),
-    z: document.querySelector('#partRotationZ'),
-  };
-  const weaponPanel = document.querySelector('#weaponPanel');
-  const weaponPivotStatus = document.querySelector('#weaponPivotStatus');
-  const weaponTraverse = document.querySelector('#weaponTraverse');
-  const weaponTraverseValue = document.querySelector('#weaponTraverseValue');
-  const barrelElevation = document.querySelector('#barrelElevation');
-  const barrelElevationValue = document.querySelector('#barrelElevationValue');
-  const barrelDetectionStatus = document.querySelector('#barrelDetectionStatus');
+  const inspectorResizeHandle = document.querySelector('#inspectorResizeHandle');
+  const modelPanel = document.querySelector('#modelPanel');
+  const paneResizers = [...document.querySelectorAll('.pane-resizer')];
+  const lightingPanel = document.querySelector('#lightingPanel');
+  if (lightingPanel && lightingPanel.parentElement !== viewportShell) {
+    viewportShell.append(lightingPanel);
+  }
+
 
   renderer.localClippingEnabled = true;
   const clippingPlane = new THREE.Plane(new THREE.Vector3(1, 0, 0), 0);
@@ -55,6 +45,138 @@ if (core) {
   let measurePoints = [];
   let measurePointerDown = null;
   let compareRoot = null;
+  const INSPECTOR_LAYOUT_KEY = 'wows-toolbox-viewer-inspector-layout-v1';
+  const inspectorLayout = readInspectorLayout();
+
+  function readInspectorLayout() {
+    try {
+      const value = JSON.parse(localStorage.getItem(INSPECTOR_LAYOUT_KEY) || '{}');
+      return value && typeof value === 'object' ? value : {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function saveInspectorLayout() {
+    try { localStorage.setItem(INSPECTOR_LAYOUT_KEY, JSON.stringify(inspectorLayout)); } catch (_) {}
+  }
+
+  function clamp(value, minimum, maximum) {
+    return Math.min(maximum, Math.max(minimum, Number(value) || minimum));
+  }
+
+  function applyInspectorWidth(value, persist = true) {
+    const maximum = Math.max(300, Math.min(560, window.innerWidth * 0.55));
+    const width = clamp(value, 248, maximum);
+    document.documentElement.style.setProperty('--inspector-width', `${Math.round(width)}px`);
+    inspectorResizeHandle.setAttribute('aria-valuenow', String(Math.round(width)));
+    inspectorResizeHandle.setAttribute('aria-valuemin', '248');
+    inspectorResizeHandle.setAttribute('aria-valuemax', String(Math.round(maximum)));
+    if (persist) {
+      inspectorLayout.width = Math.round(width);
+      saveInspectorLayout();
+    }
+  }
+
+  function paneLimits(pane) {
+    const minimum = Number(pane.dataset.minSize || pane.previousElementSibling?.dataset.minSize || 80);
+    const otherFixed = [...modelPanel.querySelectorAll('.pane-resizer')]
+      .map((handle) => document.querySelector(`#${handle.dataset.pane}`))
+      .filter((item) => item && item !== pane)
+      .reduce((sum, item) => sum + item.getBoundingClientRect().height, 0);
+    const handles = paneResizers.reduce((sum, item) => sum + item.getBoundingClientRect().height, 0);
+    const maximum = Math.max(minimum, modelPanel.clientHeight - otherFixed - handles - 110);
+    return { minimum, maximum };
+  }
+
+  function applyPaneSize(pane, value, persist = true) {
+    const { minimum, maximum } = paneLimits(pane);
+    const size = clamp(value, minimum, maximum);
+    pane.style.flexBasis = `${Math.round(size)}px`;
+    const handle = paneResizers.find((item) => item.dataset.pane === pane.id);
+    handle?.setAttribute('aria-valuenow', String(Math.round(size)));
+    handle?.setAttribute('aria-valuemin', String(Math.round(minimum)));
+    handle?.setAttribute('aria-valuemax', String(Math.round(maximum)));
+    if (persist) {
+      inspectorLayout.panes = inspectorLayout.panes || {};
+      inspectorLayout.panes[pane.id] = Math.round(size);
+      saveInspectorLayout();
+    }
+  }
+
+  function restoreInspectorLayout() {
+    applyInspectorWidth(inspectorLayout.width || 286, false);
+    for (const handle of paneResizers) {
+      const pane = document.querySelector(`#${handle.dataset.pane}`);
+      if (!pane) continue;
+      pane.dataset.minSize = handle.dataset.minSize || '80';
+      const saved = inspectorLayout.panes?.[pane.id];
+      applyPaneSize(pane, saved || Number(handle.dataset.defaultSize || 120), false);
+    }
+  }
+
+  inspectorResizeHandle.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    inspectorResizeHandle.setPointerCapture(event.pointerId);
+    document.body.classList.add('resizing-inspector');
+  });
+  inspectorResizeHandle.addEventListener('pointermove', (event) => {
+    if (!inspectorResizeHandle.hasPointerCapture(event.pointerId)) return;
+    applyInspectorWidth(window.innerWidth - event.clientX);
+  });
+  inspectorResizeHandle.addEventListener('pointerup', (event) => {
+    if (inspectorResizeHandle.hasPointerCapture(event.pointerId)) inspectorResizeHandle.releasePointerCapture(event.pointerId);
+    document.body.classList.remove('resizing-inspector');
+  });
+  inspectorResizeHandle.addEventListener('dblclick', () => applyInspectorWidth(286));
+  inspectorResizeHandle.addEventListener('keydown', (event) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home'].includes(event.key)) return;
+    event.preventDefault();
+    const current = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--inspector-width')) || 286;
+    applyInspectorWidth(event.key === 'Home' ? 286 : current + (event.key === 'ArrowLeft' ? 12 : -12));
+  });
+
+  for (const handle of paneResizers) {
+    const pane = document.querySelector(`#${handle.dataset.pane}`);
+    if (!pane) continue;
+    handle.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      handle.setPointerCapture(event.pointerId);
+      handle.classList.add('dragging');
+      document.body.classList.add('resizing-pane');
+      handle.dataset.dragStartY = String(event.clientY);
+      handle.dataset.dragStartSize = String(pane.getBoundingClientRect().height);
+    });
+    handle.addEventListener('pointermove', (event) => {
+      if (!handle.hasPointerCapture(event.pointerId)) return;
+      const startY = Number(handle.dataset.dragStartY || event.clientY);
+      const startSize = Number(handle.dataset.dragStartSize || pane.getBoundingClientRect().height);
+      applyPaneSize(pane, startSize + event.clientY - startY);
+    });
+    handle.addEventListener('pointerup', (event) => {
+      if (handle.hasPointerCapture(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+      handle.classList.remove('dragging');
+      document.body.classList.remove('resizing-pane');
+    });
+    handle.addEventListener('dblclick', () => applyPaneSize(pane, Number(handle.dataset.defaultSize || 120)));
+    handle.addEventListener('keydown', (event) => {
+      if (!['ArrowUp', 'ArrowDown', 'Home'].includes(event.key)) return;
+      event.preventDefault();
+      const current = pane.getBoundingClientRect().height;
+      applyPaneSize(pane, event.key === 'Home' ? Number(handle.dataset.defaultSize || 120) : current + (event.key === 'ArrowDown' ? 12 : -12));
+    });
+  }
+
+  window.addEventListener('resize', () => {
+    applyInspectorWidth(inspectorLayout.width || 286, false);
+    paneResizers.forEach((handle) => {
+      const pane = document.querySelector(`#${handle.dataset.pane}`);
+      if (pane) applyPaneSize(pane, pane.getBoundingClientRect().height, false);
+    });
+  });
+  restoreInspectorLayout();
   let compareMode = 'overlay';
   let compareLoadSerial = 0;
   let waterlineVisible = false;
@@ -208,7 +330,6 @@ if (core) {
         count: multiSelection.size,
         names: [...multiSelection].map((item) => item.userData.viewerLabel),
       });
-      queueMicrotask(() => updateWeaponPanel());
     } else {
       multiSelection.clear();
       multiSelection.add(part);
@@ -220,80 +341,10 @@ if (core) {
     multiSelection.clear();
     const part = event.detail?.part;
     if (part) multiSelection.add(part);
-    queueMicrotask(() => {
-      decorateSelection();
-      updateWeaponPanel(part);
-    });
+    queueMicrotask(decorateSelection);
   });
 
-  window.addEventListener('wows-viewer-edit', (event) => {
-    queueMicrotask(() => updateWeaponPanel(event.detail?.part));
-  });
 
-  function rotationInputValues() {
-    return Object.fromEntries(
-      Object.entries(partRotationInputs).map(([axis, input]) => [axis, Number(input.value) || 0]),
-    );
-  }
-
-  function syncRotationInputs(part) {
-    const rotation = core.getPartRotationDegrees(part);
-    for (const axis of ['x', 'y', 'z']) {
-      partRotationInputs[axis].value = String(Number(rotation[axis].toFixed(1)));
-    }
-    return rotation;
-  }
-
-  function commitRotationInputs() {
-    const part = core.getSelected();
-    if (!part || multiSelection.size > 1) return;
-    const rotation = rotationInputValues();
-    core.recordObjectEdit([part], '파트 회전값', () => {
-      core.setPartRotationDegrees(part, rotation);
-    });
-    core.setStatus(`${part.userData.viewerLabel} · 회전 X ${degreeLabel(rotation.x)} / Y ${degreeLabel(rotation.y)} / Z ${degreeLabel(rotation.z)}`);
-    updateWeaponPanel(part);
-  }
-
-  Object.values(partRotationInputs).forEach((input) => {
-    input.addEventListener('change', commitRotationInputs);
-    input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        input.blur();
-      }
-    });
-  });
-  weaponTraverse.addEventListener('input', () => {
-    weaponTraverseValue.textContent = degreeLabel(weaponTraverse.value);
-  });
-  weaponTraverse.addEventListener('change', () => {
-    const part = core.getSelected();
-    if (!part || !core.isWeaponPart(part)) return;
-    const degrees = Number(weaponTraverse.value);
-    core.recordObjectEdit([part], '무장 선회각', () => {
-      core.setPartTraverseDegrees(part, degrees);
-    });
-    core.setStatus(`${part.userData.viewerLabel} · 선회각 ${degreeLabel(degrees)}`);
-  });
-  barrelElevation.addEventListener('input', () => {
-    barrelElevationValue.textContent = degreeLabel(barrelElevation.value);
-  });
-  barrelElevation.addEventListener('change', () => {
-    const part = core.getSelected();
-    if (!part || !core.isWeaponPart(part)) return;
-    const degrees = Number(barrelElevation.value);
-    const rig = inferBarrelRig(part);
-    if (!rig.available) {
-      core.setStatus(rig.reason, true);
-      updateWeaponPanel(part);
-      return;
-    }
-    core.recordObjectEdit([part], '포신 앙각', () => {
-      applyBarrelElevation(part, degrees);
-    });
-    core.setStatus(`${part.userData.viewerLabel} · 포신 앙각 ${degreeLabel(degrees)}`);
-  });
 
   modelOpacity.addEventListener('input', () => {
     const opacity = Number(modelOpacity.value) / 100;
@@ -499,65 +550,6 @@ if (core) {
     return part ? [part] : [];
   }
 
-  function degreeLabel(value) {
-    const number = Number(value) || 0;
-    return `${number > 0 ? '+' : ''}${number.toFixed(0)}°`;
-  }
-
-  function updateWeaponPanel(part = core.getSelected()) {
-    const singlePart = Boolean(part && multiSelection.size <= 1);
-    partTransformPanel.hidden = !singlePart;
-    weaponPanel.hidden = true;
-    if (!singlePart) return;
-
-    const approximatePivot = core.ensurePartPivot(part);
-    syncRotationInputs(part);
-    const weapon = core.isWeaponPart(part);
-    partControlTitle.textContent = weapon ? '무장 회전' : '파트 회전';
-    weaponPivotStatus.textContent = part.userData.viewerPivotSource === 'model-report'
-      ? '추출 엔티티 원점'
-      : '형상 중심 자동 원점';
-    partRotationStatus.textContent = weapon
-      ? 'X·Y·Z 회전값과 아래 선회·포신 앙각을 따로 조절할 수 있어요.'
-      : 'X·Y·Z 값 또는 R 회전 도구로 이 파트를 자체 중심축 기준 회전해요.';
-    if (approximatePivot) {
-      partRotationStatus.textContent += ' 추출 원점이 없어 형상 중심을 사용해요.';
-    }
-
-    weaponPanel.hidden = !weapon;
-    if (!weapon) return;
-    weaponTypeStatus.textContent = part.userData.viewerType || '무장';
-    const traverse = Number(part.userData.viewerTraverseDegrees || 0);
-    weaponTraverse.value = String(Math.round(traverse));
-    weaponTraverseValue.textContent = degreeLabel(traverse);
-    const elevation = Number(part.userData.viewerBarrelDegrees || 0);
-    barrelElevation.value = String(Math.round(elevation));
-    barrelElevationValue.textContent = degreeLabel(elevation);
-    const rig = inferBarrelRig(part);
-    barrelElevation.disabled = !rig.available;
-    barrelDetectionStatus.textContent = rig.available
-      ? `분리된 포신 형상 ${rig.componentCount}개 감지 · 자체 앙각축 사용`
-      : `${rig.reason} · 이 OBJ에는 독립 포신 엔티티가 없어 포탑 선회만 사용할 수 있어요.`;
-  }
-
-  function rotateSelected(delta) {
-    const targets = activeTransformParts();
-    if (!targets.length) {
-      core.setStatus('먼저 회전할 파트를 선택해 주세요');
-      return;
-    }
-    let approximatePivots = 0;
-    for (const part of targets) {
-      approximatePivots += Number(core.ensurePartPivot(part));
-    }
-    core.recordObjectEdit(targets, '파트 회전', () => {
-      for (const part of targets) core.rotatePartAroundUpAxis(part, delta);
-    });
-    const pivotNote = approximatePivots
-      ? ` · 원점 정보가 없는 ${approximatePivots}개는 파트 중심축 사용`
-      : ' · 추출 원점 사용';
-    core.setStatus(`${targets.length}개 파트를 자체 중심축으로 ${degreeLabel(THREE.MathUtils.radToDeg(delta))} 회전했어요${pivotNote}`);
-  }
 
   function resetSelected() {
     const targets = activeTransformParts();
@@ -567,12 +559,8 @@ if (core) {
     }
     core.recordObjectEdit(targets, '파트 원위치', () => {
       for (const part of targets) {
-        if (part.userData.originalQuaternion) part.quaternion.copy(part.userData.originalQuaternion);
         if (part.userData.originalPosition) part.position.copy(part.userData.originalPosition);
         if (part.userData.originalScale) part.scale.copy(part.userData.originalScale);
-        part.userData.viewerTraverseDegrees = 0;
-        part.userData.viewerApplyBarrelElevation?.(0);
-        part.userData.viewerRotationDegrees = { x: 0, y: 0, z: 0 };
       }
     });
     core.setStatus(`${targets.length}개 파트를 추출 위치로 되돌렸어요`);
@@ -829,20 +817,11 @@ if (core) {
     disposeCompare(true);
     compareMode = 'overlay';
     compareLayoutButton.textContent = '비교 겹침';
-    weaponPanel.hidden = true;
-    weaponTraverse.value = '0';
-    weaponTraverseValue.textContent = '0°';
-    barrelElevation.value = '0';
-    barrelElevationValue.textContent = '0°';
-    barrelElevation.disabled = true;
-    partTransformPanel.hidden = true;
     transform.detach();
   }
 
   window.addEventListener('wows-viewer-reset', resetAdvancedState);
 
-  turnLeftButton.addEventListener('click', () => rotateSelected(THREE.MathUtils.degToRad(15)));
-  turnRightButton.addEventListener('click', () => rotateSelected(THREE.MathUtils.degToRad(-15)));
   resetPartButton.addEventListener('click', resetSelected);
   waterlineButton.addEventListener('click', () => {
     waterlineVisible = !waterlineVisible;
