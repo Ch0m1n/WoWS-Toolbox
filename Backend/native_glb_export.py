@@ -670,6 +670,7 @@ def build(args: argparse.Namespace) -> dict:
         "coordinate_space": "gltf-rh-y-up",
         "obj_axis_forward": "-Z",
         "obj_axis_up": "Y",
+        "pivot_space": "obj",
         "categories": categories,
         "objects": objects,
         "weapon_counts": weapon_counts,

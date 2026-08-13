@@ -594,16 +594,16 @@ function normalizeModelMaterials(root, assemblyMetadata = null) {
       }
     });
     const reportMirrored = isAssemblyMirroredNode(node, assemblyMetadata);
-    const unverifiedObj = !assemblyMetadata;
-    const needsDoubleSide = reportMirrored || unverifiedObj;
     const windingPolicy = reportMirrored
       ? 'assembly-mirrored-stable-double-sided-v3'
-      : (unverifiedObj ? 'unverified-obj-stable-double-sided-v4' : 'verified-native-front-sided-v2');
-    // Native exports repair negative-determinant winding while writing the OBJ.
-    // Double-sided native meshes expose the far side through transparent armor mode.
+      : 'ship-surface-stable-double-sided-v5';
+    // WoWS visuals mix intentionally single-sided sheets with meshes whose winding
+    // is not consistent across render sets. Blender displays these assets from both
+    // sides; forcing verified OBJ files to FrontSide made deck, turret, catapult,
+    // and superstructure surfaces disappear in the built-in viewer.
     mirroredPartMaterials += cloneNodeMaterialsForSide(
       node,
-      needsDoubleSide ? THREE.DoubleSide : THREE.FrontSide,
+      THREE.DoubleSide,
       windingPolicy,
     );
   });
@@ -653,8 +653,6 @@ function snapshotObjects(objects) {
       quaternion: object.quaternion.clone(),
       scale: object.scale.clone(),
       visible: object.visible,
-      traverseDegrees: Number(object.userData.viewerTraverseDegrees || 0),
-      barrelDegrees: Number(object.userData.viewerBarrelDegrees || 0),
     }));
 }
 
@@ -666,9 +664,7 @@ function snapshotChanged(before, after) {
       || !entry.position.equals(next.position)
       || !entry.quaternion.equals(next.quaternion)
       || !entry.scale.equals(next.scale)
-      || entry.visible !== next.visible
-      || entry.traverseDegrees !== next.traverseDegrees
-      || entry.barrelDegrees !== next.barrelDegrees;
+      || entry.visible !== next.visible;
   });
 }
 
@@ -678,10 +674,6 @@ function applySnapshot(snapshot) {
     entry.object.quaternion.copy(entry.quaternion);
     entry.object.scale.copy(entry.scale);
     entry.object.visible = entry.visible;
-    entry.object.userData.viewerRotationDegrees = getPartRotationDegrees(entry.object);
-    entry.object.userData.viewerTraverseDegrees = entry.traverseDegrees;
-    entry.object.userData.viewerBarrelDegrees = entry.barrelDegrees;
-    entry.object.userData.viewerApplyBarrelElevation?.(entry.barrelDegrees);
     entry.object.updateMatrix();
   });
   shipRoot?.updateMatrixWorld(true);
@@ -734,125 +726,20 @@ function recordObjectEdit(objects, label, mutate) {
 }
 
 function rememberOriginalTransform(object) {
-  if (!object?.isObject3D || object.userData.originalQuaternion) return;
+  if (!object?.isObject3D || object.userData.originalPosition) return;
   object.userData.originalPosition = object.position.clone();
-  object.userData.originalQuaternion = object.quaternion.clone();
   object.userData.originalScale = object.scale.clone();
 }
 
-const VIEWER_WEAPON_TYPES = new Set(['주함포', '부포', '대공포', '어뢰', '미사일']);
-const VIEWER_WEAPON_CATEGORIES = new Set([
-  'main_gun', 'secondary', 'anti_air', 'torpedo', 'missile_launcher',
-]);
-
-function isViewerWeaponPart(object) {
-  return Boolean(object?.isMesh) && (
-    VIEWER_WEAPON_CATEGORIES.has(object.userData.viewerCategory)
-    || VIEWER_WEAPON_TYPES.has(object.userData.viewerType)
-  );
-}
-
-function getPartUpAxisName(object) {
-  return object?.userData?.viewerUpAxis === 'z' ? 'z' : 'y';
-}
-
-function getPartUpAxis(object) {
-  return getPartUpAxisName(object) === 'z'
-    ? new THREE.Vector3(0, 0, 1)
-    : new THREE.Vector3(0, 1, 0);
-}
-
-function ensurePartPivot(object) {
-  if (!object?.isMesh || object.userData.viewerPivotSource) return false;
-  object.geometry.computeBoundingBox();
-  const center = object.geometry.boundingBox?.getCenter(new THREE.Vector3());
-  if (!center || ![center.x, center.y, center.z].every(Number.isFinite)) return false;
-  object.geometry = object.geometry.clone();
-  object.geometry.translate(-center.x, -center.y, -center.z);
-  object.position.add(center);
-  object.userData.viewerPivot = center.clone();
-  object.userData.viewerPivotSource = 'geometry-center';
-  return true;
-}
-
-function configureTransformAxes(object = selected) {
-  const weaponRotation = transform.getMode() === 'rotate' && isViewerWeaponPart(object);
-  const upAxis = getPartUpAxisName(object);
+function configureTransformAxes() {
   transform.setSpace('local');
-  transform.showX = !weaponRotation || upAxis === 'x';
-  transform.showY = !weaponRotation || upAxis === 'y';
-  transform.showZ = !weaponRotation || upAxis === 'z';
-}
-
-function normalizeDegrees(value) {
-  let normalized = Number(value) || 0;
-  while (normalized > 180) normalized -= 360;
-  while (normalized < -180) normalized += 360;
-  return normalized;
-}
-function getPartRotationDegrees(object) {
-  if (!object?.isObject3D) return { x: 0, y: 0, z: 0 };
-  rememberOriginalTransform(object);
-  const delta = object.userData.originalQuaternion.clone().invert()
-    .multiply(object.quaternion).normalize();
-  const euler = new THREE.Euler().setFromQuaternion(delta, 'XYZ');
-  return {
-    x: normalizeDegrees(THREE.MathUtils.radToDeg(euler.x)),
-    y: normalizeDegrees(THREE.MathUtils.radToDeg(euler.y)),
-    z: normalizeDegrees(THREE.MathUtils.radToDeg(euler.z)),
-  };
-}
-
-function setPartRotationDegrees(object, rotation = {}) {
-  if (!object?.isObject3D) return false;
-  ensurePartPivot(object);
-  rememberOriginalTransform(object);
-  const value = {
-    x: normalizeDegrees(rotation.x),
-    y: normalizeDegrees(rotation.y),
-    z: normalizeDegrees(rotation.z),
-  };
-  const euler = new THREE.Euler(
-    THREE.MathUtils.degToRad(value.x),
-    THREE.MathUtils.degToRad(value.y),
-    THREE.MathUtils.degToRad(value.z),
-    'XYZ',
-  );
-  object.quaternion.copy(object.userData.originalQuaternion)
-    .multiply(new THREE.Quaternion().setFromEuler(euler));
-  object.userData.viewerRotationDegrees = value;
-  if (isViewerWeaponPart(object)) {
-    object.userData.viewerTraverseDegrees = value[getPartUpAxisName(object)];
-  }
-  object.updateMatrix();
-  object.updateMatrixWorld(true);
-  return true;
-}
-
-function setPartTraverseDegrees(object, degrees) {
-  if (!isViewerWeaponPart(object)) return false;
-  const value = normalizeDegrees(degrees);
-  const rotation = getPartRotationDegrees(object);
-  rotation[getPartUpAxisName(object)] = value;
-  return setPartRotationDegrees(object, rotation);
-}
-
-function rotatePartAroundUpAxis(object, deltaRadians) {
-  if (!object?.isObject3D) return false;
-  const rotation = getPartRotationDegrees(object);
-  const axis = getPartUpAxisName(object);
-  rotation[axis] = normalizeDegrees(rotation[axis] + THREE.MathUtils.radToDeg(deltaRadians));
-  return setPartRotationDegrees(object, rotation);
-}
-
-function traverseDegreesFromQuaternion(object) {
-  if (!isViewerWeaponPart(object)) return 0;
-  return getPartRotationDegrees(object)[getPartUpAxisName(object)];
+  transform.showX = true;
+  transform.showY = true;
+  transform.showZ = true;
 }
 
 function beginTransformEdit() {
   if (!transform.object) return;
-  ensurePartPivot(transform.object);
   rememberOriginalTransform(transform.object);
   pendingTransformEdit = snapshotObjects([transform.object]);
 }
@@ -861,13 +748,8 @@ function commitTransformEdit() {
   if (!pendingTransformEdit?.length) return;
   const before = pendingTransformEdit;
   pendingTransformEdit = null;
-  if (transform.getMode() === 'rotate' && transform.object) {
-    transform.object.userData.viewerRotationDegrees = getPartRotationDegrees(transform.object);
-    if (isViewerWeaponPart(transform.object)) transform.object.userData.viewerTraverseDegrees = traverseDegreesFromQuaternion(transform.object);
-  }
   const after = snapshotObjects(before.map((entry) => entry.object));
-  const label = transform.getMode() === 'rotate' ? '파트 회전' : '파트 이동';
-  if (pushObjectEdit(label, before, after)) refreshAfterEdit();
+  if (pushObjectEdit('파트 이동', before, after)) refreshAfterEdit();
 }
 
 function undoViewerEdit() {
@@ -1069,8 +951,6 @@ function prepareParts() {
     node.userData.viewerLabel = getPartLabel(node, parts.length);
     node.userData.viewerType = node.userData.viewerType || classifyPart(node.userData.viewerLabel);
     node.userData.viewerUpAxis = node.userData.viewerUpAxis || inferredUpAxis;
-    node.userData.viewerTraverseDegrees = 0;
-    node.userData.viewerBarrelDegrees = 0;
     parts.push(node);
   });
   parts.sort((a, b) => a.userData.viewerLabel.localeCompare(b.userData.viewerLabel, 'ko'));
@@ -1168,7 +1048,7 @@ function ensureArmorDepthProxy(node) {
     colorWrite: false,
     depthWrite: true,
     depthTest: true,
-    side: THREE.FrontSide,
+    side: THREE.DoubleSide,
     blending: THREE.NoBlending,
   });
   const proxy = new THREE.Mesh(node.geometry, depthMaterial);
@@ -1220,7 +1100,7 @@ function setModelGhost(enabled) {
       material.opacity = enabled ? 0.13 : material.userData.viewerOpacity;
       material.transparent = enabled ? true : material.userData.viewerTransparent;
       material.depthWrite = enabled ? false : material.userData.viewerDepthWrite;
-      material.side = enabled ? THREE.FrontSide : material.userData.viewerSide;
+      material.side = enabled ? THREE.DoubleSide : material.userData.viewerSide;
       material.needsUpdate = true;
     });
   });
@@ -1445,8 +1325,8 @@ async function loadArmor(url, loadId) {
       side: THREE.FrontSide,
       transparent: true,
       opacity: Number(armorOpacity.value) / 100,
-      depthTest: false,
-      depthWrite: true,
+      depthTest: true,
+      depthWrite: false,
       polygonOffset: true,
       polygonOffsetFactor: -1,
     });
@@ -1810,11 +1690,9 @@ document.querySelector('#captureButton').addEventListener('click', () => {
   anchor.click();
 });
 function setTransformMode(mode) {
-  if (mode === 'rotate' && selected) ensurePartPivot(selected);
-  transform.setMode(mode);
-  configureTransformAxes(selected);
+  transform.setMode('translate');
+  configureTransformAxes();
   document.querySelector('#moveButton').classList.toggle('active', mode === 'translate');
-  document.querySelector('#rotateButton').classList.toggle('active', mode === 'rotate');
 }
 
 function hideSelectedPart() {
@@ -1828,7 +1706,6 @@ function isTextEditingTarget(target) {
 }
 
 document.querySelector('#moveButton').addEventListener('click', () => setTransformMode('translate'));
-document.querySelector('#rotateButton').addEventListener('click', () => setTransformMode('rotate'));
 document.querySelector('#hideButton').addEventListener('click', hideSelectedPart);
 
 window.addEventListener('keydown', (event) => {
@@ -1853,10 +1730,6 @@ window.addEventListener('keydown', (event) => {
     event.preventDefault();
     setTransformMode('translate');
     setStatus('파트 이동 도구');
-  } else if (event.code === 'KeyR') {
-    event.preventDefault();
-    setTransformMode('rotate');
-    setStatus('파트 회전 도구');
   } else if (event.code === 'KeyB') {
     event.preventDefault();
     setBackgroundVisible(!backgroundVisible, { announce: true });
@@ -1947,16 +1820,9 @@ window.WoWSViewerCore = {
   recordObjectEdit,
   undoViewerEdit,
   redoViewerEdit,
-  ensurePartPivot,
-  isWeaponPart: isViewerWeaponPart,
-  getPartUpAxisName,
-  setPartTraverseDegrees,
   rememberOriginalTransform,
-  getPartRotationDegrees,
-  setPartRotationDegrees,
-  rotatePartAroundUpAxis,
   loadResourceWithRetry,
   setStatus,
   hostMessage,
 };
-hostMessage({ type: 'ready', version: '5.0.36' });
+hostMessage({ type: 'ready', version: '5.0.38' });

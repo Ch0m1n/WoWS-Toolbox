@@ -1,7 +1,7 @@
 #define MyAppName "WoWS Toolbox"
-#define MyAppVersion "5.0.36"
+#define MyAppVersion "5.0.38"
 #define MyAppPublisher "WoWS Toolbox contributors"
-#define ReleaseRoot "..\..\..\outputs\WoWS-Toolbox-v5.0.36"
+#define ReleaseRoot "..\..\..\outputs\WoWS-Toolbox-v5.0.38"
 
 [Setup]
 AppId={{88AA1660-CC89-4EDA-9895-BC051E8CAD26}
@@ -11,7 +11,7 @@ AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppCopyright=Copyright (c) 2026 WoWS Toolbox contributors
 AppComments=Unofficial WoWS-family model extraction and inspection toolbox
-VersionInfoVersion=5.0.36.0
+VersionInfoVersion=5.0.38.0
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription={#MyAppName} Installer
 VersionInfoCompany={#MyAppPublisher}
@@ -111,6 +111,8 @@ Type: files; Name: "{app}\README_KO*.md"
 Type: files; Name: "{app}\test*.py"
 Type: files; Name: "{app}\Backend\test_*.py"
 Type: files; Name: "{app}\BlenderExtractor\test_*.py"
+; Remove the retired experimental weapon/part rotation module during upgrades.
+Type: files; Name: "{app}\Viewer\web\weapon-kinematics.js"
 [Run]
 Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "{cm:InstallingWebView2}"; Flags: waituntilterminated; Check: NeedsWebView2; AfterInstall: VerifyWebView2Install
 Filename: "{app}\README.txt"; Description: "{cm:ViewReadme}"; Flags: postinstall shellexec skipifsilent skipifdoesntexist
