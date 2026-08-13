@@ -66,6 +66,14 @@ The release package includes a private CPython 3.10 runtime and Pillow. Blender 
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.39 extraction integrity and viewer normal repair
+
+- Restores standard Three.js double-sided normal handling. Camera-facing reverse-wound hull, deck, turret, catapult, and superstructure faces no longer turn black under directional lighting.
+- Removes the unsafe GLB primitive deduplication pass. Repeated draw calls that share accessors are preserved because they may represent intentional ship geometry.
+- Rejects incomplete streamed `.dd0` texture fragments before decoding and falls back only to a decodable DDS payload.
+- Resolves nested PC/Korabli visual prototypes to their leaf visual model before export, preventing placeholder or parent assemblies from being emitted as ship parts.
+- Rebuilds both bundled PC/Korabli extractors and adds regression contracts for the renderer and native OBJ conversion.
+- Revalidates Korabli Moonsund, PC Aki, and Legends Suwo through the current no-Blender pipelines.
 ## 5.0.38 resizable part inspector and simplified editing
 
 - Makes the model viewer's right inspector width adjustable by dragging its left edge.
@@ -141,7 +149,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.38 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.39 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -252,7 +260,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.38 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.39 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 

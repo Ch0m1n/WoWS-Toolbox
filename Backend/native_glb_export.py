@@ -468,31 +468,6 @@ def face_token(vertex: int, uv: int | None, normal: int | None) -> str:
     return str(vertex)
 
 
-def accessor_fingerprint(document: dict, binary: bytes, index: int) -> bytes:
-    accessor = document["accessors"][index]
-    view = document["bufferViews"][accessor["bufferView"]]
-    start = int(view.get("byteOffset", 0)) + int(accessor.get("byteOffset", 0))
-    count = int(accessor["count"])
-    component_size = COMPONENTS[int(accessor["componentType"])][1]
-    width = TYPE_WIDTHS[accessor["type"]]
-    packed_size = component_size * width
-    stride = int(view.get("byteStride", packed_size))
-    digest = hashlib.sha256()
-    for row in range(count):
-        offset = start + row * stride
-        digest.update(binary[offset : offset + packed_size])
-    return digest.digest()
-
-
-def primitive_fingerprint(document: dict, binary: bytes, primitive: dict) -> tuple:
-    attributes = primitive.get("attributes", {})
-    channels = tuple(
-        (name, accessor_fingerprint(document, binary, int(index)))
-        for name, index in sorted(attributes.items())
-    )
-    indices = accessor_fingerprint(document, binary, int(primitive["indices"])) if "indices" in primitive else b""
-    return channels, indices, primitive.get("material"), int(primitive.get("mode", 4))
-
 
 def export_obj(
     document: dict,
@@ -518,15 +493,10 @@ def export_obj(
             output.write(f"\no {object_name}\n")
             object_vertices = 0
             object_triangles = 0
-            seen_primitives: set[tuple] = set()
             for primitive_index, primitive in enumerate(mesh.get("primitives", [])):
                 attributes = primitive.get("attributes", {})
                 if "POSITION" not in attributes:
                     continue
-                fingerprint = primitive_fingerprint(document, binary, primitive)
-                if fingerprint in seen_primitives:
-                    continue
-                seen_primitives.add(fingerprint)
                 positions = accessor_values(document, binary, int(attributes["POSITION"]))
                 normals = accessor_values(document, binary, int(attributes["NORMAL"])) if "NORMAL" in attributes else []
                 uvs = accessor_values(document, binary, int(attributes["TEXCOORD_0"])) if "TEXCOORD_0" in attributes else []
@@ -763,3 +733,5 @@ if __name__ == "__main__":
     except Exception as exc:
         print("[ERROR] " + str(exc), flush=True)
         raise SystemExit(1) from None
+
+
