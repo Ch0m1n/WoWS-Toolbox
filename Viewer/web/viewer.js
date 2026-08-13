@@ -549,19 +549,7 @@ function isAssemblyMirroredNode(node, assemblyMetadata) {
   );
 }
 
-function applyStableDoubleSidedNormals(material) {
-  if (!material?.isMaterial || material.userData?.viewerStableDoubleSidedNormals) return material;
-  const inheritedCompile = material.onBeforeCompile;
-  const inheritedCacheKey = material.customProgramCacheKey?.bind(material);
-  material.onBeforeCompile = (shader, rendererInstance) => {
-    inheritedCompile?.call(material, shader, rendererInstance);
-    shader.defines = { ...(shader.defines || {}), WOWS_STABLE_DOUBLE_SIDED_NORMALS: 1 };
-  };
-  material.customProgramCacheKey = () => `${inheritedCacheKey?.() || ''}|stable-double-sided-normals-v1`;
-  material.userData = { ...(material.userData || {}), viewerStableDoubleSidedNormals: true };
-  material.needsUpdate = true;
-  return material;
-}
+
 function cloneNodeMaterialsForSide(node, side, policy) {
   const originals = Array.isArray(node.material) ? node.material : [node.material];
   const clones = originals.map((material) => {
@@ -570,7 +558,6 @@ function cloneNodeMaterialsForSide(node, side, policy) {
     clone.userData = { ...(material.userData || {}) };
     clone.side = side;
     clone.userData.viewerWindingPolicy = policy;
-    if (side === THREE.DoubleSide) applyStableDoubleSidedNormals(clone);
     clone.needsUpdate = true;
     return clone;
   });
@@ -595,12 +582,14 @@ function normalizeModelMaterials(root, assemblyMetadata = null) {
     });
     const reportMirrored = isAssemblyMirroredNode(node, assemblyMetadata);
     const windingPolicy = reportMirrored
-      ? 'assembly-mirrored-stable-double-sided-v3'
-      : 'ship-surface-stable-double-sided-v5';
+      ? 'assembly-mirrored-standard-double-sided-v4'
+      : 'ship-surface-standard-double-sided-v6';
     // WoWS visuals mix intentionally single-sided sheets with meshes whose winding
     // is not consistent across render sets. Blender displays these assets from both
     // sides; forcing verified OBJ files to FrontSide made deck, turret, catapult,
-    // and superstructure surfaces disappear in the built-in viewer.
+    // and superstructure surfaces disappear in the built-in viewer. Standard
+    // Three.js back-face normal flipping must remain enabled: suppressing it
+    // turns every camera-facing back face black under directional lighting.
     mirroredPartMaterials += cloneNodeMaterialsForSide(
       node,
       THREE.DoubleSide,
@@ -1825,4 +1814,4 @@ window.WoWSViewerCore = {
   setStatus,
   hostMessage,
 };
-hostMessage({ type: 'ready', version: '5.0.38' });
+hostMessage({ type: 'ready', version: '5.0.39' });

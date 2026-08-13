@@ -130,7 +130,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.38',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.39',
     'ConvertTo-ValidatedQueueEntries',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -323,7 +323,7 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerI18n -notmatch 'formalKoreanReplacements' -or
     $viewerI18n -notmatch 'language === ''ko''.*formalizeKorean' -or
     $viewerIndex -match 'v=5\.0\.30' -or
-    $viewerScript -notmatch "version: '5\.0\.38'" -or
+    $viewerScript -notmatch "version: '5\.0\.39'" -or
     $advanced -match 'v=5\.0\.30' -or
     $viewerCss -notmatch '#app \{[^}]*grid-template-rows: minmax\(0, 1fr\);[^}]*overflow: hidden' -or
     $viewerCss -notmatch '\.inspector \{[^}]*min-height: 0;[^}]*overflow: hidden;' -or
@@ -394,18 +394,18 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerScript -notmatch 'pbrPreview: false' -or
     $viewerScript -notmatch 'setMaterialPbrPreview\(standard, pbrPreviewEnabled\)' -or
     $viewerScript -notmatch 'Object\.values\(material\.userData\?\.viewerPbrChannels' -or
-    $viewerScript -notmatch 'applyStableDoubleSidedNormals\(clone\)' -or
+    $viewerScript -match 'applyStableDoubleSidedNormals' -or
     $viewerScript -notmatch 'applyPbrPreview' -or
-    $viewerScript -notmatch 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
-    $viewerVendor -notmatch 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
+    $viewerScript -match 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
+    $viewerVendor -match 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
     $viewerIndex -notmatch '조명과 표면' -or
     $viewerLightingCss -notmatch '\.lighting-desk' -or
-    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.38\.1' -or
-    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.38\.1' -or
+    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.39\.1' -or
+    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.39\.1' -or
     $viewerScript -notmatch 'loadAssemblyMetadata' -or
     $viewerScript -notmatch 'matrixRowsDeterminant' -or
-    $viewerScript -notmatch 'assembly-mirrored-stable-double-sided-v3' -or
-    $viewerScript -notmatch 'ship-surface-stable-double-sided-v5' -or
+    $viewerScript -notmatch 'assembly-mirrored-standard-double-sided-v4' -or
+    $viewerScript -notmatch 'ship-surface-standard-double-sided-v6' -or
     $viewerScript -notmatch 'THREE\.DoubleSide' -or
     $viewerScript -notmatch 'ARMOR_GHOST_MODEL_TYPES' -or
     $viewerScript -notmatch 'ensureArmorDepthProxy' -or
@@ -496,9 +496,9 @@ if ($backendExtractText -notmatch 'quality_contract' -or
     $nativeExportText -notmatch 'texture-max-size.+default=0') {
     throw 'Lossless LOD0/original-texture quality contract is missing.'
 }
-if ($nativeExportText -notmatch 'primitive_fingerprint' -or
-    $nativeExportText -notmatch 'seen_primitives') {
-    throw 'Native duplicate-primitive compaction is missing.'
+if ($nativeExportText -match 'primitive_fingerprint' -or
+    $nativeExportText -match 'seen_primitives') {
+    throw 'Unsafe duplicate-primitive compaction returned; repeated GLB draw calls must be preserved.'
 }
 
 $launchGuiText = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'GUI\Launch-Gui.ps1')
@@ -508,8 +508,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.38.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.38') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.39.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.39') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -607,7 +607,7 @@ if ($threeCore.Length -lt 1000000 -or $threeModule.Length -lt 500000 -or
     $notices -notmatch 'RPC\s+`FLOAT64`\s+support') {
     throw 'Dependency or license acceptance failed.'
 }
-$expectedExporterHash = '0D471A922CFD975865618C36CEEC6F6226C0EC4298A24E519DBF46D8FC03452D'
+$expectedExporterHash = '4C55EFCE5942E45B35F5457F2F27FB7203C83A9B9EDF7C9793F51478AE755271'
 foreach ($relative in @('Backend\wowsunpack.exe', 'Backend\wowsunpack_armor.exe')) {
     $actualHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $relative) -Algorithm SHA256).Hash
     if ($actualHash -ne $expectedExporterHash) {
@@ -653,8 +653,9 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.38 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.39 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.38 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.39 self-tests passed.'
 }
+

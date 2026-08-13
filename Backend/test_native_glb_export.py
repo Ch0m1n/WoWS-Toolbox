@@ -175,7 +175,7 @@ class NativeGlbExportTests(unittest.TestCase):
                 os.environ["WOWS_TOOLBOX_LANGUAGE"] = old
 
 
-    def test_skips_duplicate_primitive_references_within_one_part(self) -> None:
+    def test_preserves_duplicate_primitive_references_within_one_part(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             source = root / "duplicate.glb"
@@ -194,7 +194,7 @@ class NativeGlbExportTests(unittest.TestCase):
             report = NATIVE.build(args)
             obj = args.output.read_text(encoding="utf-8")
             self.assertEqual(report["object_count"], 2)
-            self.assertEqual(obj.count("f "), 2)
+            self.assertEqual(obj.count("f "), 3)
 
     def test_catapult_hardpoint_is_classified_as_aircraft(self) -> None:
         self.assertEqual(
@@ -204,3 +204,4 @@ class NativeGlbExportTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
