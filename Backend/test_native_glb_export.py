@@ -151,6 +151,7 @@ class NativeGlbExportTests(unittest.TestCase):
                 {
                     "maps": {
                         "normal": "textures/paint_normal.png",
+                        "specular": "textures/paint_specular.png",
                         "roughness": "textures/paint_roughness.png",
                         "metalness": "textures/paint_metalness.png",
                         "ao": "textures/paint_ao.png",
@@ -162,10 +163,13 @@ class NativeGlbExportTests(unittest.TestCase):
             target = Path(temporary) / "ship.mtl"
             NATIVE.write_mtl(document, target, {}, contract)
             result = target.read_text(encoding="utf-8")
-            self.assertIn("norm textures/paint_normal.png", result)
-            self.assertIn("map_Pr textures/paint_roughness.png", result)
-            self.assertIn("map_Pm textures/paint_metalness.png", result)
-            self.assertIn("map_Ka textures/paint_ao.png", result)
+            self.assertIn("map_Ks textures/paint_specular.png", result)
+            self.assertIn("map_normal textures/paint_normal.png", result)
+            self.assertIn("# wows_map_Pr textures/paint_roughness.png", result)
+            self.assertIn("# wows_map_Pm textures/paint_metalness.png", result)
+            self.assertIn("map_ao textures/paint_ao.png", result)
+            self.assertNotIn("\nPr ", result)
+            self.assertNotIn("\nPm ", result)
 
     def test_english_runtime_lines_contain_no_hangul(self) -> None:
         old = os.environ.get("WOWS_TOOLBOX_LANGUAGE")

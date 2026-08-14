@@ -439,8 +439,6 @@ function createStandardViewerMaterial(material) {
     },
   };
   standard.normalScale.set(activeNormalStrength, activeNormalStrength);
-  material.normalMap = null;
-  material.bumpMap = null;
   material.userData = {
     ...(material.userData || {}),
     viewerPbrPreview: false,
@@ -464,8 +462,8 @@ function normalizeViewerMaterial(material) {
   if (material.isMeshPhongMaterial) {
     // Painted naval surfaces are mostly dielectric and fairly rough. Keeping
     // the highlight broad and weak reveals albedo detail without a metallic cast.
-    material.specular?.setRGB(0.012, 0.012, 0.012);
-    material.shininess = 10;
+    material.specular?.setRGB(0.125, 0.125, 0.125);
+    material.shininess = 32;
   }
   if (material.bumpMap && !material.normalMap) {
     material.normalMap = material.bumpMap;
@@ -1841,4 +1839,4 @@ window.WoWSViewerCore = {
   setStatus,
   hostMessage,
 };
-hostMessage({ type: 'ready', version: '5.0.41' });
+hostMessage({ type: 'ready', version: '5.0.42' });

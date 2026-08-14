@@ -454,6 +454,7 @@ def split_metallic_gloss_texture(source: Path, texture_dir: Path) -> dict[str, s
     digest = sha256(source)
     targets = {
         "metallic_gloss": texture_dir / f"{digest}_metallic_gloss.png",
+        "specular": texture_dir / f"{digest}_specular.png",
         "roughness": texture_dir / f"{digest}_roughness.png",
         "metalness": texture_dir / f"{digest}_metalness.png",
     }
@@ -462,6 +463,9 @@ def split_metallic_gloss_texture(source: Path, texture_dir: Path) -> dict[str, s
             rgba = opened.convert("RGBA")
             red, green, _blue, _alpha = rgba.split()
             rgba.save(targets["metallic_gloss"], format="PNG", compress_level=3)
+            Image.merge("RGB", (red,) * 3).save(
+                targets["specular"], format="PNG", compress_level=3
+            )
             Image.merge("RGB", (ImageOps.invert(red),) * 3).save(
                 targets["roughness"], format="PNG", compress_level=3
             )
@@ -523,14 +527,11 @@ def write_mtl(
                 [
                     "",
                     f"newmtl {output_name}",
-                    "Ka 0.080000 0.080000 0.080000",
-                    "Kd 0.800000 0.800000 0.800000",
-                    "Ks 0.050000 0.050000 0.050000",
+                    "Kd 1 1 1",
+                    "Ks 0.125 0.125 0.125",
                     "Ns 32.000000",
+                    "Ke 0 0 0",
                     "d 1.000000",
-                    "illum 2",
-                    "Pr 1" if "roughness" in mapped else "Pr 0.72",
-                    "Pm 1" if "metalness" in mapped else "Pm 0",
                     f"# wows_fx {fx_name or 'unknown'}",
                     f"# wows_double_sided {bool(properties.get('doubleSided', False))}",
                 ]
@@ -540,14 +541,16 @@ def write_mtl(
                 if transparent:
                     blocks.append(f"map_d {mapped['a']}")
             if "n" in mapped:
-                blocks.append(f"map_Bump {mapped['n']}")
+                blocks.append(f"map_normal {mapped['n']}")
             if "ao" in mapped:
-                blocks.append(f"map_Ka {mapped['ao']}")
+                blocks.append(f"map_ao {mapped['ao']}")
+            if "specular" in mapped:
+                blocks.append(f"map_Ks {mapped['specular']}")
             if "roughness" in mapped:
                 blocks.append("# wows_pbr_contract R=gloss G=metalness roughness=1-R")
-                blocks.append(f"map_Pr {mapped['roughness']}")
+                blocks.append(f"# wows_map_Pr {mapped['roughness']}")
             if "metalness" in mapped:
-                blocks.append(f"map_Pm {mapped['metalness']}")
+                blocks.append(f"# wows_map_Pm {mapped['metalness']}")
     output.write_text("\n".join(blocks) + "\n", encoding="utf-8", newline="\n")
     return material_names, object_materials, len(set(texture_cache.values()))
 

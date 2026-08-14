@@ -116,6 +116,20 @@ class MTLLoader extends Loader {
 			let line = lines[ i ];
 			line = line.trim();
 
+			if ( line.startsWith( '# wows_map_Pr ' ) ) {
+
+				info.wows_map_pr = line.substring( 14 ).trim();
+				continue;
+
+			}
+
+			if ( line.startsWith( '# wows_map_Pm ' ) ) {
+
+				info.wows_map_pm = line.substring( 14 ).trim();
+				continue;
+
+			}
+
 			if ( line.length === 0 || line.charAt( 0 ) === '#' ) {
 
 				// Blank line or comment ignore
@@ -427,18 +441,21 @@ class MaterialCreator {
 					break;
 
 				case 'map_pr':
+				case 'wows_map_pr':
 
 					setMapForType( 'roughnessMap', value );
 
 					break;
 
 				case 'map_pm':
+				case 'wows_map_pm':
 
 					setMapForType( 'metalnessMap', value );
 
 					break;
 
 				case 'map_ka':
+				case 'map_ao':
 
 					setMapForType( 'aoMap', value );
 
@@ -453,6 +470,7 @@ class MaterialCreator {
 					break;
 
 				case 'norm':
+				case 'map_normal':
 
 					setMapForType( 'normalMap', value );
 

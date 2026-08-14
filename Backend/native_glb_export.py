@@ -465,9 +465,10 @@ def write_mtl(
             pbr_maps = pbr_entry.get("maps", {}) if pbr_entry else {}
             output.write(f"\nnewmtl {names[index]}\n")
             output.write(f"Kd {factor[0]:.6g} {factor[1]:.6g} {factor[2]:.6g}\n")
-            output.write("Ka 0 0 0\nKs 0.02 0.02 0.02\nNs 16\nillum 2\n")
-            output.write("Pr 1\n" if pbr_maps.get("roughness") else "Pr 0.72\n")
-            output.write("Pm 1\n" if pbr_maps.get("metalness") else "Pm 0\n")
+            # Match the proven GM3D OBJ contract for the default paint view.
+            # Extended PBR maps remain available but must not force a fully
+            # metallic base material in generic OBJ importers.
+            output.write("Ks 0.125 0.125 0.125\nNs 32\nKe 0 0 0\n")
             if factor[3] < 0.999:
                 output.write(f"d {factor[3]:.6g}\n")
             image_index = material_texture_index(document, material)
@@ -481,14 +482,19 @@ def write_mtl(
                     output.write(f"map_d {image_paths[image_index]}\n")
             if pbr_maps:
                 output.write("# wows_pbr_contract R=gloss G=metalness roughness=1-R\n")
+                if pbr_maps.get("specular"):
+                    output.write(f"map_Ks {pbr_maps['specular']}\n")
                 if pbr_maps.get("normal"):
-                    output.write(f"norm {pbr_maps['normal']}\n")
+                    output.write(f"map_normal {pbr_maps['normal']}\n")
                 if pbr_maps.get("roughness"):
-                    output.write(f"map_Pr {pbr_maps['roughness']}\n")
+                    # Keep optional detailed PBR channels available to the
+                    # Toolbox viewer without changing how generic OBJ tools
+                    # render the proven GM3D-compatible paint material.
+                    output.write(f"# wows_map_Pr {pbr_maps['roughness']}\n")
                 if pbr_maps.get("metalness"):
-                    output.write(f"map_Pm {pbr_maps['metalness']}\n")
+                    output.write(f"# wows_map_Pm {pbr_maps['metalness']}\n")
                 if pbr_maps.get("ao"):
-                    output.write(f"map_Ka {pbr_maps['ao']}\n")
+                    output.write(f"map_ao {pbr_maps['ao']}\n")
     return names
 
 

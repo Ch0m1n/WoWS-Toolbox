@@ -66,6 +66,14 @@ The release package includes a private CPython 3.10 runtime and Pillow. Blender 
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.42 GM3D-compatible materials and isolated PBR channels
+
+- Matches the default OBJ material contract against a GM3D Aki G reference export.
+- Uses `_a` for base paint, `_mg`.R as a grayscale specular map, `_n` for normals, and `_ao` for ambient occlusion in generic OBJ viewers.
+- Preserves detailed roughness and metalness maps as Toolbox-specific MTL comments so generic importers do not turn painted parts metallic or create false two-tone surfaces.
+- Selects the highest-information AO channel for indexed Korabli materials, including assets that store AO in G instead of R.
+- Validates a real Aki G export and all material-channel registrations with a Chromium-based MTL loader test.
+
 ## 5.0.41 source-accurate surfaces and Legends assembly repair
 
 - Resolves event and collaboration ships by their exact GameParams record, preventing shared model-directory siblings such as Aki G and AL Hindenburg from exporting the hull without their weapons.
@@ -158,7 +166,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.41 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.42 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -269,7 +277,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.41 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.42 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -288,4 +296,3 @@ WoWS Toolbox는 비공식 커뮤니티 프로젝트예요. MIT 라이선스는 W
 사용자는 해당 게임 EULA, 플랫폼 약관과 지역 법률을 따라야 해요. 권리자의 허가 없이 추출 자산을 재배포하거나 판매하지 마세요. 자세한 내용은 [LEGAL_NOTICE.txt](LEGAL_NOTICE.txt)와 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)를 확인하세요.
 
 WoWS Toolbox 코드는 [MIT License](LICENSE)로 배포해요. 제3자 구성 요소에는 각각의 라이선스가 적용돼요.
-

@@ -18,13 +18,13 @@ import subprocess
 from pathlib import Path, PurePosixPath
 from typing import Iterable
 
-from PIL import Image, ImageChops, ImageOps
+from PIL import Image, ImageChops, ImageOps, ImageStat
 
 
 MFM_LINE = re.compile(r"^\(A\)\s+(/.+\.mfm)\s+\d+\s+bytes\s*$", re.IGNORECASE)
 MFM_STRIP_SUFFIXES = ("_skinned", "_wire", "_dead", "_blaze", "_alpha")
 CHANNEL_SUFFIXES = {"normal": "_n", "metallic_gloss": "_mg", "ao": "_ao"}
-SCHEMA = "wows-toolbox-pbr-materials/v1"
+SCHEMA = "wows-toolbox-pbr-materials/v2"
 
 
 def safe_name(value: str, fallback: str = "Texture") -> str:
@@ -158,6 +158,28 @@ def split_metallic_gloss(image: Image.Image) -> tuple[Image.Image, Image.Image, 
     return source, roughness, metalness
 
 
+def specular_from_metallic_gloss(image: Image.Image) -> Image.Image:
+    """Return the legacy WoWS/GM3D specular-gloss view of an `_mg` map."""
+
+    red = image.convert("RGBA").getchannel("R")
+    return Image.merge("RGB", (red,) * 3)
+
+
+def extract_ambient_occlusion(image: Image.Image) -> tuple[Image.Image, str]:
+    """Extract AO from the RGB channel that actually contains image data.
+
+    Standard PC/Legends textures normally store AO in R. Newer indexed
+    Korabli materials have been observed with an almost constant R/B pair and
+    their AO payload in G, so select the channel with the largest variance.
+    """
+
+    channels = image.convert("RGBA").split()[:3]
+    deviations = [float(ImageStat.Stat(channel).stddev[0]) for channel in channels]
+    index = max(range(3), key=lambda item: deviations[item])
+    selected = channels[index]
+    return Image.merge("RGB", (selected,) * 3), "RGB"[index]
+
+
 def _resize(image: Image.Image, max_size: int) -> tuple[Image.Image, bool]:
     if max_size <= 0 or max(image.size) <= max_size:
         return image, False
@@ -176,9 +198,11 @@ def _cache_outputs(cache_root: Path, logical_path: str, channel: str) -> dict[st
     if channel == "normal":
         return {"normal": prefix.with_name(prefix.name + "_normal.png")}
     if channel == "ao":
-        return {"ao": prefix.with_name(prefix.name + "_ao.png")}
+        # v2 invalidates the old R-only AO conversion cache.
+        return {"ao": prefix.with_name(prefix.name + "_ao_v2.png")}
     return {
         "metallic_gloss": prefix.with_name(prefix.name + "_metallic_gloss.png"),
+        "specular": prefix.with_name(prefix.name + "_specular.png"),
         "roughness": prefix.with_name(prefix.name + "_roughness.png"),
         "metalness": prefix.with_name(prefix.name + "_metalness.png"),
     }
@@ -279,12 +303,13 @@ def _convert_to_cache(
         if channel == "normal":
             images = {"normal": reconstruct_tangent_normal(converted)}
         elif channel == "ao":
-            red = converted.getchannel("R")
-            images = {"ao": Image.merge("RGB", (red,) * 3)}
+            ao, _source_channel = extract_ambient_occlusion(converted)
+            images = {"ao": ao}
         else:
             source_mg, roughness, metalness = split_metallic_gloss(converted)
             images = {
                 "metallic_gloss": source_mg,
+                "specular": specular_from_metallic_gloss(source_mg),
                 "roughness": roughness,
                 "metalness": metalness,
             }
@@ -323,9 +348,10 @@ def prepare_pbr_materials(
         "source_contract": {
             "normal": "WoWS signed tangent XY in RG; positive Z reconstructed",
             "metallic_gloss": "source `_mg` retained; inferred R=gloss, G=metalness",
+            "specular": "GM3D-compatible grayscale view of `_mg`.R",
             "roughness": "1 - `_mg`.R",
             "metalness": "`_mg`.G",
-            "ao": "`_ao`.R",
+            "ao": "highest-information RGB channel from `_ao` (R on standard PBS, often G on indexed PBS)",
         },
         "materials": [None] * len(materials),
         "coverage": {"materials": len(materials), "pbr_materials": 0, "channels": 0},

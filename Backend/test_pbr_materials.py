@@ -34,7 +34,9 @@ class PbrMaterialsTests(unittest.TestCase):
 
         mg = Image.new("RGBA", (1, 1), (64, 192, 7, 255))
         source, roughness, metalness = PBR.split_metallic_gloss(mg)
+        specular = PBR.specular_from_metallic_gloss(mg)
         self.assertEqual(source.getpixel((0, 0)), (64, 192, 7, 255))
+        self.assertEqual(specular.getpixel((0, 0)), (64, 64, 64))
         self.assertEqual(roughness.getpixel((0, 0)), (191, 191, 191))
         self.assertEqual(metalness.getpixel((0, 0)), (192, 192, 192))
 
@@ -83,8 +85,16 @@ class PbrMaterialsTests(unittest.TestCase):
                 source, root / "cache", "/content/paint_mg.dd0", "metallic_gloss", 0
             )
             self.assertFalse(resized)
-            self.assertEqual(set(outputs), {"metallic_gloss", "roughness", "metalness"})
+            self.assertEqual(set(outputs), {"metallic_gloss", "specular", "roughness", "metalness"})
             self.assertTrue(all(path.is_file() for path in outputs.values()))
+
+
+    def test_ao_uses_the_channel_with_real_payload(self) -> None:
+        image = Image.new("RGBA", (4, 1))
+        image.putdata([(0, 10, 0, 255), (0, 80, 0, 255), (0, 160, 0, 255), (0, 240, 0, 255)])
+        ao, channel = PBR.extract_ambient_occlusion(image)
+        self.assertEqual(channel, "G")
+        self.assertEqual([ao.getpixel((x, 0))[0] for x in range(4)], [10, 80, 160, 240])
 
 
 if __name__ == "__main__":

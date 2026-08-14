@@ -18,7 +18,7 @@ class NativeObjPbrTests(unittest.TestCase):
 
             maps = native.split_metallic_gloss_texture(source, root / "textures")
 
-            self.assertEqual(set(maps), {"metallic_gloss", "roughness", "metalness"})
+            self.assertEqual(set(maps), {"metallic_gloss", "specular", "roughness", "metalness"})
             roughness = Image.open(root / maps["roughness"])
             metalness = Image.open(root / maps["metalness"])
             self.assertEqual(roughness.getpixel((0, 0)), (191, 191, 191))
