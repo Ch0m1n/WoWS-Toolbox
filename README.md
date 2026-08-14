@@ -66,8 +66,9 @@ The release package includes a private CPython 3.10 runtime and Pillow. Blender 
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
-## 5.0.40 source-accurate surfaces and Legends assembly repair
+## 5.0.41 source-accurate surfaces and Legends assembly repair
 
+- Resolves event and collaboration ships by their exact GameParams record, preventing shared model-directory siblings such as Aki G and AL Hindenburg from exporting the hull without their weapons.
 - Keeps base-color paint in the default viewer material and moves normal, roughness, and AO channels to the optional PBR preview, preventing unrelated parts from turning black or splitting into false two-tone surfaces.
 - Resets obsolete low-exposure lighting presets once so upgraded installations open with a neutral inspection setup.
 - Prefers Korabli's full `_art` paint atlas and reconstructs narrowly truncated BC7 atlas tails before decoding instead of falling back to 16/32px placeholders.
@@ -157,7 +158,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.40 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.41 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -268,7 +269,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.40 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.41 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 

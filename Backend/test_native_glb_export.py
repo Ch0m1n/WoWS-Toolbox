@@ -64,7 +64,12 @@ def synthetic_glb(path: Path, *, duplicate_hull_primitive: bool = False) -> None
             {"name": "HP_AGM_1 (TestGun)", "mesh": 1, "scale": [-1, 1, 1]},
         ],
         "meshes": [
-            {"name": "Hull", "primitives": [primitive, primitive] if duplicate_hull_primitive else [primitive]},
+            {
+                "name": "Hull",
+                "primitives": [primitive, primitive]
+                if duplicate_hull_primitive
+                else [primitive],
+            },
             {"name": "Gun", "primitives": [primitive]},
         ],
         "materials": [
@@ -74,7 +79,9 @@ def synthetic_glb(path: Path, *, duplicate_hull_primitive: bool = False) -> None
             }
         ],
         "textures": [{"source": 0}],
-        "images": [{"name": "TestTexture", "bufferView": image, "mimeType": "image/png"}],
+        "images": [
+            {"name": "TestTexture", "bufferView": image, "mimeType": "image/png"}
+        ],
         "accessors": accessors,
         "bufferViews": views,
         "buffers": [{"byteLength": len(binary)}],
@@ -115,7 +122,9 @@ class NativeGlbExportTests(unittest.TestCase):
             self.assertEqual(report["object_count"], 2)
             self.assertEqual(report["categories"]["hull"], 1)
             self.assertEqual(report["categories"]["main_gun"], 1)
-            hierarchy = json.loads(args.output.with_suffix(".model.json").read_text(encoding="utf-8"))
+            hierarchy = json.loads(
+                args.output.with_suffix(".model.json").read_text(encoding="utf-8")
+            )
             self.assertEqual(hierarchy["coordinate_space"], "gltf-rh-y-up")
             self.assertEqual(hierarchy["pivot_space"], "obj")
             obj = args.output.read_text(encoding="utf-8")
@@ -138,12 +147,16 @@ class NativeGlbExportTests(unittest.TestCase):
             "images": [],
         }
         contract = {
-            "materials": [{"maps": {
-                "normal": "textures/paint_normal.png",
-                "roughness": "textures/paint_roughness.png",
-                "metalness": "textures/paint_metalness.png",
-                "ao": "textures/paint_ao.png",
-            }}]
+            "materials": [
+                {
+                    "maps": {
+                        "normal": "textures/paint_normal.png",
+                        "roughness": "textures/paint_roughness.png",
+                        "metalness": "textures/paint_metalness.png",
+                        "ao": "textures/paint_ao.png",
+                    }
+                }
+            ]
         }
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "ship.mtl"
@@ -174,7 +187,6 @@ class NativeGlbExportTests(unittest.TestCase):
             else:
                 os.environ["WOWS_TOOLBOX_LANGUAGE"] = old
 
-
     def test_preserves_duplicate_primitive_references_within_one_part(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -196,12 +208,28 @@ class NativeGlbExportTests(unittest.TestCase):
             self.assertEqual(report["object_count"], 2)
             self.assertEqual(obj.count("f "), 3)
 
+    def test_detects_triangle_winding_that_disagrees_with_normals(self) -> None:
+        positions = [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+        ]
+        upward = [(0.0, 0.0, 1.0)] * 3
+        downward = [(0.0, 0.0, -1.0)] * 3
+        self.assertFalse(
+            NATIVE.triangle_winding_is_reversed(positions, upward, 0, 1, 2)
+        )
+        self.assertTrue(
+            NATIVE.triangle_winding_is_reversed(positions, downward, 0, 1, 2)
+        )
+        self.assertFalse(NATIVE.triangle_winding_is_reversed(positions, [], 0, 1, 2))
+
     def test_catapult_hardpoint_is_classified_as_aircraft(self) -> None:
         self.assertEqual(
             NATIVE.classify_part("HP_AC_1 (AC001_Catapult_1)"),
             "aircraft",
         )
 
+
 if __name__ == "__main__":
     unittest.main()
-

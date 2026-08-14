@@ -24,27 +24,39 @@ VISIBILITY_PROFILES = {
     "overlay_debug": {"dock": True, "overlay": True},
 }
 IDENTITY_COLUMN_MAJOR = [
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 1.0, 0.0,
-    0.0, 0.0, 0.0, 1.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
 ]
 
-# These matrices reproduce the established Blender route exactly. Source
-# component OBJ vertices already use Blender coordinates. Mount placement is
+# Source component OBJ vertices already use Blender coordinates. Mount placement is
 # B * M_game * B^-1, then Blender's -Z-forward/Y-up OBJ export maps
 # (x, y, z) to (x, z, -y). Hull geometry only receives the final OBJ export
 # basis. ModelUber port nodes use +Z toward the bow while decoded component
-# geometry uses +Y toward the bow. Therefore B maps (x, y, z) to (-x, z, y);
-# the final OBJ translation becomes (-x, y, -z), matching the hull segments.
+# geometry uses +Y toward the bow. Therefore B maps (x, y, z) to (x, z, y);
+# the final OBJ translation becomes (x, y, -z), preserving the same
+# port/starboard sign as the hull geometry.
 GAME_NODE_TO_BLENDER_BASIS = [
-    [-1.0, 0.0, 0.0, 0.0],
+    [1.0, 0.0, 0.0, 0.0],
     [0.0, 0.0, 1.0, 0.0],
     [0.0, 1.0, 0.0, 0.0],
     [0.0, 0.0, 0.0, 1.0],
 ]
 BLENDER_BASIS_INVERSE = [
-    [-1.0, 0.0, 0.0, 0.0],
+    [1.0, 0.0, 0.0, 0.0],
     [0.0, 0.0, 1.0, 0.0],
     [0.0, 1.0, 0.0, 0.0],
     [0.0, 0.0, 0.0, 1.0],
@@ -55,6 +67,7 @@ BLENDER_TO_EDITABLE_OBJ = [
     [0.0, -1.0, 0.0, 0.0],
     [0.0, 0.0, 0.0, 1.0],
 ]
+
 
 class NativeAssemblyError(RuntimeError):
     pass
@@ -122,7 +135,11 @@ def normalize_model_path(value: object) -> str:
     if not isinstance(value, str) or not value.strip():
         raise NativeAssemblyError(f"invalid model path: {value!r}")
     path = PurePosixPath(value.strip().replace("/", "/"))
-    if path.is_absolute() or ".." in path.parts or not path.as_posix().endswith(".model"):
+    if (
+        path.is_absolute()
+        or ".." in path.parts
+        or not path.as_posix().endswith(".model")
+    ):
         raise NativeAssemblyError(f"unsafe model path: {value!r}")
     return path.as_posix()
 
@@ -300,8 +317,7 @@ def build_occurrences(mapping: Mapping[str, Any], profile: str) -> list[Occurren
 
 def matrix_rows_from_column_major(values: Sequence[float]) -> list[list[float]]:
     return [
-        [float(values[column * 4 + row]) for column in range(4)]
-        for row in range(4)
+        [float(values[column * 4 + row]) for column in range(4)] for row in range(4)
     ]
 
 
@@ -327,6 +343,7 @@ def output_matrix_for_occurrence(occurrence: Occurrence) -> list[list[float]]:
     )
     return multiply_matrices(BLENDER_TO_EDITABLE_OBJ, blender_world)
 
+
 def determinant3(matrix: Sequence[Sequence[float]]) -> float:
     a, b, c = matrix[0][:3]
     d, e, f = matrix[1][:3]
@@ -349,7 +366,9 @@ def normal_matrix(matrix: Sequence[Sequence[float]]) -> list[list[float]]:
     return [[inverse[column][row] for column in range(3)] for row in range(3)]
 
 
-def transform_position(matrix: Sequence[Sequence[float]], values: Sequence[float]) -> tuple[float, float, float]:
+def transform_position(
+    matrix: Sequence[Sequence[float]], values: Sequence[float]
+) -> tuple[float, float, float]:
     x, y, z = values
     result = []
     for row in range(3):
@@ -362,11 +381,12 @@ def transform_position(matrix: Sequence[Sequence[float]], values: Sequence[float
     return result[0], result[1], result[2]
 
 
-def transform_normal(matrix: Sequence[Sequence[float]], values: Sequence[float]) -> tuple[float, float, float]:
+def transform_normal(
+    matrix: Sequence[Sequence[float]], values: Sequence[float]
+) -> tuple[float, float, float]:
     x, y, z = values
     result = [
-        matrix[row][0] * x + matrix[row][1] * y + matrix[row][2] * z
-        for row in range(3)
+        matrix[row][0] * x + matrix[row][1] * y + matrix[row][2] * z for row in range(3)
     ]
     length = math.sqrt(sum(value * value for value in result))
     if length <= 1e-20:
@@ -393,7 +413,9 @@ def material_contract(asset: ModelAsset) -> tuple[dict[str, str], list[dict[str,
     objects = payload.get("objects")
     materials = payload.get("materials")
     if not isinstance(objects, list) or not isinstance(materials, list):
-        raise NativeAssemblyError(f"invalid material manifest: {asset.material_manifest}")
+        raise NativeAssemblyError(
+            f"invalid material manifest: {asset.material_manifest}"
+        )
     object_material: dict[str, str] = {}
     for item in objects:
         if isinstance(item, dict):
@@ -468,7 +490,9 @@ def write_mtl(
             source_name = str(material.get("name") or f"material_{index:03d}")
             output_name = safe_name(f"{asset.output_key}__{source_name}")
             material_names[(model_path, source_name)] = output_name
-            maps = material.get("maps") if isinstance(material.get("maps"), dict) else {}
+            maps = (
+                material.get("maps") if isinstance(material.get("maps"), dict) else {}
+            )
             mapped: dict[str, str] = {}
             for channel, source_value in maps.items():
                 channel = str(channel)
@@ -477,7 +501,9 @@ def write_mtl(
                 if isinstance(source_value, str) and source_value:
                     source_path = Path(source_value)
                     if channel == "mg":
-                        mapped.update(split_metallic_gloss_texture(source_path, texture_dir))
+                        mapped.update(
+                            split_metallic_gloss_texture(source_path, texture_dir)
+                        )
                     else:
                         mapped[channel] = materialize_texture(
                             source_path, texture_dir, texture_cache
@@ -583,10 +609,16 @@ def assemble(
                 local = [0, 0, 0]
                 current_source_object = "Mesh"
                 current_output_object = ""
-                with asset.obj.open("r", encoding="utf-8-sig", errors="strict") as source:
+                with asset.obj.open(
+                    "r", encoding="utf-8-sig", errors="strict"
+                ) as source:
                     for raw_line in source:
                         line = raw_line.rstrip("\r\n")
-                        if not line or line.startswith("#") or line.startswith("mtllib "):
+                        if (
+                            not line
+                            or line.startswith("#")
+                            or line.startswith("mtllib ")
+                        ):
                             continue
                         if line.startswith("v "):
                             values = [float(value) for value in line.split()[1:4]]
@@ -654,7 +686,8 @@ def assemble(
                         elif line.startswith("f "):
                             tokens = line.split()[1:]
                             converted = [
-                                offset_face_token(token, start_offsets) for token in tokens
+                                offset_face_token(token, start_offsets)
+                                for token in tokens
                             ]
                             if mirrored:
                                 converted.reverse()
@@ -735,7 +768,9 @@ def assemble(
     }
     write_json(validation_path, result)
     if not result["ok"]:
-        raise NativeAssemblyError(f"native assembly checks failed: {combined['errors']}")
+        raise NativeAssemblyError(
+            f"native assembly checks failed: {combined['errors']}"
+        )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return result
 

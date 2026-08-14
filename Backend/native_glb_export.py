@@ -37,10 +37,22 @@ TYPE_WIDTHS = {
     "MAT4": 16,
 }
 IDENTITY = (
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 1.0, 0.0,
-    0.0, 0.0, 0.0, 1.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
 )
 
 
@@ -49,7 +61,9 @@ class NativeGlbError(RuntimeError):
 
 
 def language() -> str:
-    return "en" if os.environ.get("WOWS_TOOLBOX_LANGUAGE", "").casefold() == "en" else "ko"
+    return (
+        "en" if os.environ.get("WOWS_TOOLBOX_LANGUAGE", "").casefold() == "en" else "ko"
+    )
 
 
 def text(ko: str, en: str) -> str:
@@ -93,7 +107,11 @@ def load_glb(path: Path) -> tuple[dict, bytes]:
         raise NativeGlbError(text("GLB 헤더가 올바르지 않아요", "Invalid GLB header"))
     version, declared = struct.unpack_from("<II", data, 4)
     if version != 2 or declared != len(data):
-        raise NativeGlbError(text("GLB 버전 또는 길이가 올바르지 않아요", "Invalid GLB version or length"))
+        raise NativeGlbError(
+            text(
+                "GLB 버전 또는 길이가 올바르지 않아요", "Invalid GLB version or length"
+            )
+        )
     offset = 12
     document: dict | None = None
     binary = b""
@@ -107,7 +125,9 @@ def load_glb(path: Path) -> tuple[dict, bytes]:
         elif kind == b"BIN\0":
             binary = payload
     if not isinstance(document, dict) or not binary:
-        raise NativeGlbError(text("GLB JSON/BIN 청크가 없어요", "GLB JSON/BIN chunk is missing"))
+        raise NativeGlbError(
+            text("GLB JSON/BIN 청크가 없어요", "GLB JSON/BIN chunk is missing")
+        )
     return document, binary
 
 
@@ -167,7 +187,9 @@ def trs_matrix(node: dict) -> tuple[float, ...]:
         return values
     tx, ty, tz = (list(node.get("translation", (0.0, 0.0, 0.0))) + [0.0] * 3)[:3]
     sx, sy, sz = (list(node.get("scale", (1.0, 1.0, 1.0))) + [1.0] * 3)[:3]
-    x, y, z, w = (list(node.get("rotation", (0.0, 0.0, 0.0, 1.0))) + [0.0, 0.0, 0.0, 1.0])[:4]
+    x, y, z, w = (
+        list(node.get("rotation", (0.0, 0.0, 0.0, 1.0))) + [0.0, 0.0, 0.0, 1.0]
+    )[:4]
     length = math.sqrt(x * x + y * y + z * z + w * w) or 1.0
     x, y, z, w = x / length, y / length, z / length, w / length
     xx, yy, zz = x * x, y * y, z * z
@@ -186,11 +208,16 @@ def trs_matrix(node: dict) -> tuple[float, ...]:
         (2 * (yz - wx)) * sz,
         (1 - 2 * (xx + yy)) * sz,
         0.0,
-        float(tx), float(ty), float(tz), 1.0,
+        float(tx),
+        float(ty),
+        float(tz),
+        1.0,
     )
 
 
-def transform_point(matrix: tuple[float, ...], value: tuple) -> tuple[float, float, float]:
+def transform_point(
+    matrix: tuple[float, ...], value: tuple
+) -> tuple[float, float, float]:
     x, y, z = (float(value[0]), float(value[1]), float(value[2]))
     return (
         matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12],
@@ -206,7 +233,9 @@ def determinant3(matrix: tuple[float, ...]) -> float:
     return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
 
 
-def transform_normal(matrix: tuple[float, ...], value: tuple) -> tuple[float, float, float]:
+def transform_normal(
+    matrix: tuple[float, ...], value: tuple
+) -> tuple[float, float, float]:
     a, b, c = matrix[0], matrix[4], matrix[8]
     d, e, f = matrix[1], matrix[5], matrix[9]
     g, h, i = matrix[2], matrix[6], matrix[10]
@@ -225,7 +254,9 @@ def transform_normal(matrix: tuple[float, ...], value: tuple) -> tuple[float, fl
     return nx / length, ny / length, nz / length
 
 
-def scene_meshes(document: dict) -> list[tuple[int, dict, tuple[float, ...], str | None]]:
+def scene_meshes(
+    document: dict,
+) -> list[tuple[int, dict, tuple[float, ...], str | None]]:
     nodes = document.get("nodes", [])
     scenes = document.get("scenes", [])
     if not scenes:
@@ -292,6 +323,7 @@ def image_payload(document: dict, binary: bytes, image: dict, source: Path) -> b
     uri = str(image.get("uri", ""))
     if uri.startswith("data:"):
         import base64
+
         return base64.b64decode(uri.split(",", 1)[1])
     if uri:
         return (source.parent / uri).read_bytes()
@@ -308,7 +340,10 @@ def export_textures(
 ) -> tuple[dict[int, str], list[str], int, int]:
     images = document.get("images", [])
     names = unique_names(
-        [str(image.get("name") or f"Texture_{index:03d}") for index, image in enumerate(images)],
+        [
+            str(image.get("name") or f"Texture_{index:03d}")
+            for index, image in enumerate(images)
+        ],
         "Texture",
     )
     texture_dir.mkdir(parents=True, exist_ok=True)
@@ -320,11 +355,18 @@ def export_textures(
         payload = image_payload(document, binary, image, source)
         target = texture_dir / f"{names[index]}.png"
         with Image.open(BytesIO(payload)) as opened:
-            converted = opened.convert("RGBA") if opened.mode not in {"RGB", "RGBA"} else opened.copy()
+            converted = (
+                opened.convert("RGBA")
+                if opened.mode not in {"RGB", "RGBA"}
+                else opened.copy()
+            )
         if max_size > 0 and max(converted.size) > max_size:
             scale = max_size / max(converted.size)
             converted = converted.resize(
-                (max(1, round(converted.width * scale)), max(1, round(converted.height * scale))),
+                (
+                    max(1, round(converted.width * scale)),
+                    max(1, round(converted.height * scale)),
+                ),
                 Image.Resampling.LANCZOS,
             )
             resized += 1
@@ -337,9 +379,8 @@ def export_textures(
 
 def classify_part(name: str) -> str:
     folded = name.casefold()
-    if (
-        not folded.startswith("hp_")
-        and any(token in folded for token in ("_bow", "_midback", "_midfront", "_stern", "hull"))
+    if not folded.startswith("hp_") and any(
+        token in folded for token in ("_bow", "_midback", "_midfront", "_stern", "hull")
     ):
         return "hull"
 
@@ -363,7 +404,10 @@ def classify_part(name: str) -> str:
         return "aircraft"
 
     rules = (
-        ("missile_launcher", ("vertical_launch", "guided_missile", "missile_launcher", "vls")),
+        (
+            "missile_launcher",
+            ("vertical_launch", "guided_missile", "missile_launcher", "vls"),
+        ),
         ("secondary", ("secondary", "secgun", "casemate")),
         ("anti_air", ("antiair", "anti_air", "aagun", "machinegun")),
         ("torpedo", ("torpedo", "ttube", "torp")),
@@ -398,7 +442,10 @@ def write_mtl(
 ) -> list[str]:
     materials = document.get("materials", [])
     names = unique_names(
-        [str(item.get("name") or f"Material_{index:03d}") for index, item in enumerate(materials)],
+        [
+            str(item.get("name") or f"Material_{index:03d}")
+            for index, item in enumerate(materials)
+        ],
         "Material",
     )
     with target.open("w", encoding="utf-8", newline="\n") as output:
@@ -409,7 +456,11 @@ def write_mtl(
             pbr_entry = None
             if isinstance(pbr_contract, dict):
                 entries = pbr_contract.get("materials")
-                if isinstance(entries, list) and index < len(entries) and isinstance(entries[index], dict):
+                if (
+                    isinstance(entries, list)
+                    and index < len(entries)
+                    and isinstance(entries[index], dict)
+                ):
                     pbr_entry = entries[index]
             pbr_maps = pbr_entry.get("maps", {}) if pbr_entry else {}
             output.write(f"\nnewmtl {names[index]}\n")
@@ -468,6 +519,33 @@ def face_token(vertex: int, uv: int | None, normal: int | None) -> str:
     return str(vertex)
 
 
+def triangle_winding_is_reversed(
+    positions: list[tuple],
+    normals: list[tuple],
+    a: int,
+    b: int,
+    c: int,
+) -> bool:
+    """Return whether triangle winding disagrees with the supplied normals."""
+    if not positions or len(normals) < len(positions):
+        return False
+    if min(a, b, c) < 0 or max(a, b, c) >= len(positions):
+        return False
+    p0, p1, p2 = positions[a], positions[b], positions[c]
+    edge1 = tuple(float(p1[axis]) - float(p0[axis]) for axis in range(3))
+    edge2 = tuple(float(p2[axis]) - float(p0[axis]) for axis in range(3))
+    geometric = (
+        edge1[1] * edge2[2] - edge1[2] * edge2[1],
+        edge1[2] * edge2[0] - edge1[0] * edge2[2],
+        edge1[0] * edge2[1] - edge1[1] * edge2[0],
+    )
+    normal = tuple(
+        float(normals[a][axis]) + float(normals[b][axis]) + float(normals[c][axis])
+        for axis in range(3)
+    )
+    dot = sum(geometric[axis] * normal[axis] for axis in range(3))
+    return dot < 0.0
+
 
 def export_obj(
     document: dict,
@@ -477,18 +555,27 @@ def export_obj(
 ) -> tuple[list[dict], int, int]:
     scene_entries = scene_meshes(document)
     object_names = unique_names(
-        [str(node.get("name") or document["meshes"][int(node["mesh"])].get("name", "")) for _, node, _, _ in scene_entries],
+        [
+            str(
+                node.get("name")
+                or document["meshes"][int(node["mesh"])].get("name", "")
+            )
+            for _, node, _, _ in scene_entries
+        ],
         "Part",
     )
     vertex_offset = uv_offset = normal_offset = 0
 
-
     objects: list[dict] = []
     triangle_total = 0
-    with target.open("w", encoding="utf-8", newline="\n", buffering=1024 * 1024) as output:
+    with target.open(
+        "w", encoding="utf-8", newline="\n", buffering=1024 * 1024
+    ) as output:
         output.write("# WoWS Toolbox Blender-free PC/Korabli OBJ\n")
         output.write(f"mtllib {target.with_suffix('.mtl').name}\n")
-        for entry_index, ((_, node, world, parent_name), object_name) in enumerate(zip(scene_entries, object_names)):
+        for entry_index, ((_, node, world, parent_name), object_name) in enumerate(
+            zip(scene_entries, object_names)
+        ):
             mesh = document["meshes"][int(node["mesh"])]
             output.write(f"\no {object_name}\n")
             object_vertices = 0
@@ -497,29 +584,55 @@ def export_obj(
                 attributes = primitive.get("attributes", {})
                 if "POSITION" not in attributes:
                     continue
-                positions = accessor_values(document, binary, int(attributes["POSITION"]))
-                normals = accessor_values(document, binary, int(attributes["NORMAL"])) if "NORMAL" in attributes else []
-                uvs = accessor_values(document, binary, int(attributes["TEXCOORD_0"])) if "TEXCOORD_0" in attributes else []
+                positions = accessor_values(
+                    document, binary, int(attributes["POSITION"])
+                )
+                normals = (
+                    accessor_values(document, binary, int(attributes["NORMAL"]))
+                    if "NORMAL" in attributes
+                    else []
+                )
+                uvs = (
+                    accessor_values(document, binary, int(attributes["TEXCOORD_0"]))
+                    if "TEXCOORD_0" in attributes
+                    else []
+                )
                 if "indices" in primitive:
-                    indices = [int(row[0]) for row in accessor_values(document, binary, int(primitive["indices"]))]
+                    indices = [
+                        int(row[0])
+                        for row in accessor_values(
+                            document, binary, int(primitive["indices"])
+                        )
+                    ]
                 else:
                     indices = list(range(len(positions)))
                 output.write(f"g {object_name}_P{primitive_index:02d}\n")
                 material_index = primitive.get("material")
-                if material_index is not None and int(material_index) < len(material_names):
+                if material_index is not None and int(material_index) < len(
+                    material_names
+                ):
                     output.write(f"usemtl {material_names[int(material_index)]}\n")
-                for value in positions:
-                    x, y, z = transform_point(world, value)
+                transformed_positions = [
+                    transform_point(world, value) for value in positions
+                ]
+                transformed_normals = [
+                    transform_normal(world, value) for value in normals
+                ]
+                for x, y, z in transformed_positions:
                     output.write(f"v {x:.8g} {y:.8g} {z:.8g}\n")
                 for value in uvs:
                     # Blender's glTF->OBJ path flips V to preserve the source image orientation.
-                    output.write(f"vt {float(value[0]):.8g} {1.0 - float(value[1]):.8g}\n")
-                for value in normals:
-                    x, y, z = transform_normal(world, value)
+                    output.write(
+                        f"vt {float(value[0]):.8g} {1.0 - float(value[1]):.8g}\n"
+                    )
+                for x, y, z in transformed_normals:
                     output.write(f"vn {x:.8g} {y:.8g} {z:.8g}\n")
-                reverse = determinant3(world) < 0.0
-                for a, b, c in triangles(indices, int(primitive.get("mode", 4))):
-                    if reverse:
+                primitive_mode = int(primitive.get("mode", 4))
+                for a, b, c in triangles(indices, primitive_mode):
+                    source_reversed = triangle_winding_is_reversed(
+                        transformed_positions, transformed_normals, a, b, c
+                    )
+                    if source_reversed:
                         b, c = c, b
                     tokens = []
                     for item in (a, b, c):
@@ -543,7 +656,11 @@ def export_obj(
                         "name": object_name,
                         "category": category,
                         "parent": parent_name,
-                        "pivot": [round(world[12], 6), round(world[13], 6), round(world[14], 6)],
+                        "pivot": [
+                            round(world[12], 6),
+                            round(world[13], 6),
+                            round(world[14], 6),
+                        ],
                         "vertices": object_vertices,
                         "polygons": object_triangles,
                     }
@@ -553,7 +670,9 @@ def export_obj(
 
 
 def build(args: argparse.Namespace) -> dict:
-    formats = {part.strip().casefold() for part in args.formats.split(",") if part.strip()} or {"obj"}
+    formats = {
+        part.strip().casefold() for part in args.formats.split(",") if part.strip()
+    } or {"obj"}
     unsupported = formats - {"obj", "glb"}
     if unsupported:
         raise NativeGlbError(
@@ -571,7 +690,12 @@ def build(args: argparse.Namespace) -> dict:
     textures: list[str] = []
     resized = linked = 0
     if "obj" in formats:
-        progress("texture", 40, "텍스처를 PNG로 준비하는 중", "Preparing textures as PNG files")
+        progress(
+            "texture",
+            40,
+            "텍스처를 PNG로 준비하는 중",
+            "Preparing textures as PNG files",
+        )
         image_paths, textures, resized, linked = export_textures(
             document,
             binary,
@@ -625,15 +749,29 @@ def build(args: argparse.Namespace) -> dict:
     vertices = triangle_count = 0
     if "obj" in formats:
         progress("obj", 68, "파트별 OBJ를 쓰는 중", "Writing the part-based OBJ")
-        objects, vertices, triangle_count = export_obj(document, binary, args.output, material_names)
+        objects, vertices, triangle_count = export_obj(
+            document, binary, args.output, material_names
+        )
     editable_glb = args.output.with_suffix(".editable.glb")
     if "glb" in formats:
-        progress("glb", 88, "원본 계층 GLB를 복사하는 중", "Copying the original hierarchical GLB")
+        progress(
+            "glb",
+            88,
+            "원본 계층 GLB를 복사하는 중",
+            "Copying the original hierarchical GLB",
+        )
         shutil.copy2(args.input, editable_glb)
     categories: dict[str, int] = {}
     for item in objects:
         categories[item["category"]] = categories.get(item["category"], 0) + 1
-    weapon_keys = ("main_gun", "secondary", "anti_air", "torpedo", "missile_launcher", "radar_sensor")
+    weapon_keys = (
+        "main_gun",
+        "secondary",
+        "anti_air",
+        "torpedo",
+        "missile_launcher",
+        "radar_sensor",
+    )
     weapon_counts = {key: categories.get(key, 0) for key in weapon_keys}
     hierarchy = {
         "schema": "wows-toolbox-model/v1",
@@ -646,9 +784,15 @@ def build(args: argparse.Namespace) -> dict:
         "weapon_counts": weapon_counts,
     }
     model_report = args.output.with_suffix(".model.json")
-    model_report.write_text(json.dumps(hierarchy, ensure_ascii=False, indent=2), encoding="utf-8")
-    obj_ok = "obj" not in formats or (args.output.is_file() and args.output.stat().st_size > 0)
-    glb_ok = "glb" not in formats or (editable_glb.is_file() and editable_glb.stat().st_size > 0)
+    model_report.write_text(
+        json.dumps(hierarchy, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    obj_ok = "obj" not in formats or (
+        args.output.is_file() and args.output.stat().st_size > 0
+    )
+    glb_ok = "glb" not in formats or (
+        editable_glb.is_file() and editable_glb.stat().st_size > 0
+    )
     verification = {
         "passed": obj_ok and glb_ok and ("obj" not in formats or bool(objects)),
         "editable_parts": len(objects),
@@ -657,7 +801,9 @@ def build(args: argparse.Namespace) -> dict:
         "warnings": [],
     }
     if categories.get("hull", 0) <= 0:
-        verification["warnings"].append(text("선체 파트를 분류하지 못했어요", "No hull part was classified"))
+        verification["warnings"].append(
+            text("선체 파트를 분류하지 못했어요", "No hull part was classified")
+        )
     report = {
         "ok": verification["passed"],
         "engine": "native_python_glb_obj/v1",
@@ -672,11 +818,19 @@ def build(args: argparse.Namespace) -> dict:
         "textures_resized": resized,
         "textures_shared": linked,
         "pbr": {
-            "available": bool(pbr_contract and pbr_contract.get("coverage", {}).get("pbr_materials")),
-            "sidecar": str(args.output.with_suffix(".pbr.json")) if pbr_contract else None,
+            "available": bool(
+                pbr_contract and pbr_contract.get("coverage", {}).get("pbr_materials")
+            ),
+            "sidecar": str(args.output.with_suffix(".pbr.json"))
+            if pbr_contract
+            else None,
             "coverage": pbr_contract.get("coverage", {}) if pbr_contract else {},
-            "source_contract": pbr_contract.get("source_contract", {}) if pbr_contract else {},
-            "texture_files": pbr_contract.get("texture_files", []) if pbr_contract else [],
+            "source_contract": pbr_contract.get("source_contract", {})
+            if pbr_contract
+            else {},
+            "texture_files": pbr_contract.get("texture_files", [])
+            if pbr_contract
+            else [],
         },
         "object_count": len(objects),
         "object_names": [item["name"] for item in objects],
@@ -690,7 +844,9 @@ def build(args: argparse.Namespace) -> dict:
         "axis_forward": "-Z",
         "axis_up": "Y",
     }
-    args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    args.report.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     progress(
         "complete",
         100,
@@ -733,5 +889,3 @@ if __name__ == "__main__":
     except Exception as exc:
         print("[ERROR] " + str(exc), flush=True)
         raise SystemExit(1) from None
-
-

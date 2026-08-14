@@ -44,9 +44,7 @@ class NativeObjAssemblerTests(unittest.TestCase):
             material_manifest.write_text(
                 json.dumps(
                     {
-                        "objects": [
-                            {"object_name": "Mesh", "material_name": "Paint"}
-                        ],
+                        "objects": [{"object_name": "Mesh", "material_name": "Paint"}],
                         "materials": [
                             {
                                 "name": "Paint",
@@ -65,9 +63,7 @@ class NativeObjAssemblerTests(unittest.TestCase):
             mapping.write_text(
                 json.dumps(
                     {
-                        "hull_parts": [
-                            {"role": "mesh", "path": model_path}
-                        ],
+                        "hull_parts": [{"role": "mesh", "path": model_path}],
                         "combat_mounts": [
                             {
                                 "model_path": model_path,
@@ -120,7 +116,7 @@ class NativeObjAssemblerTests(unittest.TestCase):
             self.assertEqual(combined["editable_mesh_objects"], 2)
             self.assertEqual(len(combined["excluded_hidden_mounts"]), 1)
             text = output.read_text(encoding="utf-8")
-            self.assertIn("v -10 2 -3", text)
+            self.assertIn("v 10 2 -3", text)
             self.assertIn("f 4/4/4 5/5/5 6/6/6", text)
             self.assertNotIn("HIDDEN_OVERLAY__Mesh", text)
             mtl = output.with_suffix(".mtl").read_text(encoding="utf-8")
@@ -129,7 +125,7 @@ class NativeObjAssemblerTests(unittest.TestCase):
                 output.with_suffix(".model.json").read_text(encoding="utf-8")
             )
             self.assertEqual(len(sidecar["parts"]), 2)
-            self.assertEqual(sidecar["parts"][1]["pivot"], [-10.0, 2.0, -3.0])
+            self.assertEqual(sidecar["parts"][1]["pivot"], [10.0, 2.0, -3.0])
             self.assertEqual(sidecar["obj_axis_forward"], "-Z")
             self.assertEqual(sidecar["obj_axis_up"], "Y")
             self.assertEqual(sidecar["pivot_space"], "obj")
