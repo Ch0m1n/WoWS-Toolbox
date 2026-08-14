@@ -10,9 +10,9 @@ Run with Blender 3.5+:
       --validation validation.json
 
 The plan stores transforms as 16-element, column-major game-node matrices.  The
-legacy ModelUber node space is left-handed Y-up, while decoded hull geometry is
-already aligned to Blender's longitudinal direction.  Placements therefore use
-B * M_game * B^-1 where B maps (x, y, z) to (-x, -z, y).
+legacy ModelUber node space is Y-up with +Z toward the bow, while decoded hull
+geometry uses +Y toward the bow. Placements therefore use B * M_game * B^-1
+where B maps (x, y, z) to (-x, z, y).
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from mathutils import Matrix, Vector
 GAME_NODE_TO_BLENDER_BASIS = Matrix(
     (
         (-1.0, 0.0, 0.0, 0.0),
-        (0.0, 0.0, -1.0, 0.0),
+        (0.0, 0.0, 1.0, 0.0),
         (0.0, 1.0, 0.0, 0.0),
         (0.0, 0.0, 0.0, 1.0),
     )

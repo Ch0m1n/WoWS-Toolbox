@@ -34,18 +34,19 @@ IDENTITY_COLUMN_MAJOR = [
 # component OBJ vertices already use Blender coordinates. Mount placement is
 # B * M_game * B^-1, then Blender's -Z-forward/Y-up OBJ export maps
 # (x, y, z) to (x, z, -y). Hull geometry only receives the final OBJ export
-# basis. The minus sign is required; omitting it mirrors the complete ship
-# fore/aft compared with Blender's exporter.
+# basis. ModelUber port nodes use +Z toward the bow while decoded component
+# geometry uses +Y toward the bow. Therefore B maps (x, y, z) to (-x, z, y);
+# the final OBJ translation becomes (-x, y, -z), matching the hull segments.
 GAME_NODE_TO_BLENDER_BASIS = [
     [-1.0, 0.0, 0.0, 0.0],
-    [0.0, 0.0, -1.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
     [0.0, 1.0, 0.0, 0.0],
     [0.0, 0.0, 0.0, 1.0],
 ]
 BLENDER_BASIS_INVERSE = [
     [-1.0, 0.0, 0.0, 0.0],
     [0.0, 0.0, 1.0, 0.0],
-    [0.0, -1.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0],
     [0.0, 0.0, 0.0, 1.0],
 ]
 BLENDER_TO_EDITABLE_OBJ = [
