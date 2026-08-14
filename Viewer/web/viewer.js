@@ -126,12 +126,17 @@ const BACKGROUND_VISIBILITY_KEY = 'wows-toolbox-viewer-background';
 const LIGHTING_PANEL_POSITION_KEY = 'wows-toolbox-viewer-lighting-panel-v1';
 let lightingPanelDrag = null;
 const LIGHTING_PANEL_MARGIN = 8;
-const LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v4';
+// v5 intentionally resets old troubleshooting presets. Previous builds could
+// persist exposure 0.4 / environment 0 combinations which made sound albedo
+// textures look black after an update.
+const LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v5';
 const LIGHTING_DEFAULTS = Object.freeze({ exposure: 1, key: 0.72, environment: 1, normalStrength: 0.2, pbrPreview: false, albedoPreview: false, azimuth: 32, elevation: 48 });
 let activeNormalStrength = LIGHTING_DEFAULTS.normalStrength;
 let pbrPreviewEnabled = LIGHTING_DEFAULTS.pbrPreview;
 let albedoPreviewEnabled = LIGHTING_DEFAULTS.albedoPreview;
 const viewerMaterialUpgrades = new WeakMap();
+const viewerPbrMaterials = new WeakMap();
+const viewerPaintMaterials = new WeakMap();
 let backgroundVisible = true;
 const ARMOR_GHOST_RENDER_ORDER = 100;
 const ARMOR_RENDER_ORDER_BASE = 1000;
@@ -282,35 +287,32 @@ function applyNormalStrength(value) {
   });
 }
 
-function setMaterialPbrPreview(material, enabled) {
-  if (!material?.isMaterial) return false;
-  const channels = material.userData?.viewerPbrChannels;
-  if (!channels) return false;
-  material.normalMap = enabled ? channels.normalMap : null;
-  material.roughnessMap = enabled ? channels.roughnessMap : null;
-  material.aoMap = enabled ? channels.aoMap : null;
-  material.roughness = enabled && channels.roughnessMap ? 1 : 0.82;
-  material.metalness = 0;
-  if (material.normalMap && material.normalScale) {
-    material.normalScale.set(activeNormalStrength, activeNormalStrength);
-  }
-  material.userData.viewerPbrPreview = Boolean(enabled);
-  material.needsUpdate = true;
-  return true;
+function swapPbrMaterials(root, enabled) {
+  root?.traverse((node) => {
+    if (!node.isMesh || node.userData.viewerArmorDepthProxy) return;
+    const materials = Array.isArray(node.material) ? node.material : [node.material];
+    const replaced = materials.map((material) => {
+      if (!material) return material;
+      if (enabled) {
+        return material.userData.viewerPbrPreview
+          ? material
+          : (viewerPbrMaterials.get(material) || material);
+      }
+      return material.userData.viewerPbrPreview
+        ? (viewerPaintMaterials.get(material) || material)
+        : material;
+    });
+    node.material = Array.isArray(node.material) ? replaced : replaced[0];
+  });
 }
 
 function applyPbrPreview(enabled) {
+  const restoreAlbedo = albedoPreviewEnabled;
+  if (restoreAlbedo && modelContent) applyAlbedoPreview(false);
   pbrPreviewEnabled = Boolean(enabled);
-  const visited = new Set();
-  scene.traverse((node) => {
-    if (!node.isMesh) return;
-    const materials = Array.isArray(node.material) ? node.material : [node.material];
-    for (const material of materials.filter(Boolean)) {
-      if (visited.has(material)) continue;
-      visited.add(material);
-      setMaterialPbrPreview(material, pbrPreviewEnabled);
-    }
-  });
+  swapPbrMaterials(modelContent, pbrPreviewEnabled);
+  applyNormalStrength(activeNormalStrength);
+  if (restoreAlbedo && modelContent) applyAlbedoPreview(true);
   pbrPreviewControl.checked = pbrPreviewEnabled;
   normalStrengthControl.disabled = !pbrPreviewEnabled;
 }
@@ -416,9 +418,10 @@ function createStandardViewerMaterial(material) {
   if (!pbr.roughnessMap && !pbr.metalnessMap && !pbr.aoMap && !material.normalMap && !material.bumpMap) return material;
   if (pbr.roughnessMap) pbr.roughnessMap.channel = 0;
   if (pbr.aoMap) pbr.aoMap.channel = 0;
+  const normalMap = material.normalMap || material.bumpMap || null;
   const standard = new THREE.MeshStandardMaterial({
     name: material.name, color: material.color, map: material.map, alphaMap: material.alphaMap,
-    normalMap: material.normalMap || material.bumpMap || null, roughnessMap: pbr.roughnessMap || null,
+    normalMap, roughnessMap: pbr.roughnessMap || null,
     metalnessMap: null, aoMap: pbr.aoMap || null, roughness: pbr.roughnessMap ? 1 : 0.82,
     metalness: 0, opacity: material.opacity, transparent: material.transparent,
     alphaTest: material.alphaTest, side: material.side, depthWrite: material.depthWrite, vertexColors: material.vertexColors,
@@ -427,7 +430,7 @@ function createStandardViewerMaterial(material) {
   // the game's proprietary shader/environment it creates false black/white paint.
   standard.userData = {
     ...(material.userData || {}),
-    viewerPbrMaterial: true,
+    viewerPbrPreview: true,
     viewerMetalnessPreview: false,
     viewerPbrChannels: {
       normalMap: standard.normalMap,
@@ -436,15 +439,22 @@ function createStandardViewerMaterial(material) {
     },
   };
   standard.normalScale.set(activeNormalStrength, activeNormalStrength);
-  setMaterialPbrPreview(standard, pbrPreviewEnabled);
-  viewerMaterialUpgrades.set(material, standard);
-  material.dispose();
-  return standard;
+  material.normalMap = null;
+  material.bumpMap = null;
+  material.userData = {
+    ...(material.userData || {}),
+    viewerPbrPreview: false,
+    viewerPbrChannels: standard.userData.viewerPbrChannels,
+  };
+  viewerPbrMaterials.set(material, standard);
+  viewerPaintMaterials.set(standard, material);
+  viewerMaterialUpgrades.set(material, material);
+  return material;
 }
 
 function normalizeViewerMaterial(material) {
-  if (!material || material.userData.viewerMaterialPolicy === 'paint-v5') return false;
-  material.userData.viewerMaterialPolicy = 'paint-v5';
+  if (!material || material.userData.viewerMaterialPolicy === 'paint-v6') return false;
+  material.userData.viewerMaterialPolicy = 'paint-v6';
   material.userData.viewerSourceShininess = Number(material.shininess ?? 0);
   material.userData.viewerSourceSpecular = material.specular?.getHex?.() ?? null;
   if (material.map) {
@@ -558,6 +568,15 @@ function cloneNodeMaterialsForSide(node, side, policy) {
     clone.userData = { ...(material.userData || {}) };
     clone.side = side;
     clone.userData.viewerWindingPolicy = policy;
+    const pbrSource = viewerPbrMaterials.get(material);
+    if (pbrSource?.isMaterial) {
+      const pbrClone = pbrSource.clone();
+      pbrClone.userData = { ...(pbrSource.userData || {}) };
+      pbrClone.side = side;
+      pbrClone.userData.viewerWindingPolicy = policy;
+      viewerPbrMaterials.set(clone, pbrClone);
+      viewerPaintMaterials.set(pbrClone, clone);
+    }
     clone.needsUpdate = true;
     return clone;
   });
@@ -596,22 +615,30 @@ function normalizeModelMaterials(root, assemblyMetadata = null) {
       windingPolicy,
     );
   });
+  swapPbrMaterials(root, pbrPreviewEnabled);
   return normalized.size + mirroredPartMaterials;
 }
 
 function disposeMaterial(material) {
   if (!material) return;
   const textures = new Set();
-  for (const key of Object.keys(material)) {
-    const value = material[key];
-    if (value?.isTexture) textures.add(value);
-  }
-  for (const value of Object.values(material.userData?.viewerPbrChannels || {})) {
-    if (value?.isTexture) textures.add(value);
+  const materials = new Set([material]);
+  const pbrMaterial = viewerPbrMaterials.get(material);
+  const paintMaterial = viewerPaintMaterials.get(material);
+  if (pbrMaterial?.isMaterial) materials.add(pbrMaterial);
+  if (paintMaterial?.isMaterial) materials.add(paintMaterial);
+  for (const candidate of materials) {
+    for (const key of Object.keys(candidate)) {
+      const value = candidate[key];
+      if (value?.isTexture) textures.add(value);
+    }
+    for (const value of Object.values(candidate.userData?.viewerPbrChannels || {})) {
+      if (value?.isTexture) textures.add(value);
+    }
   }
   material.userData?.viewerAlbedoMaterial?.dispose?.();
   textures.forEach((texture) => texture.dispose());
-  material.dispose?.();
+  materials.forEach((candidate) => candidate.dispose?.());
 }
 
 function disposeObject3D(root) {
@@ -1814,4 +1841,4 @@ window.WoWSViewerCore = {
   setStatus,
   hostMessage,
 };
-hostMessage({ type: 'ready', version: '5.0.39' });
+hostMessage({ type: 'ready', version: '5.0.40' });

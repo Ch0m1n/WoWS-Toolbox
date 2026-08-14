@@ -1,7 +1,7 @@
 #define MyAppName "WoWS Toolbox"
-#define MyAppVersion "5.0.39"
+#define MyAppVersion "5.0.40"
 #define MyAppPublisher "WoWS Toolbox contributors"
-#define ReleaseRoot "..\..\..\outputs\WoWS-Toolbox-v5.0.39"
+#define ReleaseRoot "..\..\..\outputs\WoWS-Toolbox-v5.0.40"
 
 [Setup]
 AppId={{88AA1660-CC89-4EDA-9895-BC051E8CAD26}
@@ -11,7 +11,7 @@ AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppCopyright=Copyright (c) 2026 WoWS Toolbox contributors
 AppComments=Unofficial WoWS-family model extraction and inspection toolbox
-VersionInfoVersion=5.0.39.0
+VersionInfoVersion=5.0.40.0
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription={#MyAppName} Installer
 VersionInfoCompany={#MyAppPublisher}
