@@ -317,6 +317,7 @@ def run_checked(
     *,
     log_dir: Path,
     timeout: int,
+    heartbeat_interval: float = 15.0,
 ) -> dict[str, Any]:
     """Run a pipeline child while forwarding its output to the GUI in real time."""
 
@@ -336,6 +337,19 @@ def run_checked(
         bufsize=1,
         env=environment,
     )
+    print(
+        "[PIPELINE] "
+        + json.dumps(
+            {
+                "event": "child_start",
+                "step": label,
+                "pid": process.pid,
+                "timeout_seconds": timeout,
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
     output_queue: queue.Queue[str | None] = queue.Queue()
     output: list[str] = []
 
@@ -350,10 +364,29 @@ def run_checked(
     reader = threading.Thread(target=read_output, daemon=True)
     reader.start()
     deadline = started + timeout
+    heartbeat_interval = max(0.01, float(heartbeat_interval))
+    next_heartbeat = started + heartbeat_interval
     timed_out = False
     reader_done = False
     while not reader_done:
-        remaining = deadline - time.monotonic()
+        now = time.monotonic()
+        if now >= next_heartbeat:
+            print(
+                "[PIPELINE] "
+                + json.dumps(
+                    {
+                        "event": "child_heartbeat",
+                        "step": label,
+                        "pid": process.pid,
+                        "elapsed_seconds": round(now - started, 1),
+                        "timeout_seconds": timeout,
+                    },
+                    ensure_ascii=False,
+                ),
+                flush=True,
+            )
+            next_heartbeat = now + heartbeat_interval
+        remaining = deadline - now
         if remaining <= 0:
             timed_out = True
             break
@@ -411,6 +444,22 @@ def run_checked(
         "elapsed_seconds": round(elapsed, 3),
         "log": str(log),
     }
+    print(
+        "[PIPELINE] "
+        + json.dumps(
+            {
+                "event": "child_complete",
+                "step": label,
+                "pid": process.pid,
+                "returncode": process.returncode,
+                "elapsed_seconds": round(elapsed, 3),
+                "timed_out": timed_out,
+                "log": str(log),
+            },
+            ensure_ascii=False,
+        ),
+        flush=True,
+    )
     if timed_out:
         raise PipelineError(f"{label} timed out after {timeout}s; see {log}")
     if process.returncode != 0:

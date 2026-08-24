@@ -180,6 +180,29 @@ class SelectedShipPipelineTests(unittest.TestCase):
             self.assertIn("\ufffd", log_text)
             self.assertIn("streamed", log_text)
 
+    def test_run_checked_reports_child_liveness(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            captured = io.StringIO()
+            command = [
+                sys.executable,
+                "-c",
+                "import time; time.sleep(0.09); print('done', flush=True)",
+            ]
+            with contextlib.redirect_stdout(captured):
+                module.run_checked(
+                    "slow child",
+                    command,
+                    log_dir=Path(temporary),
+                    timeout=5,
+                    heartbeat_interval=0.02,
+                )
+            stream = captured.getvalue()
+            self.assertIn('"event": "child_start"', stream)
+            self.assertIn('"event": "child_heartbeat"', stream)
+            self.assertIn('"step": "slow child"', stream)
+            self.assertIn('"event": "child_complete"', stream)
+
+
     def test_work_cleanup_is_scoped_to_run_root(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

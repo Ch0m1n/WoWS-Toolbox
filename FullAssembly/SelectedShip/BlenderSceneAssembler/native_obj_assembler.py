@@ -428,37 +428,108 @@ def material_contract(asset: ModelAsset) -> tuple[dict[str, str], list[dict[str,
     return object_material, clean_materials
 
 
-def materialize_texture(source: Path, texture_dir: Path, cache: dict[str, str]) -> str:
+def readable_texture_stem(source: Path, hint: str | None = None) -> str:
+    """Return a stable user-facing texture stem without WoWS channel suffixes."""
+
+    stem = safe_name(hint or source.stem, "Texture", limit=140)
+    cleaned = re.sub(
+        r"(?i)(?:_(?:a|n|ao|mg|albedo|normal|roughness|metalness|specular))$",
+        "",
+        stem,
+    ).strip("_.")
+    return cleaned or stem
+
+
+def allocate_texture_target(
+    source: Path,
+    texture_dir: Path,
+    role: str,
+    cache: dict[str, str],
+    used_names: set[str],
+    stem_hint: str | None = None,
+) -> tuple[Path, str, bool]:
+    """Allocate a readable final filename; hashes remain metadata, not filenames."""
+
     source = source.resolve()
-    key = os.path.normcase(str(source))
+    key = os.path.normcase(str(source)) + "\0" + role.casefold()
     previous = cache.get(key)
     if previous is not None:
-        return previous
+        return texture_dir / Path(previous).name, previous, False
+
+    stem = readable_texture_stem(source, stem_hint)
+    base = safe_name(f"{stem}_{role}", f"Texture_{role}", limit=170)
+    candidate = f"{base}.png"
+    serial = 2
+    while candidate.casefold() in used_names:
+        candidate = f"{base[:165]}_{serial:02d}.png"
+        serial += 1
+    used_names.add(candidate.casefold())
+    target = texture_dir / candidate
+    relative = f"textures/{candidate}"
+    cache[key] = relative
+    return target, relative, True
+
+
+def materialize_texture(
+    source: Path,
+    texture_dir: Path,
+    cache: dict[str, str],
+    *,
+    role: str = "albedo",
+    stem_hint: str | None = None,
+    used_names: set[str] | None = None,
+    manifest: list[dict[str, Any]] | None = None,
+) -> str:
+    source = source.resolve()
     if not source.is_file():
         raise NativeAssemblyError(f"material texture is missing: {source}")
-    digest = sha256(source)
-    target = texture_dir / f"{digest}.png"
-    if not target.is_file():
+    texture_dir.mkdir(parents=True, exist_ok=True)
+    if used_names is None:
+        used_names = set()
+    target, relative, created = allocate_texture_target(
+        source, texture_dir, role, cache, used_names, stem_hint
+    )
+    if created:
         # Final exports must not share writable file records with conversion
         # caches or unpacked source data.
         shutil.copy2(source, target)
-    relative = f"textures/{target.name}"
-    cache[key] = relative
+        if manifest is not None:
+            manifest.append(
+                {
+                    "output": relative,
+                    "role": role,
+                    "source": str(source),
+                    "sha256": sha256(target),
+                }
+            )
     return relative
 
 
-def split_metallic_gloss_texture(source: Path, texture_dir: Path) -> dict[str, str]:
+def split_metallic_gloss_texture(
+    source: Path,
+    texture_dir: Path,
+    *,
+    cache: dict[str, str] | None = None,
+    stem_hint: str | None = None,
+    used_names: set[str] | None = None,
+    manifest: list[dict[str, Any]] | None = None,
+) -> dict[str, str]:
     """Publish the original MG map plus DCC-friendly roughness/metalness maps."""
 
+    source = source.resolve()
+    if not source.is_file():
+        raise NativeAssemblyError(f"material texture is missing: {source}")
     texture_dir.mkdir(parents=True, exist_ok=True)
-    digest = sha256(source)
-    targets = {
-        "metallic_gloss": texture_dir / f"{digest}_metallic_gloss.png",
-        "specular": texture_dir / f"{digest}_specular.png",
-        "roughness": texture_dir / f"{digest}_roughness.png",
-        "metalness": texture_dir / f"{digest}_metalness.png",
+    cache = cache if cache is not None else {}
+    used_names = used_names if used_names is not None else set()
+    allocated = {
+        role: allocate_texture_target(
+            source, texture_dir, role, cache, used_names, stem_hint
+        )
+        for role in ("metallic_gloss", "specular", "roughness", "metalness")
     }
-    if not all(path.is_file() for path in targets.values()):
+    targets = {role: values[0] for role, values in allocated.items()}
+    if any(values[2] for values in allocated.values()):
         with Image.open(source) as opened:
             rgba = opened.convert("RGBA")
             red, green, _blue, _alpha = rgba.split()
@@ -472,7 +543,18 @@ def split_metallic_gloss_texture(source: Path, texture_dir: Path) -> dict[str, s
             Image.merge("RGB", (green,) * 3).save(
                 targets["metalness"], format="PNG", compress_level=3
             )
-    return {role: f"textures/{path.name}" for role, path in targets.items()}
+        if manifest is not None:
+            for role, (_target, relative, created) in allocated.items():
+                if created:
+                    manifest.append(
+                        {
+                            "output": relative,
+                            "role": role,
+                            "source": str(source),
+                            "sha256": sha256(targets[role]),
+                        }
+                    )
+    return {role: values[1] for role, values in allocated.items()}
 
 
 def write_mtl(
@@ -482,6 +564,8 @@ def write_mtl(
 ) -> tuple[dict[tuple[str, str], str], dict[str, str], int]:
     texture_dir.mkdir(parents=True, exist_ok=True)
     texture_cache: dict[str, str] = {}
+    texture_names: set[str] = set()
+    texture_manifest: list[dict[str, Any]] = []
     material_names: dict[tuple[str, str], str] = {}
     object_materials: dict[str, str] = {}
     blocks: list[str] = ["# WoWS Toolbox native OBJ material library"]
@@ -506,11 +590,24 @@ def write_mtl(
                     source_path = Path(source_value)
                     if channel == "mg":
                         mapped.update(
-                            split_metallic_gloss_texture(source_path, texture_dir)
+                            split_metallic_gloss_texture(
+                                source_path,
+                                texture_dir,
+                                cache=texture_cache,
+                                stem_hint=f"{asset.output_key}_{source_name}",
+                                used_names=texture_names,
+                                manifest=texture_manifest,
+                            )
                         )
                     else:
                         mapped[channel] = materialize_texture(
-                            source_path, texture_dir, texture_cache
+                            source_path,
+                            texture_dir,
+                            texture_cache,
+                            role={"a": "albedo", "n": "normal", "ao": "ao"}[channel],
+                            stem_hint=f"{asset.output_key}_{source_name}",
+                            used_names=texture_names,
+                            manifest=texture_manifest,
                         )
             properties = {
                 str(item.get("name")): item.get("value")
@@ -552,7 +649,15 @@ def write_mtl(
             if "metalness" in mapped:
                 blocks.append(f"# wows_map_Pm {mapped['metalness']}")
     output.write_text("\n".join(blocks) + "\n", encoding="utf-8", newline="\n")
-    return material_names, object_materials, len(set(texture_cache.values()))
+    write_json(
+        texture_dir.parent / "texture_manifest.json",
+        {
+            "schema": "wows-toolbox-texture-manifest/v1",
+            "naming": "readable-role-suffix",
+            "textures": sorted(texture_manifest, key=lambda item: item["output"].casefold()),
+        },
+    )
+    return material_names, object_materials, len(texture_manifest)
 
 
 def assemble(

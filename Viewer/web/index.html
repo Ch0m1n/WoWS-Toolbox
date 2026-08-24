@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://model.local https://compare.local; img-src 'self' https://model.local https://compare.local data: blob:; style-src 'self'; script-src 'self'; connect-src 'self' https://model.local https://compare.local; worker-src 'self' blob:;" />
   <title>WoWS Ship Model Viewer</title>
-  <link rel="stylesheet" href="./viewer.css?v=5.0.42.1" />
-  <link rel="stylesheet" href="./viewer-v5.css?v=5.0.42.1" />
-  <link rel="stylesheet" href="./viewer-lighting-fix.css?v=5.0.42.1" />
+  <link rel="stylesheet" href="./viewer.css?v=5.0.53.1" />
+  <link rel="stylesheet" href="./viewer-v5.css?v=5.0.53.1" />
+  <link rel="stylesheet" href="./viewer-lighting-fix.css?v=5.0.53.1" />
 </head>
 <body>
   <main id="app">
@@ -75,8 +75,8 @@
         <label><span>노출 <output id="exposureValue" for="exposureControl">1.00</output></span><input id="exposureControl" type="range" min="0.4" max="1.8" step="0.01" value="1" /></label>
         <label><span>주광 <output id="keyLightValue" for="keyLightControl">0.72</output></span><input id="keyLightControl" type="range" min="0" max="4" step="0.01" value="0.72" /></label>
         <label><span>환경광 <output id="environmentValue" for="environmentControl">1.00</output></span><input id="environmentControl" type="range" min="0" max="2" step="0.02" value="1" /></label>
-        <label class="lighting-toggle"><span><input id="pbrPreviewControl" type="checkbox" /> PBR 상세 미리보기</span><small>기본값은 원본 색상 우선이며 모든 파트에 동일하게 적용됩니다.</small></label>
-        <label class="lighting-toggle"><span><input id="albedoPreviewControl" type="checkbox" /> 알베도 검사</span><small>모든 광원과 PBR 채널을 무시하고 원본 색상 텍스처만 표시합니다.</small></label>
+        <label class="lighting-toggle"><span><input id="pbrPreviewControl" type="checkbox" /> PBR 상세 미리보기</span><small>방향성 조명과 PBR 채널 검사 모드이며 알베도 검사와 동시에 켜지지 않습니다.</small></label>
+        <label class="lighting-toggle"><span><input id="albedoPreviewControl" type="checkbox" /> 알베도 검사</span><small>원본 색상만 표시하며, 끄면 균일한 기본 표시로 돌아갑니다.</small></label>
         <label><span>표면 굴곡 <output id="normalStrengthValue" for="normalStrengthControl">0.20</output></span><input id="normalStrengthControl" type="range" min="0" max="1" step="0.01" value="0.20" disabled /></label>
         <div class="lighting-axis">
           <label><span>방위 <output id="azimuthValue" for="azimuthControl">32°</output></span><input id="azimuthControl" type="range" min="-180" max="180" step="1" value="32" /></label>
@@ -129,6 +129,7 @@
           <input id="clipPosition" type="range" min="-100" max="100" value="0" />
         </section>
         <label class="opacity-control">장갑 불투명도 <input id="armorOpacity" type="range" min="20" max="100" value="82" /></label>
+        <label class="opacity-control">뒤쪽 함선 불투명도 <input id="armorContextOpacity" type="range" min="0" max="100" value="100" /></label>
         <div id="armorHoverInfo" class="armor-hover-info"><span>표면을 가리키면 두께·구역·입사각을 계산해요.</span></div>
         <p id="armorSummary" class="armor-summary">장갑 데이터가 없어요.</p>
       </div>
@@ -140,9 +141,9 @@
       </footer>
     </aside>
   </main>
-  <script src="./i18n.js?v=5.0.42.1"></script>
-  <script src="./diagnostics.js?v=5.0.42.1"></script>
-  <script type="module" src="./viewer.js?v=5.0.42.1"></script>
-  <script type="module" src="./viewer-advanced.js?v=5.0.42.1"></script>
+  <script src="./i18n.js?v=5.0.53.1"></script>
+  <script src="./diagnostics.js?v=5.0.53.1"></script>
+  <script type="module" src="./viewer.js?v=5.0.53.1"></script>
+  <script type="module" src="./viewer-advanced.js?v=5.0.53.1"></script>
 </body>
 </html>

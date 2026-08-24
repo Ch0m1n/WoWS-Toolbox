@@ -32,6 +32,21 @@ def safe_name(value: str, fallback: str = "Texture") -> str:
     return (cleaned or fallback)[:120]
 
 
+def readable_publish_stem(image_stem: str, material_name: str) -> str:
+    """Prefer semantic material names whenever an exporter exposes a hash."""
+
+    generic = bool(re.fullmatch(r"[0-9a-f]{24,64}", image_stem, re.IGNORECASE))
+    generic = generic or bool(re.fullmatch(r"Texture_?\d+", image_stem, re.IGNORECASE))
+    stem = material_name if generic else image_stem
+    stem = re.sub(
+        r"(?:[_ .-](?:albedo|basecolou?r|diffuse|color|a|n|ao|mg))+$",
+        "",
+        stem,
+        flags=re.IGNORECASE,
+    )
+    return safe_name(stem, "Texture")
+
+
 def texture_base_names(stem: str) -> list[str]:
     names = [stem]
     folded = stem.casefold()
@@ -321,13 +336,34 @@ def _convert_to_cache(
     return outputs, resized
 
 
-def _publish(cache_path: Path, texture_dir: Path, stem: str, role: str) -> str:
+def _publish(
+    cache_path: Path,
+    texture_dir: Path,
+    stem: str,
+    role: str,
+    allocations: dict[str, str],
+    used_names: set[str],
+) -> str:
+    """Publish a cache entry under a readable, collision-safe final filename."""
+
     texture_dir.mkdir(parents=True, exist_ok=True)
-    digest = hashlib.sha256(cache_path.name.encode("utf-8")).hexdigest()[:8]
-    target = texture_dir / f"{safe_name(stem)}_{digest}_{role}.png"
-    if not target.is_file():
-        shutil.copy2(cache_path, target)
-    return f"textures/{target.name}"
+    key = os.path.normcase(str(cache_path.resolve())) + "\0" + stem.casefold() + "\0" + role
+    previous = allocations.get(key)
+    if previous is not None:
+        return previous
+
+    base = safe_name(f"{stem}_{role}", f"Texture_{role}")
+    candidate = f"{base}.png"
+    serial = 2
+    while candidate.casefold() in used_names:
+        candidate = f"{base[:110]}_{serial:02d}.png"
+        serial += 1
+    used_names.add(candidate.casefold())
+    target = texture_dir / candidate
+    shutil.copy2(cache_path, target)
+    relative = f"textures/{target.name}"
+    allocations[key] = relative
+    return relative
 
 
 def prepare_pbr_materials(
@@ -439,6 +475,8 @@ def prepare_pbr_materials(
 
     resized_count = 0
     published: set[str] = set()
+    publish_allocations: dict[str, str] = {}
+    publish_names: set[str] = set()
     for material_index, resolution in enumerate(resolutions):
         if not resolution:
             continue
@@ -472,7 +510,14 @@ def prepare_pbr_materials(
                 )
                 resized_count += int(resized)
             for role, cache_path in cache_outputs.items():
-                relative = _publish(cache_path, texture_dir, resolution["stem"], role)
+                relative = _publish(
+                    cache_path,
+                    texture_dir,
+                    readable_publish_stem(resolution["stem"], entry["material_name"]),
+                    role,
+                    publish_allocations,
+                    publish_names,
+                )
                 entry["maps"][role] = relative
                 published.add(relative)
         contract["materials"][material_index] = entry
@@ -493,6 +538,7 @@ def prepare_pbr_materials(
             "maps_resized": resized_count,
         }
     )
+    contract["naming"] = "readable-role-suffix"
     contract["texture_files"] = sorted(published)
     if contract["coverage"]["pbr_materials"] == 0:
         contract["warnings"].append("No matching PBR material maps were found")

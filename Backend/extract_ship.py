@@ -64,6 +64,31 @@ def safe_name(value: str) -> str:
     return (cleaned or "ship")[:100]
 
 
+def validate_camouflage_selection(value: str | None) -> str:
+    selection = str(value or "default").strip()
+    if not selection:
+        selection = "default"
+    if selection in {"default", "native"}:
+        return selection
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", selection):
+        raise ValueError("영구 위장 식별자가 안전하지 않아요")
+    return selection
+
+
+def ship_output_stem(
+    display_name: str,
+    ship_index: str,
+    ship_key: str = "",
+    camouflage: str = "default",
+) -> str:
+    identity = ship_index or ship_key
+    stem = f"{display_name or identity}_{identity}"
+    selection = validate_camouflage_selection(camouflage)
+    if selection != "default":
+        stem += f"_camo-{safe_name(selection)}"
+    return safe_name(stem)
+
+
 def _is_relative_to(path: Path, parent: Path) -> bool:
     try:
         path.relative_to(parent)
@@ -335,6 +360,112 @@ def next_legends_output_dir(
         serial += 1
 
 
+def legends_diagnostics_root(output_root: Path) -> Path:
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    state_root = Path(local_app_data) if local_app_data else output_root.parent
+    return state_root / "WoWSToolbox" / "Diagnostics" / "Exports"
+
+
+def _next_diagnostics_dir(root: Path, stem: str) -> Path:
+    safe_stem = safe_name(stem)
+    candidate = root / safe_stem
+    if not candidate.exists():
+        return candidate
+    serial = 2
+    while True:
+        numbered = root / f"{safe_stem}_{serial:02d}"
+        if not numbered.exists():
+            return numbered
+        serial += 1
+
+
+def publish_legends_output(
+    run_root: Path,
+    scene_dir: Path,
+    manifest: Path,
+    diagnostics_root: Path,
+) -> dict:
+    """Publish only user-facing scene assets at the ship folder root.
+
+    Successful Legends pipelines create several implementation directories.
+    The viewer only needs the contents of ``scene``. Keep the small diagnostic
+    evidence under LocalAppData, discard reproducible intermediates, and make
+    the validated OBJ package immediately visible to the user.
+    """
+
+    run_root = run_root.resolve()
+    scene_dir = scene_dir.resolve()
+    manifest = manifest.resolve()
+    if scene_dir.parent != run_root or manifest.parent != run_root:
+        raise ValueError("Legends 게시 대상이 결과 폴더 바로 아래가 아니에요")
+    if not scene_dir.is_dir():
+        raise FileNotFoundError(f"Legends scene 폴더가 없어요: {scene_dir}")
+
+    scene_children = list(scene_dir.iterdir())
+    if not scene_children:
+        raise RuntimeError("Legends scene 폴더가 비어 있어요")
+    conflicts = [child.name for child in scene_children if (run_root / child.name).exists()]
+    if conflicts:
+        raise FileExistsError(
+            "Legends 결과를 게시할 위치에 같은 이름이 있어요: "
+            + ", ".join(sorted(conflicts))
+        )
+
+    diagnostics_root.mkdir(parents=True, exist_ok=True)
+    diagnostics_dir = _next_diagnostics_dir(diagnostics_root, run_root.name)
+    diagnostics_dir.mkdir()
+    diagnostic_moves: list[tuple[Path, Path]] = []
+    scene_moves: list[tuple[Path, Path]] = []
+    try:
+        for source in (run_root / "logs", manifest):
+            if not source.exists():
+                continue
+            target = diagnostics_dir / source.name
+            shutil.move(str(source), str(target))
+            diagnostic_moves.append((source, target))
+
+        for source in scene_children:
+            target = run_root / source.name
+            os.replace(source, target)
+            scene_moves.append((source, target))
+        scene_dir.rmdir()
+    except Exception:
+        scene_dir.mkdir(exist_ok=True)
+        for source, target in reversed(scene_moves):
+            if target.exists() and not source.exists():
+                os.replace(target, source)
+        for source, target in reversed(diagnostic_moves):
+            if target.exists() and not source.exists():
+                shutil.move(str(target), str(source))
+        try:
+            diagnostics_dir.rmdir()
+        except OSError:
+            pass
+        raise
+
+    cleanup_warnings: list[str] = []
+    for name in ("generated", "extracted", "pbr"):
+        intermediate = run_root / name
+        if not intermediate.exists():
+            continue
+        try:
+            if intermediate.is_dir():
+                shutil.rmtree(intermediate)
+            else:
+                intermediate.unlink()
+        except OSError as exc:
+            cleanup_warnings.append(f"{name}: {exc}")
+
+    published_manifest = diagnostics_dir / manifest.name
+    return {
+        "diagnostics_dir": str(diagnostics_dir),
+        "pipeline_manifest": (
+            str(published_manifest) if published_manifest.is_file() else None
+        ),
+        "cleanup_warnings": cleanup_warnings,
+    }
+
+
 def extract_legends(args: argparse.Namespace, output_dir: Path) -> dict:
     formats = parse_formats(args.formats)
     requested_lod = getattr(args, "requested_lod", getattr(args, "lod", 0))
@@ -433,6 +564,30 @@ def extract_legends(args: argparse.Namespace, output_dir: Path) -> dict:
         mtl_value = mtl_value.get("path")
     obj_path = Path(str(obj_value or ""))
     mtl_path = Path(str(mtl_value or ""))
+    published = {
+        "diagnostics_dir": None,
+        "pipeline_manifest": str(manifest),
+        "cleanup_warnings": [],
+    }
+    if bool(payload.get("acceptance", {}).get("passed")):
+        scene_dir = run_root / "scene"
+        if not obj_path.is_file():
+            raise FileNotFoundError(f"Legends OBJ 결과가 없어요: {obj_path}")
+        if mtl_value and not mtl_path.is_file():
+            raise FileNotFoundError(f"Legends MTL 결과가 없어요: {mtl_path}")
+        if obj_path.parent.resolve() != scene_dir.resolve():
+            raise RuntimeError(f"Legends OBJ가 scene 폴더 밖을 가리켜요: {obj_path}")
+        if mtl_value and mtl_path.parent.resolve() != scene_dir.resolve():
+            raise RuntimeError(f"Legends MTL이 scene 폴더 밖을 가리켜요: {mtl_path}")
+        published = publish_legends_output(
+            run_root,
+            scene_dir,
+            manifest,
+            legends_diagnostics_root(args.output_root),
+        )
+        obj_path = run_root / obj_path.name
+        if mtl_value:
+            mtl_path = run_root / mtl_path.name
     result = {
         "ok": bool(payload.get("acceptance", {}).get("passed")),
         "source": "legends",
@@ -442,7 +597,9 @@ def extract_legends(args: argparse.Namespace, output_dir: Path) -> dict:
         "intermediate_obj": str(obj_path),
         "object_count": combined.get("editable_mesh_objects"),
         "blend_created": False,
-        "pipeline_manifest": str(manifest),
+        "pipeline_manifest": published["pipeline_manifest"],
+        "diagnostics_dir": published["diagnostics_dir"],
+        "cleanup_warnings": published["cleanup_warnings"],
         "formats": sorted(formats),
         "quality_contract": {
             "requested_model_lod": requested_lod,
@@ -603,6 +760,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
         / str(build)
         / exporter_fingerprint
         / f"lod-{args.lod}"
+        / ("camo-" + safe_name(args.camouflage or "default"))
         / (safe_name(args.ship_index) + ".glb")
     )
     glb_cache_reused = valid_glb(glb_cache)
@@ -654,6 +812,11 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
                 "--lod",
                 str(args.lod),
                 *(["--hull", args.hull_upgrade] if args.hull_upgrade else []),
+                *(
+                    ["--camouflage", args.camouflage]
+                    if args.camouflage and args.camouflage != "default"
+                    else []
+                ),
                 "--output",
                 str(glb),
             ],
@@ -836,6 +999,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
                 "highest_mesh_lod": args.lod == 0,
                 "texture_max_size": args.texture_max_size,
                 "original_textures": args.texture_max_size == 0,
+                "camouflage": args.camouflage or "default",
                 "source_policy": "wowsunpack export-ship LOD index",
             },
             "cache": cache_info,
@@ -843,6 +1007,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
             "ship_glb_cache": str(glb_cache),
             "exporter_fingerprint": exporter_fingerprint,
             "ship_glb_cache_reused": glb_cache_reused,
+            "camouflage": args.camouflage or "default",
             "armor_glb_cache": str(armor_cache) if armor_cache else None,
             "armor_metadata_cache": (
                 str(armor_metadata_cache) if armor_metadata_cache else None
@@ -886,6 +1051,7 @@ def main() -> int:
     parser.add_argument("--run-slug", default="")
     parser.add_argument("--ship-index", default="")
     parser.add_argument("--hull-upgrade", default="")
+    parser.add_argument("--camouflage", default="default")
     parser.add_argument("--display-name", default="")
     parser.add_argument("--oodle-dll", type=Path)
     parser.add_argument("--cache-root", type=Path)
@@ -895,6 +1061,7 @@ def main() -> int:
     parser.add_argument("--formats", default="obj")
     parser.add_argument("--texture-max-size", type=int, choices=(0, 1024, 2048, 4096), default=0)
     args = parser.parse_args()
+    args.camouflage = validate_camouflage_selection(args.camouflage)
 
     args.game_dir = args.game_dir.resolve()
     args.toolbox_root = args.toolbox_root.resolve()
@@ -920,8 +1087,8 @@ def main() -> int:
             args.output_root, args.run_slug, args.overwrite
         )
     else:
-        stem = safe_name(
-            f"{args.display_name or args.ship_index or args.ship_key}_{args.ship_index or args.ship_key}"
+        stem = ship_output_stem(
+            args.display_name, args.ship_index, args.ship_key, args.camouflage
         )
         output_dir = next_output_dir(args.output_root, stem, args.overwrite)
     output_dir = validate_output_child(args.output_root, output_dir)

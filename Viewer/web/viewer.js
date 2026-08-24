@@ -39,6 +39,7 @@ const modelModeButton = document.querySelector('#modelModeButton');
 const thicknessFilters = document.querySelector('#thicknessFilters');
 const zoneFilters = document.querySelector('#zoneFilters');
 const armorOpacity = document.querySelector('#armorOpacity');
+const armorContextOpacityControl = document.querySelector('#armorContextOpacity');
 const armorSummary = document.querySelector('#armorSummary');
 const inspectorTitle = document.querySelector('.inspector-head strong');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' });
@@ -123,23 +124,36 @@ const undoHistory = [];
 const redoHistory = [];
 let pendingTransformEdit = null;
 const BACKGROUND_VISIBILITY_KEY = 'wows-toolbox-viewer-background';
+const ARMOR_CONTEXT_OPACITY_KEY = 'wows-toolbox-viewer-armor-context-opacity-v1';
 const LIGHTING_PANEL_POSITION_KEY = 'wows-toolbox-viewer-lighting-panel-v1';
 let lightingPanelDrag = null;
 const LIGHTING_PANEL_MARGIN = 8;
-// v5 intentionally resets old troubleshooting presets. Previous builds could
-// persist exposure 0.4 / environment 0 combinations which made sound albedo
-// textures look black after an update.
-const LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v5';
+// v9 keeps the uniform asset-inspection view, albedo inspection, and the
+// directional PBR diagnostic mutually exclusive. This also discards legacy
+// persisted states where albedo and PBR could both remain enabled.
+const LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v9';
 const LIGHTING_DEFAULTS = Object.freeze({ exposure: 1, key: 0.72, environment: 1, normalStrength: 0.2, pbrPreview: false, albedoPreview: false, azimuth: 32, elevation: 48 });
 let activeNormalStrength = LIGHTING_DEFAULTS.normalStrength;
+let activeFlatLightingGain = 1;
 let pbrPreviewEnabled = LIGHTING_DEFAULTS.pbrPreview;
 let albedoPreviewEnabled = LIGHTING_DEFAULTS.albedoPreview;
 const viewerMaterialUpgrades = new WeakMap();
 const viewerPbrMaterials = new WeakMap();
 const viewerPaintMaterials = new WeakMap();
 let backgroundVisible = true;
-const ARMOR_GHOST_RENDER_ORDER = 100;
+
+const ARMOR_CONTEXT_RENDER_ORDER = 100;
 const ARMOR_RENDER_ORDER_BASE = 1000;
+
+function loadArmorContextOpacity() {
+  try {
+    const stored = Number(localStorage.getItem(ARMOR_CONTEXT_OPACITY_KEY));
+    if (Number.isFinite(stored)) return THREE.MathUtils.clamp(stored, 0, 100);
+  } catch (_) {}
+  return 100;
+}
+
+armorContextOpacityControl.value = String(loadArmorContextOpacity());
 
 function hostMessage(payload) {
   try { window.chrome?.webview?.postMessage(payload); } catch (_) {}
@@ -331,9 +345,16 @@ function applyAlbedoPreview(enabled) {
       if (albedoPreviewEnabled) {
         if (material.userData.viewerAlbedoPreview) return material;
         if (material.userData.viewerAlbedoMaterial) return material.userData.viewerAlbedoMaterial;
+        const paintMaterial = material.userData.viewerNeutralFlatMaterial
+          ? material
+          : (viewerPaintMaterials.get(material) || material);
+        const baseColor = paintMaterial.userData?.viewerFlatBaseColor;
+        const albedoColor = Array.isArray(baseColor) && baseColor.length >= 3
+          ? new THREE.Color().setRGB(baseColor[0], baseColor[1], baseColor[2])
+          : (material.map ? new THREE.Color(0xffffff) : material.color);
         const albedo = new THREE.MeshBasicMaterial({
           name: `${material.name || 'Material'}_Albedo`,
-          color: material.map ? 0xffffff : material.color,
+          color: albedoColor,
           map: material.map || null,
           alphaMap: material.alphaMap || null,
           opacity: material.opacity,
@@ -355,6 +376,39 @@ function applyAlbedoPreview(enabled) {
   albedoPreviewControl.checked = albedoPreviewEnabled;
 }
 
+function flatLightingGain(key, environment) {
+  // The normal model viewer is an asset inspector, not an in-game renderer.
+  // Both light controls therefore change a uniform studio gain so separate OBJ
+  // parts with different normals cannot acquire false two-tone paint.
+  return THREE.MathUtils.clamp(0.28 + environment * 0.5 + key * 0.3, 0.18, 1.45);
+}
+
+function applyFlatLightingGain(gain, root = modelContent) {
+  activeFlatLightingGain = gain;
+  const updated = new Set();
+  root?.traverse((node) => {
+    if (!node.isMesh) return;
+    const materials = Array.isArray(node.material) ? node.material : [node.material];
+    for (const material of materials) {
+      const candidates = [
+        material,
+        material?.userData?.viewerLitMaterial,
+        viewerPaintMaterials.get(material),
+        viewerPbrMaterials.get(material),
+      ];
+      for (const candidate of candidates) {
+        if (!candidate?.userData?.viewerNeutralFlatMaterial || updated.has(candidate)) continue;
+        const base = candidate.userData.viewerFlatBaseColor;
+        if (!Array.isArray(base) || base.length < 3) continue;
+        candidate.color.setRGB(base[0], base[1], base[2]).multiplyScalar(gain);
+        candidate.userData.viewerFlatLightingGain = gain;
+        candidate.needsUpdate = true;
+        updated.add(candidate);
+      }
+    }
+  });
+}
+
 function applyLightingSettings(settings, persist = true) {
   const state = {
     exposure: clampLighting(settings.exposure, 0.4, 1.8, LIGHTING_DEFAULTS.exposure),
@@ -366,7 +420,11 @@ function applyLightingSettings(settings, persist = true) {
     azimuth: clampLighting(settings.azimuth, -180, 180, LIGHTING_DEFAULTS.azimuth),
     elevation: clampLighting(settings.elevation, 5, 85, LIGHTING_DEFAULTS.elevation),
   };
+  // Albedo inspection has priority when migrating an old both-enabled state.
+  // The normal UI never stores this combination, but v8 settings could.
+  if (state.albedoPreview && state.pbrPreview) state.pbrPreview = false;
   renderer.toneMappingExposure = state.exposure;
+  const uniformGain = flatLightingGain(state.key, state.environment);
   keyLight.intensity = state.key;
   hemisphereLight.intensity = state.environment * 1.1;
   ambientLight.intensity = state.environment * 0.78;
@@ -376,6 +434,7 @@ function applyLightingSettings(settings, persist = true) {
   applyNormalStrength(state.normalStrength);
   applyPbrPreview(state.pbrPreview);
   applyAlbedoPreview(state.albedoPreview);
+  applyFlatLightingGain(uniformGain);
   const azimuth = THREE.MathUtils.degToRad(state.azimuth);
   const elevation = THREE.MathUtils.degToRad(state.elevation);
   const horizontal = Math.cos(elevation) * 14;
@@ -403,6 +462,20 @@ function currentLightingSettings() {
   return { exposure: exposureControl.value, key: keyLightControl.value, environment: environmentControl.value, normalStrength: normalStrengthControl.value, pbrPreview: pbrPreviewControl.checked, albedoPreview: albedoPreviewControl.checked, azimuth: azimuthControl.value, elevation: elevationControl.value };
 }
 
+function selectSurfacePreview(mode, enabled) {
+  const checked = Boolean(enabled);
+  if (mode === 'albedo') {
+    albedoPreviewControl.checked = checked;
+    // Turning albedo off must return to the uniform default, not reveal a
+    // previously hidden directional PBR state.
+    pbrPreviewControl.checked = false;
+  } else if (mode === 'pbr') {
+    pbrPreviewControl.checked = checked;
+    if (checked) albedoPreviewControl.checked = false;
+  }
+  return applyLightingSettings(currentLightingSettings());
+}
+
 function showLoading(title, detail) {
   loadingTitle.textContent = title;
   loadingDetail.textContent = detail;
@@ -415,44 +488,78 @@ function createStandardViewerMaterial(material) {
   if (!material?.isMeshPhongMaterial) return material;
   if (viewerMaterialUpgrades.has(material)) return viewerMaterialUpgrades.get(material);
   const pbr = material.userData?.wowsPbr || {};
-  if (!pbr.roughnessMap && !pbr.metalnessMap && !pbr.aoMap && !material.normalMap && !material.bumpMap) return material;
   if (pbr.roughnessMap) pbr.roughnessMap.channel = 0;
   if (pbr.aoMap) pbr.aoMap.channel = 0;
   const normalMap = material.normalMap || material.bumpMap || null;
-  const standard = new THREE.MeshStandardMaterial({
-    name: material.name, color: material.color, map: material.map, alphaMap: material.alphaMap,
-    normalMap, roughnessMap: pbr.roughnessMap || null,
-    metalnessMap: null, aoMap: pbr.aoMap || null, roughness: pbr.roughnessMap ? 1 : 0.82,
-    metalness: 0, opacity: material.opacity, transparent: material.transparent,
-    alphaTest: material.alphaTest, side: material.side, depthWrite: material.depthWrite, vertexColors: material.vertexColors,
+
+  // Normal viewing is deliberately flat-lit. A uniform gain keeps source
+  // albedo readable across independently exported parts without creating false
+  // two-tone paint from differing normals. Detailed directional lighting stays
+  // available through PBR preview.
+  const neutralBaseColor = material.map
+    ? new THREE.Color(0xffffff)
+    : material.color.clone();
+  const neutral = new THREE.MeshBasicMaterial({
+    name: material.name,
+    color: neutralBaseColor.clone().multiplyScalar(activeFlatLightingGain),
+    map: material.map,
+    alphaMap: material.alphaMap,
+    opacity: material.opacity,
+    transparent: material.transparent,
+    alphaTest: material.alphaTest,
+    side: material.side,
+    depthWrite: material.depthWrite,
+    vertexColors: material.vertexColors,
+  });
+  neutral.toneMapped = true;
+  neutral.userData = {
+    ...(material.userData || {}),
+    viewerNeutralFlatMaterial: true,
+    viewerFlatBaseColor: [neutralBaseColor.r, neutralBaseColor.g, neutralBaseColor.b],
+    viewerFlatLightingGain: activeFlatLightingGain,
+    viewerPbrPreview: false,
+  };
+
+  const detailed = new THREE.MeshStandardMaterial({
+    name: material.name,
+    color: material.map ? 0xffffff : material.color,
+    map: material.map,
+    alphaMap: material.alphaMap,
+    normalMap,
+    roughnessMap: pbr.roughnessMap || null,
+    metalnessMap: null,
+    aoMap: pbr.aoMap || null,
+    roughness: pbr.roughnessMap ? 1 : 0.82,
+    metalness: 0,
+    opacity: material.opacity,
+    transparent: material.transparent,
+    alphaTest: material.alphaTest,
+    side: material.side,
+    depthWrite: material.depthWrite,
+    vertexColors: material.vertexColors,
   });
   // _mg.G is retained in the export but only inferred as metalness. Without
   // the game's proprietary shader/environment it creates false black/white paint.
-  standard.userData = {
+  detailed.userData = {
     ...(material.userData || {}),
     viewerPbrPreview: true,
     viewerMetalnessPreview: false,
     viewerPbrChannels: {
-      normalMap: standard.normalMap,
-      roughnessMap: standard.roughnessMap,
-      aoMap: standard.aoMap,
+      normalMap: detailed.normalMap,
+      roughnessMap: detailed.roughnessMap,
+      aoMap: detailed.aoMap,
     },
   };
-  standard.normalScale.set(activeNormalStrength, activeNormalStrength);
-  material.userData = {
-    ...(material.userData || {}),
-    viewerPbrPreview: false,
-    viewerPbrChannels: standard.userData.viewerPbrChannels,
-  };
-  viewerPbrMaterials.set(material, standard);
-  viewerPaintMaterials.set(standard, material);
-  viewerMaterialUpgrades.set(material, material);
-  return material;
+  neutral.userData.viewerPbrChannels = detailed.userData.viewerPbrChannels;
+  detailed.normalScale.set(activeNormalStrength, activeNormalStrength);
+  viewerPbrMaterials.set(neutral, detailed);
+  viewerPaintMaterials.set(detailed, neutral);
+  viewerMaterialUpgrades.set(material, neutral);
+  return neutral;
 }
-
 function normalizeViewerMaterial(material) {
-  if (!material || material.userData.viewerMaterialPolicy === 'paint-v6') return false;
-  material.userData.viewerMaterialPolicy = 'paint-v6';
+  if (!material || material.userData.viewerMaterialPolicy === 'uniform-flat-v8') return false;
+  material.userData.viewerMaterialPolicy = 'uniform-flat-v8';
   material.userData.viewerSourceShininess = Number(material.shininess ?? 0);
   material.userData.viewerSourceSpecular = material.specular?.getHex?.() ?? null;
   if (material.map) {
@@ -614,6 +721,7 @@ function normalizeModelMaterials(root, assemblyMetadata = null) {
     );
   });
   swapPbrMaterials(root, pbrPreviewEnabled);
+  applyFlatLightingGain(activeFlatLightingGain, root);
   return normalized.size + mirroredPartMaterials;
 }
 
@@ -802,6 +910,7 @@ function clearModel(invalidateLoads = true) {
   selectionBox.visible = false;
   selected = null;
   if (albedoPreviewEnabled) applyAlbedoPreview(false);
+  if (displayMode === 'armor') setArmorModelGhost(false);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(viewportShell.clientWidth, viewportShell.clientHeight, false);
   if (shipRoot) disposeObject3D(shipRoot);
@@ -1056,68 +1165,105 @@ function selectPart(part) {
     detail: { part: selected },
   }));
 }
-function ensureArmorDepthProxy(node) {
-  if (node.userData.viewerArmorDepthProxyObject) return node.userData.viewerArmorDepthProxyObject;
-  const depthMaterial = new THREE.MeshBasicMaterial({
-    colorWrite: false,
-    depthWrite: true,
-    depthTest: true,
-    side: THREE.DoubleSide,
-    blending: THREE.NoBlending,
-  });
-  const proxy = new THREE.Mesh(node.geometry, depthMaterial);
-  proxy.name = (node.name || 'Part') + '_ARMOR_DEPTH';
-  proxy.userData.viewerArmorDepthProxy = true;
-  proxy.frustumCulled = node.frustumCulled;
-  proxy.renderOrder = ARMOR_GHOST_RENDER_ORDER - 2;
-  proxy.visible = false;
-  node.add(proxy);
-  node.userData.viewerArmorDepthProxyObject = proxy;
-  return proxy;
+function armorContextBaseOpacity(node) {
+  const type = String(node?.userData?.viewerType || '');
+  if (type === '선체') return 0.25;
+  if (type === '상부구조') return 0.2;
+  if (type === '주함포' || type === '부포') return 0.17;
+  if (type === '대공포' || type === '어뢰' || type === '미사일') return 0.14;
+  return 0.12;
 }
 
+function armorContextOpacityScale() {
+  return THREE.MathUtils.clamp(Number(armorContextOpacityControl.value) / 100, 0, 1);
+}
 
-const ARMOR_GHOST_MODEL_TYPES = new Set(['선체', '상부구조']);
+function createArmorContextMaterial(material, baseOpacity) {
+  const sourceColor = material?.color?.isColor
+    ? material.color.clone().lerp(new THREE.Color(0x9ba9ae), 0.55)
+    : new THREE.Color(0x9ba9ae);
+  const effectiveBaseOpacity = Math.min(Number(material?.opacity ?? 1), baseOpacity);
+  const ghost = new THREE.MeshBasicMaterial({
+    name: `${material?.name || 'Material'}_ArmorContext`,
+    color: material?.map ? 0xd0d6d8 : sourceColor,
+    map: material?.map || null,
+    alphaMap: material?.alphaMap || null,
+    opacity: effectiveBaseOpacity * armorContextOpacityScale(),
+    transparent: true,
+    alphaTest: material?.alphaTest || 0,
+    side: THREE.DoubleSide,
+    depthTest: true,
+    // The reference shell must never hide deck, barbette, belt, or internal
+    // armor. It provides location context without participating in depth.
+    depthWrite: false,
+    vertexColors: material?.vertexColors === true,
+  });
+  ghost.toneMapped = false;
+  ghost.forceSinglePass = true;
+  ghost.userData = {
+    viewerArmorContextMaterial: true,
+    nonOccludingArmorContext: true,
+    viewerArmorContextBaseOpacity: effectiveBaseOpacity,
+  };
+  return ghost;
+}
 
-function setModelGhost(enabled) {
+function setArmorContextOpacity(value, { persist = true } = {}) {
+  const normalized = THREE.MathUtils.clamp(Number(value), 0, 100);
+  armorContextOpacityControl.value = String(normalized);
+  const scale = normalized / 100;
+  if (modelContent) {
+    modelContent.traverse((node) => {
+      if (!node.isMesh || !node.userData.viewerArmorContextState) return;
+      const materials = Array.isArray(node.material) ? node.material : [node.material];
+      for (const material of materials.filter(Boolean)) {
+        const baseOpacity = Number(material.userData?.viewerArmorContextBaseOpacity ?? 0);
+        material.opacity = baseOpacity * scale;
+        material.needsUpdate = true;
+      }
+    });
+  }
+  if (persist) {
+    try { localStorage.setItem(ARMOR_CONTEXT_OPACITY_KEY, String(normalized)); } catch (_) {}
+  }
+}
+
+function disposeArmorContextMaterial(material) {
+  if (Array.isArray(material)) material.forEach((item) => item?.dispose?.());
+  else material?.dispose?.();
+}
+
+function setArmorModelGhost(enabled) {
   if (!modelContent) return;
   modelContent.traverse((node) => {
-    if (!node.isMesh) return;
-    if (node.userData.viewerArmorDepthProxy) return;
-    if (node.userData.viewerRenderOrder === undefined) {
-      node.userData.viewerRenderOrder = node.renderOrder;
+    if (!node.isMesh || node.userData.viewerArmorDepthProxy) return;
+    if (enabled && !node.userData.viewerArmorContextState) {
+      const sourceMaterials = Array.isArray(node.material) ? node.material : [node.material];
+      const opacity = armorContextBaseOpacity(node);
+      node.userData.viewerArmorContextState = {
+        visible: node.visible,
+        material: node.material,
+        renderOrder: node.renderOrder,
+      };
+      const ghostMaterials = sourceMaterials.map((material) => createArmorContextMaterial(material, opacity));
+      node.material = Array.isArray(node.material) ? ghostMaterials : ghostMaterials[0];
+      node.renderOrder = ARMOR_CONTEXT_RENDER_ORDER;
+      node.visible = node.userData.viewerArmorContextState.visible;
+    } else if (!enabled && node.userData.viewerArmorContextState) {
+      const state = node.userData.viewerArmorContextState;
+      disposeArmorContextMaterial(node.material);
+      node.material = state.material;
+      node.renderOrder = state.renderOrder;
+      node.visible = state.visible;
+      delete node.userData.viewerArmorContextState;
     }
-    if (enabled && node.userData.viewerArmorVisibility === undefined) {
-      node.userData.viewerArmorVisibility = node.visible;
-    }
-    if (enabled) {
-      node.visible = ARMOR_GHOST_MODEL_TYPES.has(node.userData.viewerType)
-        ? node.userData.viewerArmorVisibility
-        : false;
-    } else if (node.userData.viewerArmorVisibility !== undefined) {
-      node.visible = node.userData.viewerArmorVisibility;
-      delete node.userData.viewerArmorVisibility;
-    }
-    const depthProxy = ensureArmorDepthProxy(node);
-    depthProxy.visible = enabled && node.visible;
-    node.renderOrder = enabled
-      ? ARMOR_GHOST_RENDER_ORDER
-      : node.userData.viewerRenderOrder;
-    const materials = Array.isArray(node.material) ? node.material : [node.material];
-    materials.filter(Boolean).forEach((material) => {
-      if (material.userData.viewerOpacity === undefined) {
-        material.userData.viewerOpacity = material.opacity;
-        material.userData.viewerTransparent = material.transparent;
-        material.userData.viewerDepthWrite = material.depthWrite;
-        material.userData.viewerSide = material.side;
-      }
-      material.opacity = enabled ? 0.13 : material.userData.viewerOpacity;
-      material.transparent = enabled ? true : material.userData.viewerTransparent;
-      material.depthWrite = enabled ? false : material.userData.viewerDepthWrite;
-      material.side = enabled ? THREE.DoubleSide : material.userData.viewerSide;
-      material.needsUpdate = true;
-    });
   });
+  if (!enabled) {
+    // Lighting toggles may have changed while armor mode was open. Restore the
+    // requested model material state after putting the original materials back.
+    swapPbrMaterials(modelContent, pbrPreviewEnabled);
+    applyAlbedoPreview(albedoPreviewEnabled);
+  }
 }
 function setDisplayMode(mode) {
   if (mode === 'armor' && !armorData) mode = 'model';
@@ -1129,7 +1275,7 @@ function setDisplayMode(mode) {
   armorPanel.hidden = !armorMode;
   inspectorTitle.textContent = armorMode ? '장갑 분석' : '파트 목록';
   if (armorRoot) armorRoot.visible = armorMode;
-  setModelGhost(armorMode);
+  setArmorModelGhost(armorMode);
   if (armorMode) selectPart(null);
   if (shipRoot) frameModel();
 }
@@ -1336,11 +1482,17 @@ async function loadArmor(url, loadId) {
     geometry.computeVertexNormals();
     const material = new THREE.MeshBasicMaterial({
       color: bucket.color,
-      side: THREE.FrontSide,
+      // Armor plates are thin surfaces. They must remain visible from both
+      // sides so an enabled deck/belt does not disappear when the camera moves
+      // underneath or inside the hull.
+      side: THREE.DoubleSide,
       transparent: true,
       opacity: Number(armorOpacity.value) / 100,
       depthTest: true,
-      depthWrite: false,
+      // Armor remains visually translucent, but the nearest plate must still
+      // occlude armor behind it. Without depth writes, deck armor behaved like
+      // an X-ray overlay and exposed barbettes/internal belts through the deck.
+      depthWrite: true,
       polygonOffset: true,
       polygonOffsetFactor: -1,
     });
@@ -1350,6 +1502,7 @@ async function loadArmor(url, loadId) {
     // change their blend order or apparent color.
     material.forceSinglePass = true;
     material.userData.stableArmorTransparency = true;
+    material.userData.occludesHiddenArmor = true;
     const mesh = new THREE.Mesh(geometry, material);
     mesh.renderOrder = ARMOR_RENDER_ORDER_BASE + groupIndex;
     mesh.name = `Armor_${group.zone}_${bucket.label}`;
@@ -1670,7 +1823,17 @@ document.querySelector('#allThickness').addEventListener('click', () => { active
 document.querySelector('#allZones').addEventListener('click', () => { activeArmorZone = null; applyArmorFilters(); });
 armorOpacity.addEventListener('input', () => {
   const opacity = Number(armorOpacity.value) / 100;
-  for (const mesh of armorMeshes) mesh.material.opacity = opacity;
+  for (const mesh of armorMeshes) {
+    mesh.material.opacity = opacity;
+    // Opacity controls how strongly the closest plate blends with the empty
+    // background. It must never turn the armor stack into an X-ray view.
+    mesh.material.depthTest = true;
+    mesh.material.depthWrite = true;
+    mesh.material.needsUpdate = true;
+  }
+});
+armorContextOpacityControl.addEventListener('input', () => {
+  setArmorContextOpacity(armorContextOpacityControl.value);
 });
 partSearch.addEventListener('input', renderPartList);
 document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => setView(button.dataset.view)));
@@ -1684,8 +1847,8 @@ lightingButton.addEventListener('click', () => {
 for (const control of [exposureControl, keyLightControl, environmentControl, normalStrengthControl, azimuthControl, elevationControl]) {
   control.addEventListener('input', () => applyLightingSettings(currentLightingSettings()));
 }
-albedoPreviewControl.addEventListener('change', () => applyLightingSettings(currentLightingSettings()));
-pbrPreviewControl.addEventListener('change', () => applyLightingSettings(currentLightingSettings()));
+albedoPreviewControl.addEventListener('change', () => selectSurfacePreview('albedo', albedoPreviewControl.checked));
+pbrPreviewControl.addEventListener('change', () => selectSurfacePreview('pbr', pbrPreviewControl.checked));
 lightingReset.addEventListener('click', () => { applyLightingSettings(LIGHTING_DEFAULTS); setStatus('조명 기본값을 복원했습니다.'); });
 document.querySelector('#gridButton').addEventListener('click', (event) => { grid.visible = !grid.visible; event.currentTarget.classList.toggle('active', grid.visible); });
 document.querySelector('#wireButton').addEventListener('click', (event) => {
@@ -1839,4 +2002,4 @@ window.WoWSViewerCore = {
   setStatus,
   hostMessage,
 };
-hostMessage({ type: 'ready', version: '5.0.42' });
+hostMessage({ type: 'ready', version: '5.0.53' });

@@ -53,6 +53,12 @@ CLASS_KO = {
 }
 
 
+# Increment when the per-ship camouflage payload changes. Cached catalog rows
+# carry this marker so the GUI can rebuild old files that already contained an
+# empty Camouflages array and would otherwise look current.
+CAMOUFLAGE_CATALOG_VERSION = 1
+
+
 def _translation(game_dir: Path, language: str) -> tuple[MoCatalog, str]:
     build, _ = latest_build(game_dir)
     languages = [language, "ko", "en", "ru"]
@@ -161,12 +167,70 @@ def _fallback_name(param_key: str, index: str) -> str:
     return tail.replace("_", " ").strip() or index
 
 
+def _pc_camouflages(
+    vehicle: dict[str, Any],
+    params_by_name: dict[str, dict[str, Any]],
+    params_by_index: dict[str, dict[str, Any]],
+    translations: MoCatalog,
+) -> list[dict[str, Any]]:
+    """Return permanent camouflage choices attached to one ship.
+
+    GameParams vehicle records reference Exterior records through
+    permoflages. The Exterior parameter name is the stable identifier passed
+    to the native exporter; the translated display name is UI-only.
+    """
+    choices: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for reference in _string_values(vehicle.get("permoflages")):
+        exterior = params_by_name.get(reference) or params_by_index.get(reference)
+        if not exterior:
+            continue
+
+        stable_id = str(exterior.get("name") or reference).strip()
+        if not stable_id or stable_id.casefold() in seen:
+            continue
+        seen.add(stable_id.casefold())
+
+        scheme = str(exterior.get("camouflage") or "").strip()
+        ids = f"IDS_{stable_id.upper()}"
+        localized = translations.gettext(ids)
+        if not localized or not localized.strip() or localized == ids:
+            localized = _fallback_name(stable_id, str(exterior.get("index") or ""))
+        else:
+            localized = localized.strip()
+
+        type_info = _dict(exterior.get("typeinfo"))
+        choices.append(
+            {
+                "Id": stable_id,
+                "Name": localized,
+                "Scheme": scheme,
+                "Index": str(exterior.get("index") or ""),
+                "Species": str(type_info.get("species") or ""),
+                "Nation": str(type_info.get("nation") or ""),
+            }
+        )
+
+    choices.sort(key=lambda item: (item["Name"].casefold(), item["Id"].casefold()))
+    return choices
+
+
 def pc_catalog(game_dir: Path, language: str, source: str) -> list[dict[str, Any]]:
     build, entries = read_archive_index(game_dir)
     entry = find_entry(entries, ("GameParams.data", "GameParams_py2.data"))
     raw = extract_entry(game_dir, entry)
     params = root_params(decode_game_params(raw))
     translations, translation_language = _translation(game_dir, language)
+    params_by_name: dict[str, dict[str, Any]] = {}
+    params_by_index: dict[str, dict[str, Any]] = {}
+    for param_key, param_value in params.items():
+        param_data = _dict(param_value)
+        param_name = str(param_data.get("name") or param_key).strip()
+        param_index = str(param_data.get("index") or "").strip()
+        if param_name:
+            params_by_name.setdefault(param_name, param_data)
+        if param_index:
+            params_by_index.setdefault(param_index, param_data)
     geometry_directories = {
         key.rsplit("/", 1)[0]
         for key in entries
@@ -240,6 +304,10 @@ def pc_catalog(game_dir: Path, language: str, source: str) -> list[dict[str, Any
                 "Id": data.get("id"),
                 "Supported": supported,
                 "ArchiveHullVerified": supported,
+                "CamouflageCatalogVersion": CAMOUFLAGE_CATALOG_VERSION,
+                "Camouflages": _pc_camouflages(
+                    data, params_by_name, params_by_index, translations
+                ),
                 "UnsupportedReason": (
                     "현재 게임 빌드에 선체 geometry가 없어요"
                     if hull_candidates and not supported
@@ -330,6 +398,8 @@ def legends_catalog(toolbox_root: Path, game_dir: Path, language: str) -> list[d
                 "ModelPath": str(legacy.get("hull_resource_path") or ""),
                 "Id": legacy.get("id"),
                 "Supported": bool(legacy.get("selectable")),
+                "CamouflageCatalogVersion": CAMOUFLAGE_CATALOG_VERSION,
+                "Camouflages": [],
             }
         )
     rows.sort(

@@ -330,6 +330,39 @@ def image_payload(document: dict, binary: bytes, image: dict, source: Path) -> b
     raise NativeGlbError("Image has neither bufferView nor URI")
 
 
+HASH_ONLY_NAME = re.compile(r"^[0-9a-f]{24,64}$", re.IGNORECASE)
+
+
+def readable_image_names(document: dict) -> list[str]:
+    """Return stable, readable albedo filenames for the GLB image table."""
+
+    images = document.get("images", [])
+    material_names: dict[int, str] = {}
+    for material_index, material in enumerate(document.get("materials", [])):
+        image_index = material_texture_index(document, material)
+        if image_index is None or image_index in material_names:
+            continue
+        material_names[image_index] = str(
+            material.get("name") or f"Material_{material_index:03d}"
+        )
+
+    candidates: list[str] = []
+    for index, image in enumerate(images):
+        original = str(image.get("name") or "").strip()
+        generic = not original or bool(HASH_ONLY_NAME.fullmatch(original))
+        if re.fullmatch(r"Texture_?\d+", original, re.IGNORECASE):
+            generic = True
+        stem = material_names.get(index, f"Texture_{index:03d}") if generic else original
+        stem = re.sub(
+            r"(?:[_ .-](?:albedo|basecolou?r|diffuse|color|a))+$",
+            "",
+            stem,
+            flags=re.IGNORECASE,
+        )
+        candidates.append(f"{stem or f'Texture_{index:03d}'}_albedo")
+    return unique_names(candidates, "Texture_albedo")
+
+
 def export_textures(
     document: dict,
     binary: bytes,
@@ -339,13 +372,7 @@ def export_textures(
     library: Path | None,
 ) -> tuple[dict[int, str], list[str], int, int]:
     images = document.get("images", [])
-    names = unique_names(
-        [
-            str(image.get("name") or f"Texture_{index:03d}")
-            for index, image in enumerate(images)
-        ],
-        "Texture",
-    )
+    names = readable_image_names(document)
     texture_dir.mkdir(parents=True, exist_ok=True)
     mapping: dict[int, str] = {}
     paths: list[str] = []
@@ -375,6 +402,65 @@ def export_textures(
         mapping[index] = f"textures/{target.name}"
         paths.append(str(target))
     return mapping, paths, resized, linked
+
+
+def write_texture_manifest(
+    document: dict,
+    output_dir: Path,
+    image_paths: dict[int, str],
+    pbr_contract: dict | None,
+) -> Path:
+    """Record readable output names while keeping hashes as metadata only."""
+
+    records: dict[str, dict] = {}
+    images = document.get("images", [])
+    for index, relative in image_paths.items():
+        target = output_dir / relative
+        records[relative.casefold()] = {
+            "output": relative,
+            "role": "albedo",
+            "source": str(images[index].get("name") or f"image:{index}"),
+            "sha256": sha256(target),
+        }
+
+    if isinstance(pbr_contract, dict):
+        for material in pbr_contract.get("materials", []):
+            if not isinstance(material, dict):
+                continue
+            sources = material.get("sources", {})
+            for role, relative in material.get("maps", {}).items():
+                target = output_dir / relative
+                if not target.is_file():
+                    continue
+                source = sources.get(role)
+                if source is None and role in {
+                    "metallic_gloss",
+                    "specular",
+                    "roughness",
+                    "metalness",
+                }:
+                    source = sources.get("metallic_gloss")
+                records[relative.casefold()] = {
+                    "output": relative,
+                    "role": role,
+                    "source": source or material.get("base_image") or "",
+                    "sha256": sha256(target),
+                }
+
+    target = output_dir / "texture_manifest.json"
+    target.write_text(
+        json.dumps(
+            {
+                "schema": "wows-toolbox-texture-manifest/v1",
+                "naming": "readable-role-suffix",
+                "textures": sorted(records.values(), key=lambda item: item["output"].casefold()),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    return target
 
 
 def classify_part(name: str) -> str:
@@ -432,6 +518,51 @@ def material_texture_index(document: dict, material: dict) -> int | None:
         return int(texture["source"])
     basis = texture.get("extensions", {}).get("KHR_texture_basisu", {})
     return int(basis["source"]) if "source" in basis else None
+
+
+def material_base_color_uv_settings(
+    document: dict, material_index: int | None
+) -> tuple[int, tuple[float, float], tuple[float, float], float]:
+    """Return the base-color texcoord and KHR_texture_transform settings."""
+    if material_index is None:
+        return 0, (0.0, 0.0), (1.0, 1.0), 0.0
+    materials = document.get("materials", [])
+    if material_index < 0 or material_index >= len(materials):
+        return 0, (0.0, 0.0), (1.0, 1.0), 0.0
+    info = materials[material_index].get("pbrMetallicRoughness", {}).get(
+        "baseColorTexture"
+    )
+    if not isinstance(info, dict):
+        return 0, (0.0, 0.0), (1.0, 1.0), 0.0
+    transform = info.get("extensions", {}).get("KHR_texture_transform", {})
+    if not isinstance(transform, dict):
+        transform = {}
+    texcoord = int(transform.get("texCoord", info.get("texCoord", 0)))
+    offset = list(transform.get("offset", (0.0, 0.0))) + [0.0, 0.0]
+    scale = list(transform.get("scale", (1.0, 1.0))) + [1.0, 1.0]
+    return (
+        texcoord,
+        (float(offset[0]), float(offset[1])),
+        (float(scale[0]), float(scale[1])),
+        float(transform.get("rotation", 0.0)),
+    )
+
+
+def transform_material_uv(
+    value: tuple,
+    offset: tuple[float, float],
+    scale: tuple[float, float],
+    rotation: float,
+) -> tuple[float, float]:
+    """Apply the glTF KHR_texture_transform formula before OBJ's V flip."""
+    u = float(value[0]) * scale[0]
+    v = float(value[1]) * scale[1]
+    cosine = math.cos(rotation)
+    sine = math.sin(rotation)
+    return (
+        offset[0] + cosine * u - sine * v,
+        offset[1] + sine * u + cosine * v,
+    )
 
 
 def write_mtl(
@@ -598,9 +729,19 @@ def export_obj(
                     if "NORMAL" in attributes
                     else []
                 )
+                material_index = primitive.get("material")
+                texcoord, uv_offset_xy, uv_scale, uv_rotation = (
+                    material_base_color_uv_settings(
+                        document,
+                        int(material_index) if material_index is not None else None,
+                    )
+                )
+                texcoord_attribute = f"TEXCOORD_{texcoord}"
                 uvs = (
-                    accessor_values(document, binary, int(attributes["TEXCOORD_0"]))
-                    if "TEXCOORD_0" in attributes
+                    accessor_values(
+                        document, binary, int(attributes[texcoord_attribute])
+                    )
+                    if texcoord_attribute in attributes
                     else []
                 )
                 if "indices" in primitive:
@@ -613,7 +754,6 @@ def export_obj(
                 else:
                     indices = list(range(len(positions)))
                 output.write(f"g {object_name}_P{primitive_index:02d}\n")
-                material_index = primitive.get("material")
                 if material_index is not None and int(material_index) < len(
                     material_names
                 ):
@@ -628,9 +768,10 @@ def export_obj(
                     output.write(f"v {x:.8g} {y:.8g} {z:.8g}\n")
                 for value in uvs:
                     # Blender's glTF->OBJ path flips V to preserve the source image orientation.
-                    output.write(
-                        f"vt {float(value[0]):.8g} {1.0 - float(value[1]):.8g}\n"
+                    u, v = transform_material_uv(
+                        value, uv_offset_xy, uv_scale, uv_rotation
                     )
+                    output.write(f"vt {u:.8g} {1.0 - v:.8g}\n")
                 for x, y, z in transformed_normals:
                     output.write(f"vn {x:.8g} {y:.8g} {z:.8g}\n")
                 primitive_mode = int(primitive.get("mode", 4))
@@ -745,6 +886,12 @@ def build(args: argparse.Namespace) -> dict:
                 flush=True,
             )
             pbr_contract = None
+    texture_manifest = write_texture_manifest(
+        document,
+        args.output.parent,
+        image_paths,
+        pbr_contract,
+    )
     material_names = write_mtl(
         document,
         args.output.with_suffix(".mtl"),
@@ -823,6 +970,8 @@ def build(args: argparse.Namespace) -> dict:
         "texture_max_size": args.texture_max_size,
         "textures_resized": resized,
         "textures_shared": linked,
+        "texture_manifest": str(texture_manifest),
+        "texture_naming": "readable-role-suffix",
         "pbr": {
             "available": bool(
                 pbr_contract and pbr_contract.get("coverage", {}).get("pbr_materials")

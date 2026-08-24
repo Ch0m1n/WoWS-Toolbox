@@ -66,6 +66,83 @@ The release package includes a private CPython 3.10 runtime and Pillow. Blender 
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.53 readable texture filenames
+
+- Publishes final PC, Korabli, and Legends texture files with readable material/part names and explicit channel suffixes such as `_albedo`, `_normal`, `_ao`, `_roughness`, and `_metalness`.
+- Uses `_02`, `_03`, and later numeric suffixes only when readable names collide; SHA-256 names remain confined to the internal deduplication cache.
+- Rewrites OBJ/MTL/PBR references to the readable files and writes `texture_manifest.json` with the original source identifier and SHA-256 for diagnostics.
+- Falls back from hash-only source names to the associated material name so third-party OBJ tools can load textures without opaque cache filenames.
+
+## 5.0.52 cleaner Legends export folders
+
+- Publishes every validated Legends OBJ package directly in its ship output folder, including the OBJ, MTL, model/validation sidecars, and `textures` directory.
+- Removes the extra `scene` level and reproducible `generated`, `extracted`, and `pbr` intermediates after a successful export.
+- Moves pipeline logs and the internal manifest to `%LOCALAPPDATA%\WoWSToolbox\Diagnostics\Exports` so normal model folders contain only files users actually open.
+- Keeps failed or incomplete extraction folders intact for troubleshooting and leaves all existing exports unchanged.
+## 5.0.51 deterministic surface modes and camouflage-cache repair
+
+- Makes **Albedo inspection** and **Detailed PBR preview** mutually exclusive. Turning albedo inspection off now always returns to the uniform default surface view instead of revealing a hidden directional-lighting state.
+- Migrates legacy viewer settings by discarding the old invalid state where both inspection modes were enabled.
+- Adds an explicit camouflage-catalog schema marker so cached PC and Korabli ship lists with empty legacy camouflage arrays are rebuilt once.
+- Restores all eight permanent camouflage choices linked to the current PTS Vanadis record, while keeping "No camouflage · Default appearance" as the default selection.
+- Verifies the catalog contract against the live PTS data and covers the new viewer mode state in self-tests.
+## 5.0.50 per-ship permanent-camouflage locker
+
+- Adds a **Paint locker** to the ship picker and always defaults every ship to `No camouflage · Default appearance`.
+- Lists only the permanent camouflages actually linked to the selected PC or Korabli ship, using both the translated display name and a stable internal ID to distinguish multiple or similarly named paints.
+- Stores one camouflage choice per ship, keeping queue entries, output folders, and extraction caches isolated from one another.
+- Persists camouflage ID, name, and scheme in saved queue files while loading older queue files safely as the default appearance.
+- Resolves the exact Vehicle record for event and collaboration ships that share a model directory, preventing another ship's camouflage or weapon layout from being selected.
+- Keeps Legends on its verified default appearance until trustworthy per-ship permanent-camouflage links are available.
+- Verifies the workflow with a real PC Aki G `Skyward Grace` export and the complete nine-stage self-test suite.
+
+## 5.0.49 double-sided armor and detail-preserving permanent camouflage
+
+- Renders armor plates from both sides so a selected plate remains visible from below and from internal camera positions.
+- Keeps armor depth testing, depth writing, and deterministic single-pass transparency, so nearer plates still occlude hidden armor.
+- Composites tiled permanent-camouflage paint over the original high-resolution albedo instead of replacing it with a tiny color tile.
+- Preserves the base surface detail and alpha while applying the camouflage scheme's UV scale and offset during baking.
+- Invalidates old ship GLB caches through the updated exporter fingerprint, preventing reuse of previously flattened camouflage output.
+- Verifies the change with a texture-compositing unit test, a release exporter build, a real New Jersey viewer regression, and the complete nine-stage self-test suite.
+
+## 5.0.48 permanent camouflage export and armor reference control
+
+- Adds a persistent **Reference ship opacity** control for the desaturated exterior shown behind armor, independently from armor-plate opacity.
+- Adds **Ship permanent camouflage** extraction for PC and Korabli ships. The exporter resolves the selected ship's own permanent camouflage and promotes it to the default OBJ/MTL material set.
+- Preserves `KHR_texture_transform` UV offset, scale, rotation, and texture-coordinate selection while converting native GLB data to OBJ.
+- Separates default-paint and permanent-camouflage caches so switching paint modes cannot reuse a stale model.
+- Verifies the workflow with a native Aki permanent-camouflage export, synthetic UV-transform coverage, and a real Aragón armor-view browser regression.
+- Keeps Legends on its verified default-paint extraction path until its separate assembly format exposes an equally reliable camouflage contract.
+
+## 5.0.47 uniform inspection lighting and clearer armor context
+
+- Uses an unlit base-color material in normal model mode and applies one shared studio brightness gain to every OBJ part, preventing normals, mirrored surfaces, and separate part origins from creating false two-tone paint.
+- Keeps exposure, key-light, and environment-light controls responsive without making their normal-view result directional; **Detailed PBR preview** remains the explicit directional-lighting mode.
+- Keeps **Albedo inspection** as the raw, tone-mapping-free texture diagnostic.
+- Raises the non-occluding armor-context ship visibility slightly while preserving armor depth testing and depth writing, so the exterior remains readable without hiding internal plates.
+- Verifies the complete mode cycle with a real 74-part Aragón export: uniform normal lighting, raw albedo, opt-in PBR, armor depth, and model restoration.
+## 5.0.46 balanced armor context and responsive lighting
+
+- Restores a neutral, light-responsive material for normal model viewing, so exposure, key-light, and environment-light controls affect the ship again.
+- Makes **Albedo inspection** an explicit unlit diagnostic mode; switching it off restores the neutral lit material, while **Detailed PBR preview** remains a separate opt-in mode.
+- Keeps a faint, desaturated ship exterior in armor mode for spatial reference without writing that reference shell to the depth buffer.
+- Continues to write visible armor plates to depth, so the nearest deck, barbette, belt, or bulkhead correctly hides armor behind it while filters no longer leave an unexplained floating block.
+## 5.0.45 physically occluding armor transparency
+
+- Keeps armor opacity adjustable while writing every visible plate to the depth buffer.
+- Makes the nearest deck, belt, turret face, or bulkhead hide armor behind it instead of blending the entire armor stack like an X-ray view.
+- Preserves front-face armor rendering and complete isolation from the regular textured ship model.
+- Adds real extracted-ship browser checks for armor depth testing, depth writing, and the occlusion material contract.
+
+## 5.0.44 armor isolation, neutral paint, and Legends diagnostics
+
+- Hides every regular ship mesh while armor mode is active, so hull paint and superstructure textures cannot block the internal armor layout.
+- Uses the original base-color texture through an unlit paint material in normal model mode. Directional PBR lighting is now opt-in instead of altering the default paint.
+- Restores the exact pre-armor mesh visibility when returning to model mode.
+- Shows the discovered and fully assemblable Legends catalog counts separately; 468 displayed ships can be the supported subset of 995 discovered records.
+- Emits child-process start, heartbeat, completion, elapsed-time, and log-path diagnostics during Legends assembly so a slow or stalled step is identifiable.
+- Validates normal paint, optional PBR, isolated armor, and model restoration with a real extracted ship in a browser regression test.
+
 ## 5.0.42 GM3D-compatible materials and isolated PBR channels
 
 - Matches the default OBJ material contract against a GM3D Aki G reference export.
@@ -166,7 +243,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.42 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.53 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -277,7 +354,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.42 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.53 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 

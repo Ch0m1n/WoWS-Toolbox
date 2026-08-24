@@ -1,4 +1,4 @@
-WoWS Toolbox 5.0.42
+WoWS Toolbox 5.0.53
 =======================================
 
 [한국어 빠른 사용법]
@@ -24,12 +24,14 @@ Windows 커뮤니티 도구입니다.
    출력 폴더와 품질 설정을 확인하고 "추출 준비 검사"를 실행합니다.
    검사를 통과하면 "대기열 모델 추출"을 눌러 OBJ·MTL·PNG를 생성합니다.
    선체와 무장은 한 OBJ 안에서 선택 가능한 개별 오브젝트로 유지됩니다.
+   PC판·코라블리는 기본 도색 또는 해당 함선의 고유 영구 위장을 선택할 수 있습니다.
 
 5. 모델과 장갑 확인
    3D 모델 뷰어에서 "최근 추출 열기" 또는 "OBJ 파일 열기"를 사용합니다.
    파트 선택·숨김·단독 보기·이동·원위치, 장갑 두께·구역,
    해수면·단면·측정·비교 기능을 사용할 수 있습니다. 오른쪽 패널의
    경계와 구분선을 드래그하면 너비와 각 영역 높이를 조절할 수 있습니다.
+   장갑판과 뒤쪽 외형 함선의 불투명도는 각각 따로 조절할 수 있습니다.
    뷰어에서 편집한 내용은 원본 OBJ에 저장되지 않습니다.
 
 6. 업데이트 확인
@@ -80,12 +82,14 @@ part-based OBJ models, and inspecting models and armor in the built-in viewer.
    Confirm the output folder and quality settings, then run Readiness check.
    After it passes, click Extract queued models to create OBJ, MTL, and PNG files.
    Hull and weapon parts remain individually selectable objects in one OBJ.
+   PC and Korabli can use default paint or the selected ship permanent camouflage.
 
 5. Inspect models and armor
    In the 3D Model Viewer, use Open recent extraction or Open OBJ file.
    You can select, hide, isolate, move, or reset parts; inspect armor thickness
    and zones; and use waterline, section, measurement, and comparison tools.
    Drag inspector borders to resize its width and section heights.
+   Armor plates and the reference ship have separate opacity controls.
 
 6. Check for updates
    In Settings > Updates, enable or disable Check automatically at startup.

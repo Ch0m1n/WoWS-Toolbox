@@ -88,6 +88,62 @@ class BatchOutputTests(unittest.TestCase):
                 EXTRACT.extract_legends(args, root / "Wrong_Full")
 
 
+    def test_successful_legends_output_is_published_at_ship_root(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run_root = root / "PXTEST_Ship_Full"
+            scene = run_root / "scene"
+            textures = scene / "textures"
+            logs = run_root / "logs"
+            generated = run_root / "generated"
+            diagnostics = root / "diagnostics"
+            textures.mkdir(parents=True)
+            logs.mkdir()
+            generated.mkdir()
+            (scene / "PXTEST_Ship_Editable.obj").write_text("mtllib ship.mtl\\n")
+            (scene / "ship.mtl").write_text("newmtl hull\\n")
+            (textures / "hull.png").write_bytes(b"texture")
+            (logs / "pipeline.log").write_text("ok")
+            (generated / "intermediate.obj").write_text("temporary")
+            manifest = run_root / "selected_ship_full.pipeline.json"
+            manifest.write_text('{"acceptance":{"passed":true}}')
+
+            result = EXTRACT.publish_legends_output(
+                run_root, scene, manifest, diagnostics
+            )
+
+            self.assertTrue((run_root / "PXTEST_Ship_Editable.obj").is_file())
+            self.assertTrue((run_root / "ship.mtl").is_file())
+            self.assertTrue((run_root / "textures" / "hull.png").is_file())
+            self.assertFalse(scene.exists())
+            self.assertFalse(generated.exists())
+            self.assertFalse((run_root / "logs").exists())
+            self.assertFalse(manifest.exists())
+            diagnostics_dir = Path(result["diagnostics_dir"])
+            self.assertTrue((diagnostics_dir / "logs" / "pipeline.log").is_file())
+            self.assertTrue(
+                (diagnostics_dir / "selected_ship_full.pipeline.json").is_file()
+            )
+            self.assertEqual(result["cleanup_warnings"], [])
+
+    def test_legends_publish_refuses_name_collision_without_moving_files(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            run_root = root / "PXTEST_Ship_Full"
+            scene = run_root / "scene"
+            scene.mkdir(parents=True)
+            (scene / "ship.obj").write_text("scene")
+            (run_root / "ship.obj").write_text("existing")
+            manifest = run_root / "selected_ship_full.pipeline.json"
+            manifest.write_text("{}")
+            with self.assertRaises(FileExistsError):
+                EXTRACT.publish_legends_output(
+                    run_root, scene, manifest, root / "diagnostics"
+                )
+            self.assertTrue((scene / "ship.obj").is_file())
+            self.assertTrue(manifest.is_file())
+
+
 class ItemContractTests(unittest.TestCase):
     def test_legends_quality_profile_is_forced_and_requested_values_preserved(self) -> None:
         common = {
@@ -106,6 +162,7 @@ class ItemContractTests(unittest.TestCase):
         }
         args = BATCH.item_namespace(common, item)
         self.assertEqual((args.requested_lod, args.lod), (2, 0))
+        self.assertEqual(args.camouflage, "default")
         self.assertEqual(
             (args.requested_texture_max_size, args.texture_max_size),
             (1024, 0),
@@ -117,6 +174,7 @@ class ItemContractTests(unittest.TestCase):
             "toolbox_root": str(BACKEND.parent),
             "output_root": str(BACKEND.parent / "output"),
             "formats": "obj",
+            "camouflage": "native",
         }
         item = {
             "source": "pc",
@@ -127,11 +185,51 @@ class ItemContractTests(unittest.TestCase):
         }
         args = BATCH.item_namespace(common, item)
         self.assertEqual(args.hull_upgrade, "B_UPGRADE")
+        self.assertEqual(args.camouflage, "native")
         self.assertTrue(BATCH.item_contract(args, 1)["ok"])
         args.hull_upgrade = "../unsafe"
         result = BATCH.item_contract(args, 1)
         self.assertFalse(result["ok"])
         self.assertIn("안전하지", result["message"])
+
+    def test_item_camouflage_overrides_common_and_separates_output(self) -> None:
+        common = {
+            "toolbox_root": str(BACKEND.parent),
+            "output_root": str(BACKEND.parent / "output"),
+            "formats": "obj",
+            "camouflage": "default",
+        }
+        item = {
+            "source": "pc",
+            "game_dir": str(BACKEND.parent),
+            "ship_index": "PJSD001",
+            "display_name": "Aki G",
+            "camouflage": "PJES397_Golden_Aki",
+        }
+        args = BATCH.item_namespace(common, item)
+        self.assertEqual(args.camouflage, "PJES397_Golden_Aki")
+        with tempfile.TemporaryDirectory() as temporary:
+            args.output_root = Path(temporary)
+            output = BATCH.output_for(args, set())
+        self.assertIn("camo-PJES397_Golden_Aki", output.name)
+
+    def test_legends_rejects_non_default_camouflage(self) -> None:
+        common = {
+            "toolbox_root": str(BACKEND.parent),
+            "output_root": str(BACKEND.parent / "output"),
+            "formats": "obj",
+        }
+        item = {
+            "source": "legends",
+            "game_dir": str(BACKEND.parent),
+            "ship_key": "PXTEST_Ship",
+            "selected_model_path": "content/gameplay/usa/ship/test/PXTEST_Ship",
+            "display_name": "Test Ship",
+            "camouflage": "PCEM017_Steel_10lvl",
+        }
+        result = BATCH.item_contract(BATCH.item_namespace(common, item), 1)
+        self.assertFalse(result["ok"])
+        self.assertIn("지원하지", result["message"])
 
     def test_unsafe_legends_model_path_is_rejected(self) -> None:
         args = SimpleNamespace(
@@ -182,6 +280,20 @@ class ValidationTests(unittest.TestCase):
     def test_unknown_format_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "지원하지 않는 출력 형식"):
             EXTRACT.parse_formats("obj,usd")
+
+    def test_camouflage_selection_validation_and_output_stem(self) -> None:
+        self.assertEqual(
+            EXTRACT.validate_camouflage_selection("PCEM017_Steel_10lvl"),
+            "PCEM017_Steel_10lvl",
+        )
+        self.assertEqual(
+            EXTRACT.ship_output_stem(
+                "Aki G", "PJSD001", camouflage="PJES397_Golden_Aki"
+            ),
+            "Aki G_PJSD001_camo-PJES397_Golden_Aki",
+        )
+        with self.assertRaisesRegex(ValueError, "안전하지"):
+            EXTRACT.validate_camouflage_selection("../unsafe")
 
     def test_prefetch_cancel_only_applies_before_promotion(self) -> None:
         args = SimpleNamespace(

@@ -75,6 +75,21 @@ class PbrMaterialsTests(unittest.TestCase):
                 )
             self.assertEqual(contract["cache"]["extraction_calls"], 0)
             self.assertEqual(contract["coverage"]["pbr_materials"], 1)
+            self.assertEqual(contract["naming"], "readable-role-suffix")
+            self.assertEqual(
+                set(contract["texture_files"]),
+                {
+                    "textures/Paint_ao.png",
+                    "textures/Paint_metallic_gloss.png",
+                    "textures/Paint_metalness.png",
+                    "textures/Paint_normal.png",
+                    "textures/Paint_roughness.png",
+                    "textures/Paint_specular.png",
+                },
+            )
+            self.assertTrue(
+                all(not __import__("re").search(r"_[0-9a-f]{8}_", name) for name in contract["texture_files"])
+            )
 
     def test_cached_output_contract_keeps_source_mg(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

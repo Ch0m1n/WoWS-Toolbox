@@ -24,7 +24,12 @@ NATIVE.Image.new("RGBA", (1, 1), (255, 0, 0, 255)).save(_png_stream, format="PNG
 PNG = _png_stream.getvalue()
 
 
-def synthetic_glb(path: Path, *, duplicate_hull_primitive: bool = False) -> None:
+def synthetic_glb(
+    path: Path,
+    *,
+    duplicate_hull_primitive: bool = False,
+    texture_transform: dict | None = None,
+) -> None:
     binary = bytearray()
     views = []
 
@@ -55,6 +60,11 @@ def synthetic_glb(path: Path, *, duplicate_hull_primitive: bool = False) -> None
         "indices": 3,
         "material": 0,
     }
+    base_color_texture = {"index": 0}
+    if texture_transform is not None:
+        base_color_texture["extensions"] = {
+            "KHR_texture_transform": texture_transform
+        }
     document = {
         "asset": {"version": "2.0"},
         "scene": 0,
@@ -75,7 +85,9 @@ def synthetic_glb(path: Path, *, duplicate_hull_primitive: bool = False) -> None
         "materials": [
             {
                 "name": "SHIPMAT_PBS_Hull",
-                "pbrMetallicRoughness": {"baseColorTexture": {"index": 0}},
+                "pbrMetallicRoughness": {
+                    "baseColorTexture": base_color_texture
+                },
             }
         ],
         "textures": [{"source": 0}],
@@ -133,12 +145,48 @@ class NativeGlbExportTests(unittest.TestCase):
             self.assertIn("v 2 3 4", obj)
             self.assertIn("vt 0 1", obj)
             self.assertTrue(args.output.with_suffix(".mtl").is_file())
-            texture = root / "textures" / "TestTexture.png"
+            texture = root / "textures" / "TestTexture_albedo.png"
             self.assertTrue(texture.is_file())
+            self.assertIn(
+                "map_Kd textures/TestTexture_albedo.png",
+                args.output.with_suffix(".mtl").read_text(encoding="utf-8"),
+            )
+            manifest = json.loads((root / "texture_manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["naming"], "readable-role-suffix")
+            self.assertEqual(manifest["textures"][0]["output"], "textures/TestTexture_albedo.png")
+            self.assertEqual(report["texture_naming"], "readable-role-suffix")
             shared = next((root / "shared").rglob("*.png"))
             cached_bytes = shared.read_bytes()
             texture.write_bytes(b"user-edited")
             self.assertEqual(shared.read_bytes(), cached_bytes)
+
+    def test_bakes_base_color_texture_transform_into_obj_uvs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "camo.glb"
+            synthetic_glb(
+                source,
+                texture_transform={
+                    "offset": [0.25, 0.5],
+                    "scale": [2.0, 3.0],
+                },
+            )
+            args = SimpleNamespace(
+                input=source,
+                output=root / "camo.obj",
+                report=root / "export.json",
+                formats="obj",
+                texture_max_size=0,
+                texture_library=None,
+                pbr_exporter=None,
+                pbr_game_dir=None,
+                pbr_cache=None,
+            )
+            NATIVE.build(args)
+            obj = args.output.read_text(encoding="utf-8")
+            self.assertIn("vt 0.25 0.5", obj)
+            self.assertIn("vt 2.25 0.5", obj)
+            self.assertIn("vt 0.25 -2.5", obj)
 
     def test_mtl_emits_pbr_channel_contract(self) -> None:
         document = {

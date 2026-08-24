@@ -23,6 +23,8 @@ from extract_ship import (  # noqa: E402
     latest_build,
     next_output_dir,
     safe_name,
+    ship_output_stem,
+    validate_camouflage_selection,
     validate_output_child,
     validate_output_location,
 )
@@ -176,6 +178,9 @@ def item_namespace(common: dict, item: dict) -> SimpleNamespace:
         run_slug=run_slug,
         ship_index=str(item.get("ship_index", "")),
         hull_upgrade=str(item.get("hull_upgrade", "")),
+        camouflage=validate_camouflage_selection(
+            item.get("camouflage", common.get("camouflage", "default"))
+        ),
         display_name=str(item.get("display_name", "")),
         oodle_dll=p(common.get("oodle_dll")),
         cache_root=p(common.get("cache_root")),
@@ -209,8 +214,8 @@ def output_for(args: SimpleNamespace, reserved: set[str]) -> Path:
         reserved.add(str(candidate).casefold())
         return candidate
 
-    stem = safe_name(
-        f"{args.display_name or args.ship_index or args.ship_key}_{args.ship_index or args.ship_key}"
+    stem = ship_output_stem(
+        args.display_name, args.ship_index, args.ship_key, args.camouflage
     )
     candidate = next_output_dir(args.output_root, stem, args.overwrite)
     serial = 2
@@ -278,6 +283,8 @@ def compatibility(args: SimpleNamespace, previous: dict | None = None) -> dict:
 def item_contract(args: SimpleNamespace, index: int) -> dict:
     errors: list[str] = []
     if args.source == "legends":
+        if getattr(args, "camouflage", "default") != "default":
+            errors.append("Legends 영구 위장 추출은 아직 지원하지 않아요")
         if not args.ship_key:
             errors.append("Legends 함선 키가 비어 있어요")
         model_path = args.selected_model_path.replace("\\", "/").strip("/")

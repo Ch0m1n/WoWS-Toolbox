@@ -125,13 +125,13 @@ foreach ($marker in @(
     'AllowDrop="True"', 'function Save-QueueFile', 'function Load-QueueFile',
     'function Start-PersistentBatchExtraction', 'function Show-CompletionNotification',
     'OpenCompareModelButton', 'FormatCombo', 'TextureCombo', 'LodCombo',
-    'LanguageCombo', 'Convert-XamlToUiLanguage', 'Get-WoWSToolboxLanguageMarker',
+    'CamouflageCombo', 'CamouflageCatalogVersion', '$staleCamouflageCatalog', 'LanguageCombo', 'Convert-XamlToUiLanguage', 'Get-WoWSToolboxLanguageMarker',
     'function Update-DynamicUiLanguage',
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.42',
-    'ConvertTo-ValidatedQueueEntries',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.53',
+    'ConvertTo-ValidatedQueueEntries', '[PIPELINE] ', 'child_heartbeat',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
     '$rowContainer.Item.QueueSelected = $true', '& $applyPickerSelection',
@@ -218,6 +218,9 @@ $pipelineText = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'FullAsse
 $pipelineWrapperText = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'FullAssembly\SelectedShip\Extract-SelectedShipFull.ps1')
 foreach ($marker in @('PYTHONUTF8', 'PYTHONIOENCODING', 'sys.stdout.reconfigure')) {
     if (-not $pipelineText.Contains($marker)) { throw "Pipeline UTF-8 marker missing: $marker" }
+}
+foreach ($marker in @('"event": "child_start"', '"event": "child_heartbeat"', '"event": "child_complete"')) {
+    if (-not $pipelineText.Contains($marker)) { throw "Pipeline liveness marker missing: $marker" }
 }
 foreach ($marker in @('PYTHONUTF8', 'PYTHONIOENCODING', '[Console]::OutputEncoding')) {
     if (-not $pipelineWrapperText.Contains($marker)) { throw "Pipeline wrapper UTF-8 marker missing: $marker" }
@@ -323,7 +326,7 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerI18n -notmatch 'formalKoreanReplacements' -or
     $viewerI18n -notmatch 'language === ''ko''.*formalizeKorean' -or
     $viewerIndex -match 'v=5\.0\.30' -or
-    $viewerScript -notmatch "version: '5\.0\.42'" -or
+    $viewerScript -notmatch "version: '5\.0\.53'" -or
     $advanced -match 'v=5\.0\.30' -or
     $viewerCss -notmatch '#app \{[^}]*grid-template-rows: minmax\(0, 1fr\);[^}]*overflow: hidden' -or
     $viewerCss -notmatch '\.inspector \{[^}]*min-height: 0;[^}]*overflow: hidden;' -or
@@ -369,18 +372,34 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerScript -notmatch 'loadResourceWithRetry' -or
     $viewerScript -notmatch 'orientObjForViewer' -or
     $viewerScript -notmatch 'metadata-y-up' -or
-    $viewerScript -notmatch 'ARMOR_GHOST_RENDER_ORDER' -or
+    $viewerScript -match 'ARMOR_DEPTH_RENDER_ORDER' -or
+    $viewerScript -match 'viewerArmorMaterialState' -or
+    $viewerScript -match 'material\.colorWrite = false' -or
+    $viewerScript -match 'function setArmorModelHidden' -or
+    $viewerScript -notmatch 'function setArmorModelGhost' -or
+    $viewerIndex -notmatch 'id="armorContextOpacity"' -or
+    $viewerScript -notmatch "ARMOR_CONTEXT_OPACITY_KEY = 'wows-toolbox-viewer-armor-context-opacity-v1'" -or
+    $viewerScript -notmatch 'function setArmorContextOpacity' -or
+    $viewerScript -notmatch 'viewerArmorContextBaseOpacity' -or
+    $viewerI18n -notmatch "'뒤쪽 함선 불투명도': 'Reference ship opacity'" -or
+    $viewerScript -match 'material\.opacity = enabled \? 0\.13' -or
     $viewerScript -notmatch 'material.forceSinglePass = true' -or
     $viewerScript -notmatch 'mesh.renderOrder = ARMOR_RENDER_ORDER_BASE \+ groupIndex' -or
     $viewerScript -notmatch 'normalizeModelMaterials' -or
     $viewerScript -notmatch '  loadShip,' -or
-    $viewerScript -notmatch "viewerMaterialPolicy === 'paint-v6'" -or
+    $viewerScript -notmatch "viewerMaterialPolicy === 'uniform-flat-v8'" -or
     $viewerScript -notmatch 'getMaxAnisotropy' -or
     $viewerScript -notmatch 'LinearMipmapLinearFilter' -or
     $viewerScript -notmatch 'AgXToneMapping' -or
     $viewerScript -notmatch 'createStandardViewerMaterial' -or
+    $viewerScript -notmatch 'const neutral = new THREE\.MeshBasicMaterial' -or
+    $viewerScript -notmatch 'viewerNeutralFlatMaterial: true' -or
+    $viewerScript -notmatch 'viewerFlatBaseColor' -or
+    $viewerScript -notmatch 'function flatLightingGain' -or
+    $viewerScript -notmatch 'function applyFlatLightingGain' -or
+    $viewerScript -notmatch '0\.28 \+ environment \* 0\.5 \+ key \* 0\.3' -or
     $viewerScript -notmatch 'roughnessMap' -or
-    $viewerScript -notmatch "LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v5'" -or
+    $viewerScript -notmatch "LIGHTING_SETTINGS_KEY = 'wows-toolbox-viewer-lighting-v9'" -or
     $viewerScript -notmatch 'metalnessMap: null' -or
     $viewerScript -notmatch 'normalStrengthControl' -or
     $viewerIndex -notmatch 'id="lightingPanel"' -or
@@ -396,22 +415,31 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerScript -notmatch 'Object\.values\(material\.userData\?\.viewerPbrChannels' -or
     $viewerScript -match 'applyStableDoubleSidedNormals' -or
     $viewerScript -notmatch 'applyPbrPreview' -or
+    $viewerScript -notmatch 'function selectSurfacePreview' -or
+    $viewerScript -notmatch "selectSurfacePreview\('albedo'" -or
+    $viewerScript -notmatch 'state\.albedoPreview && state\.pbrPreview' -or
     $viewerScript -match 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
     $viewerVendor -match 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
     $viewerIndex -notmatch '조명과 표면' -or
     $viewerLightingCss -notmatch '\.lighting-desk' -or
-    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.42\.1' -or
-    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.42\.1' -or
+    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.53\.1' -or
+    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.53\.1' -or
     $viewerScript -notmatch 'loadAssemblyMetadata' -or
     $viewerScript -notmatch 'matrixRowsDeterminant' -or
     $viewerScript -notmatch 'assembly-mirrored-standard-double-sided-v4' -or
     $viewerScript -notmatch 'ship-surface-standard-double-sided-v6' -or
     $viewerScript -notmatch 'THREE\.DoubleSide' -or
-    $viewerScript -notmatch 'ARMOR_GHOST_MODEL_TYPES' -or
-    $viewerScript -notmatch 'ensureArmorDepthProxy' -or
-    $viewerScript -notmatch 'colorWrite: false' -or
-    $viewerScript -notmatch 'side: THREE\.FrontSide' -or
+    $viewerScript -match 'ARMOR_OCCLUDER_MODEL_TYPES' -or
+    $viewerScript -match 'setArmorDepthMask' -or
+    $viewerScript -notmatch 'viewerArmorContextMaterial: true' -or
+    $viewerScript -notmatch 'nonOccludingArmorContext: true' -or
+    $viewerScript -notmatch "type === '선체'\) return 0\.25" -or
+    $viewerScript -notmatch "type === '상부구조'\) return 0\.2" -or
     $viewerScript -notmatch 'depthWrite: false' -or
+    $viewerScript -match 'setArmorModelHidden' -or
+    $viewerScript -match 'ensureArmorDepthProxy' -or
+    $viewerScript -notmatch 'depthWrite: true' -or
+    $viewerScript -notmatch 'occludesHiddenArmor = true' -or
     $viewerScript -notmatch 'applyAdaptiveRenderQuality' -or
     $viewerScript -notmatch 'modelRadius / 100' -or
     $assemblerScript -notmatch '_repair_obj_mirrored_winding' -or
@@ -500,6 +528,15 @@ if ($nativeExportText -match 'primitive_fingerprint' -or
     $nativeExportText -match 'seen_primitives') {
     throw 'Unsafe duplicate-primitive compaction returned; repeated GLB draw calls must be preserved.'
 }
+if ($backendExtractText -notmatch 'def validate_camouflage_selection' -or
+    $backendExtractText -notmatch 'parser\.add_argument\("--camouflage", default="default"\)' -or
+    $backendExtractText -notmatch '\["--camouflage", args\.camouflage\]' -or
+    $backendExtractText -notmatch 'args\.camouflage != "default"' -or
+    $backendBatchText -notmatch 'item\.get\("camouflage", common\.get\("camouflage", "default"\)\)' -or
+    $nativeExportText -notmatch 'KHR_texture_transform' -or
+    $nativeExportText -notmatch 'transform_material_uv') {
+    throw 'Permanent-camouflage extraction or OBJ UV-transform contract is missing.'
+}
 
 $launchGuiText = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'GUI\Launch-Gui.ps1')
 foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
@@ -508,8 +545,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.42.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.42') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.53.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.53') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -607,7 +644,7 @@ if ($threeCore.Length -lt 1000000 -or $threeModule.Length -lt 500000 -or
     $notices -notmatch 'RPC\s+`FLOAT64`\s+support') {
     throw 'Dependency or license acceptance failed.'
 }
-$expectedExporterHash = '7BAD019D3752FA4B32BC36D6B1459D1A8F42793E8DC3DD719ADDB3F8236CD8D3'
+$expectedExporterHash = '401077298F115655650E3CCB60B65A55533D3B1DD5B39EC433998D655A0264C6'
 foreach ($relative in @('Backend\wowsunpack.exe', 'Backend\wowsunpack_armor.exe')) {
     $actualHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $relative) -Algorithm SHA256).Hash
     if ($actualHash -ne $expectedExporterHash) {
@@ -653,9 +690,9 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.42 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.53 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.42 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.53 self-tests passed.'
 }
 

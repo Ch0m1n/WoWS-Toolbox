@@ -78,6 +78,52 @@ class CatalogTranslationTests(unittest.TestCase):
         rows = self.catalog_with_translation("  시험함  ")
         self.assertEqual(rows[0]["LocalizedName"], "시험함")
 
+    def test_permanent_camouflages_use_stable_exterior_ids(self) -> None:
+        vehicle = {"permoflages": ["PCEM017_Steel_10lvl", "PCEM188_NY25_10lvl"]}
+        exteriors = {
+            "PCEM017_Steel_10lvl": {
+                "name": "PCEM017_Steel_10lvl",
+                "index": "PCEC017",
+                "camouflage": "colorSchemes/steel",
+                "typeinfo": {"species": "Permoflage", "nation": "USA"},
+            },
+            "PCEM188_NY25_10lvl": {
+                "name": "PCEM188_NY25_10lvl",
+                "index": "PCEC188",
+                "camouflage": "colorSchemes/ny25",
+                "typeinfo": {"species": "Permoflage", "nation": "USA"},
+            },
+        }
+
+        class MappingTranslations:
+            def gettext(self, message: str) -> str:
+                return {
+                    "IDS_PCEM017_STEEL_10LVL": "Steel",
+                    "IDS_PCEM188_NY25_10LVL": "New Year 2025",
+                }.get(message, message)
+
+        choices = CATALOG._pc_camouflages(
+            vehicle, exteriors, {}, MappingTranslations()
+        )
+        self.assertEqual(
+            {choice["Id"] for choice in choices},
+            {"PCEM017_Steel_10lvl", "PCEM188_NY25_10lvl"},
+        )
+        by_id = {choice["Id"]: choice for choice in choices}
+        self.assertEqual(by_id["PCEM017_Steel_10lvl"]["Name"], "Steel")
+        self.assertEqual(
+            by_id["PCEM188_NY25_10lvl"]["Scheme"], "colorSchemes/ny25"
+        )
+
+
+    def test_pc_rows_advertise_camouflage_catalog_version(self) -> None:
+        rows = self.catalog_with_translation("")
+        self.assertEqual(
+            rows[0]["CamouflageCatalogVersion"],
+            CATALOG.CAMOUFLAGE_CATALOG_VERSION,
+        )
+        self.assertEqual(rows[0]["Camouflages"], [])
+
 
 class CatalogHullValidationTests(unittest.TestCase):
     def test_later_existing_hull_is_selected_and_missing_ship_is_unsupported(self) -> None:
