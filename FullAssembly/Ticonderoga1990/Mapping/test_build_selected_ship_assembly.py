@@ -411,6 +411,53 @@ class SelectedShipMappingTests(unittest.TestCase):
         self.assertEqual(evidence["skipped_mount_components"], [])
         self.assertEqual([mount["hardpoint"] for mount in mounts], ["HP_AGM_1"])
 
+    def test_default_named_mount_components_are_neutral_ship_modules(self) -> None:
+        class FakeShip:
+            def __init__(self, components: dict[str, object]) -> None:
+                self.state = (None, None, components)
+
+        hull_dir = "content/gameplay/usa/ship/battleship/ASB017_Montana_1945"
+        hull_model = f"{hull_dir}/ASB017_Montana_1945.model"
+        main_model = "content/gameplay/usa/gun/main/AGM216/AGM216.model"
+        secondary_model = (
+            "content/gameplay/usa/gun/secondary/AGS145/AGS145.model"
+        )
+        components = {
+            "A_Hull": {"model": hull_model},
+            "ArtilleryDefault": {
+                "HP_AGM_1": {"models": [main_model]},
+            },
+            "ATBADefault": {
+                "HP_AGS_1": {"models": [secondary_model]},
+            },
+        }
+        assets = FakeAssets([hull_model])
+        prototypes = FakePrototypes(set(assets.path_to_id.values()))
+
+        mounts, evidence = selected.gameparams_mounts(
+            {"PASB118_Maine": FakeShip(components)},
+            "PASB118_Maine",
+            assets,
+            prototypes,
+            hull_dir,
+        )
+
+        self.assertEqual(
+            evidence["mapped_components"],
+            ["ArtilleryDefault", "ATBADefault"],
+        )
+        self.assertEqual(
+            [mount["hardpoint"] for mount in mounts],
+            ["HP_AGM_1", "HP_AGS_1"],
+        )
+        self.assertEqual(
+            selected._component_category("AirDefenseDefault"),
+            ("AirDefense", "air_defense"),
+        )
+        self.assertEqual(
+            selected._variant_family("ArtilleryDefault", "Artillery"), ""
+        )
+
     def test_mount_selection_separates_vls_auxiliary_model(self) -> None:
         item = {
             "models": [

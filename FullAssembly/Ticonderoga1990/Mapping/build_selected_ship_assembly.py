@@ -273,15 +273,27 @@ def _available_model_path(
 def _component_category(component: str) -> tuple[str, str] | None:
     folded = component.casefold()
     for suffix, category in COMPONENT_SUFFIX_CATEGORIES:
-        if folded == suffix.casefold() or folded.endswith("_" + suffix.casefold()):
+        base = suffix.casefold()
+        default = base + "default"
+        if (
+            folded in {base, default}
+            or folded.endswith("_" + base)
+            or folded.endswith("_" + default)
+        ):
             return suffix, category
     return None
 
 
 def _variant_family(component: str, suffix: str) -> str:
-    if component.casefold() == suffix.casefold():
-        return ""
-    return component[: -(len(suffix) + 1)].upper()
+    folded = component.casefold()
+    for token in (suffix + "Default", suffix):
+        marker = token.casefold()
+        if folded == marker:
+            return ""
+        separator_marker = "_" + marker
+        if folded.endswith(separator_marker):
+            return component[: -len(separator_marker)].upper()
+    return ""
 
 
 def _normalize_selected_model_path(value: str) -> str:
@@ -1193,10 +1205,17 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         for item in combat_mounts
         if item["category"] == "main_artillery"
     }
-    unmapped_main_hps = (
-        sorted(set(authored_main_hps) - resolved_main_hps, key=core.natural_key)
-        if main_artillery_discovered
-        else []
+    # A newly introduced GameParams component naming form must never turn a
+    # fully armed hull into a successful hull-only export.  If Artillery was
+    # recognized, require those authored main-gun hardpoints to resolve as
+    # artillery.  Otherwise accept them only when another recognized combat
+    # family (for example a modern missile launcher) resolved the same HP.
+    resolved_authored_main_hps = (
+        resolved_main_hps if main_artillery_discovered else set(resolved_hps)
+    )
+    unmapped_main_hps = sorted(
+        set(authored_main_hps) - resolved_authored_main_hps,
+        key=core.natural_key,
     )
 
     required_render_paths = {
