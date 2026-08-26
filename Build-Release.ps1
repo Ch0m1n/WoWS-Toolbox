@@ -33,6 +33,7 @@ foreach ($directory in @(
     'Backend',
     'BlenderExtractor',
     'Branding',
+    'docs',
     'FullAssembly',
     'GUI',
     'Runtime',

@@ -14,6 +14,7 @@ Windows 커뮤니티 도구입니다.
    Blitz는 full_bundle(또는 bundle), 사용자가 직접 확보한
    main.*.net.wargaming.wows.blitz.obb, 선택적 DesignData가 함께 있는
    준비된 데이터 폴더를 선택합니다.
+   자세한 준비 방법은 docs\WOWS_BLITZ_GUIDE_KO.md를 확인하세요.
 
 2. 함선 목록 불러오기
    함선 추출 화면에서 게임 소스를 선택하고 "목록 새로고침"을 누릅니다.
@@ -74,6 +75,7 @@ part-based OBJ models, and inspecting models and armor in the built-in viewer.
    Live, public-test, and other installations can be selected directly.
    For Blitz, select a prepared data root containing full_bundle (or bundle),
    the user's main.*.net.wargaming.wows.blitz.obb, and optional DesignData.
+   See docs\WOWS_BLITZ_GUIDE.md for the complete preparation procedure.
 
 2. Load the ship catalog
    On Ship Extraction, select a game source and click Refresh catalog.

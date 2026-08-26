@@ -33,6 +33,7 @@ if (Test-Path -LiteralPath $setupPath) {
 foreach ($relative in @(
     'WoWS Toolbox.exe',
     'README.txt', 'LEGAL_NOTICE.txt',
+    'docs\WOWS_BLITZ_GUIDE.md', 'docs\WOWS_BLITZ_GUIDE_KO.md',
     'Branding\WoWS-Toolbox.ico', 'MANIFEST.sha256',
     'Runtime\Python\python.exe',
     'Runtime\Python\Lib\site-packages\PIL\__init__.py',

@@ -14,6 +14,9 @@ WoWS Blitz는 에뮬레이터를 직접 수정하지 않고, `full_bundle`(또�
 `bundle`)·직접 확보한 `main.*.net.wargaming.wows.blitz.obb`·선택적
 `DesignData`가 들어 있는 준비된 데이터 폴더를 읽기 전용으로 사용해요.
 
+[WoWS Blitz 상세 준비·추출 가이드](docs/WOWS_BLITZ_GUIDE_KO.md)에서 root/ADB
+확인, bundle·OBB 복사, 폴더 검사, 게임 업데이트와 문제 해결 절차를 볼 수 있어요.
+
 ## 5.0.61 WoWS Blitz 무장 텍스처 핫픽스
 
 - 선체가 직접 참조하는 번들만 읽고, 무장 재질이 다시 참조하는 2단계 텍스처

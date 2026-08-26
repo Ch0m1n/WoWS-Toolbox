@@ -527,6 +527,7 @@ $required = @(
     'Viewer\web\vendor\three.core.js', 'Viewer\web\vendor\OrbitControls.js',
     'Viewer\web\vendor\TransformControls.js', 'Viewer\web\vendor\OBJLoader.js',
     'Viewer\web\vendor\MTLLoader.js', 'README.md', 'README_KO.md', 'README.txt',
+    'docs\WOWS_BLITZ_GUIDE.md', 'docs\WOWS_BLITZ_GUIDE_KO.md',
     'CONTRIBUTING.md', 'SECURITY.md', '.gitignore', '.gitattributes',
     '.github\workflows\ci.yml', 'examples\batch-request.example.json',
     'Update-SourceManifest.ps1', 'LEGAL_NOTICE.txt', 'THIRD_PARTY_NOTICES.md',

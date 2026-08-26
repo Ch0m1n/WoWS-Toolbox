@@ -24,6 +24,8 @@ For WoWS Blitz, select a prepared data root containing `full_bundle` (or
 `bundle`), the account's downloaded `main.*.net.wargaming.wows.blitz.obb`,
 and optionally `DesignData` for localized catalog names. The toolbox never
 modifies the emulator or those source files.
+[Detailed WoWS Blitz setup and extraction guide](docs/WOWS_BLITZ_GUIDE.md) ·
+[한국어 가이드](docs/WOWS_BLITZ_GUIDE_KO.md)
 The selected game directory is treated as read-only. WoWS Toolbox writes caches and exported models outside the game installation.
 
 ## Main features
