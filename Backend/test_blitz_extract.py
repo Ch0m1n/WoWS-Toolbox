@@ -9,6 +9,7 @@ from blitz_extract import (
     _include_mesh,
     _priority_obb_names,
     _safe_archive_target,
+    _unity_world_to_obj_matrix,
     _world_matrices,
 )
 
@@ -46,6 +47,21 @@ class BlitzExtractionPureTests(unittest.TestCase):
 
         self.assertEqual(worlds[2][0][3], 3.0)
         self.assertEqual(worlds[2][1][3], 5.0)
+
+    def test_unity_world_matrix_matches_unitypy_obj_x_reflection(self) -> None:
+        unity_world = [
+            [0.0, 0.0, 1.0, 3.0],
+            [0.0, 1.0, 0.0, 4.0],
+            [-1.0, 0.0, 0.0, 5.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ]
+
+        converted = _unity_world_to_obj_matrix(unity_world)
+
+        self.assertEqual(converted[0], [0.0, 0.0, -1.0, -3.0])
+        self.assertEqual(converted[1], [0.0, 1.0, 0.0, 4.0])
+        self.assertEqual(converted[2], [1.0, 0.0, 0.0, 5.0])
+        self.assertEqual(converted[3], [0.0, 0.0, 0.0, 1.0])
 
     def test_obb_priority_targets_common_and_ship_bundles(self) -> None:
         names = [

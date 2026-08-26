@@ -1,4 +1,4 @@
-# WoWS Toolbox 5.0.61
+# WoWS Toolbox 5.0.62
 
 내 PC에 설치된 World of Warships 계열 게임에서 원하는 함선을 골라 파트별 모델로 내보내고, 프로그램 안에서 모델과 장갑을 바로 확인하는 Windows GUI 도구예요.
 
@@ -16,6 +16,20 @@ WoWS Blitz는 에뮬레이터를 직접 수정하지 않고, `full_bundle`(또�
 
 [WoWS Blitz 상세 준비·추출 가이드](docs/WOWS_BLITZ_GUIDE_KO.md)에서 root/ADB
 확인, bundle·OBB 복사, 폴더 검사, 게임 업데이트와 문제 해결 절차를 볼 수 있어요.
+
+## 5.0.62 WoWS Blitz 좌표·Legends 멈춤 방지 핫픽스
+
+- UnityPy가 OBJ 메시의 X축을 반전하는 것과 같은 기준으로 모든 WoWS Blitz
+  파트 배치 행렬도 변환해, Wasp·San Francisco를 비롯한 함선에서 대공포와
+  기타 장비가 선체 반대편으로 뒤집혀 배치되던 문제를 고쳤어요.
+- 현재 확보한 756개 지원 레코드의 고유 선체 번들 734개를 전수 검사했어요.
+  이 중 배치 보정이 필요한 671개와 변경이 필요 없는 63개를 오류 없이
+  판별했고, 실제 Wasp와 San Francisco 수정본도 내장 뷰어에서 확인했어요.
+- Legends 네이티브 부품 변환을 동시 2개·Windows 낮은 우선순위로 제한하고,
+  한 부품이 300초를 넘기면 종료해 Tennessee·Soobrazitelny 같은 함선에서
+  같은 heartbeat만 반복하며 PC와 Windows Explorer가 장시간 붙잡히지 않게 해요.
+- 취소나 제한 시간 초과 시 자식 변환기까지 프로세스 트리 전체를 정리하고,
+  진행 로그에는 실행 중인 부품 수·가장 오래 걸리는 모델·경과 시간을 표시해요.
 
 ## 5.0.61 WoWS Blitz 무장 텍스처 핫픽스
 

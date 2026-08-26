@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -155,6 +156,29 @@ class SelectedShipPipelineTests(unittest.TestCase):
             )
             with self.assertRaises(module.PipelineError):
                 module.mapping_acceptance(path, "PASB207_Connecticut_1944")
+
+    def test_windows_tree_stop_uses_taskkill_for_descendants(self):
+        process = mock.Mock()
+        process.pid = 4321
+        process.poll.return_value = None
+        process.wait.return_value = 0
+        with (
+            mock.patch.object(module.os, "name", "nt"),
+            mock.patch.object(module.subprocess, "run") as taskkill,
+        ):
+            taskkill.return_value.returncode = 0
+            module.terminate_process_tree(process)
+
+        command = taskkill.call_args.args[0]
+        self.assertEqual(
+            ["taskkill", "/PID", "4321", "/T", "/F"],
+            command,
+        )
+        process.wait.assert_called_once_with(timeout=5)
+        process.terminate.assert_not_called()
+        process.kill.assert_not_called()
+
+
     def test_run_checked_forwards_output_and_writes_log(self):
         with tempfile.TemporaryDirectory() as temporary:
             log_dir = Path(temporary)

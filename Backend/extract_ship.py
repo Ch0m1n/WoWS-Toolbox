@@ -181,6 +181,41 @@ def exporter_failure_message(failure: BaseException, label: str) -> str:
     return str(failure)
 
 
+def terminate_process_tree(process: subprocess.Popen[str]) -> None:
+    """Stop an extractor child and all of its pipeline descendants."""
+
+    if process.poll() is not None:
+        return
+    if os.name == "nt":
+        tree_stopped = False
+        try:
+            result = subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=15,
+                check=False,
+                creationflags=int(getattr(subprocess, "CREATE_NO_WINDOW", 0)),
+            )
+            tree_stopped = result.returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            pass
+        if tree_stopped:
+            try:
+                process.wait(timeout=5)
+                return
+            except subprocess.TimeoutExpired:
+                pass
+
+    if process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+
+
 def run_stream(
     command: list[str],
     *,
@@ -213,12 +248,7 @@ def run_stream(
     try:
         while True:
             if callable(cancel_check) and cancel_check():
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
+                terminate_process_tree(process)
                 raise RuntimeError("다음 함선의 미리 준비 작업을 취소했어요")
             try:
                 line = lines.get(timeout=0.1)
@@ -239,12 +269,7 @@ def run_stream(
             raise StreamedProcessError(code, command, output_tail)
     finally:
         if process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
+            terminate_process_tree(process)
         reader.join(timeout=1)
         process.stdout.close()
         if reader.is_alive():

@@ -36,6 +36,18 @@ TEXTURE_ROLES = {
 
 Matrix4 = list[list[float]]
 
+# Unity is left-handed, while UnityPy's OBJ exporter changes mesh vertices and
+# normals to a right-handed space by negating X. World transforms read from
+# Transform components are still in Unity space, so every placement matrix
+# must be conjugated by the same reflection before it is applied to the
+# already-converted OBJ vertices.
+UNITY_TO_OBJ_BASIS: Matrix4 = [
+    [-1.0, 0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0],
+    [0.0, 0.0, 1.0, 0.0],
+    [0.0, 0.0, 0.0, 1.0],
+]
+
 
 def safe_name(value: str) -> str:
     cleaned = re.sub(r"[^0-9A-Za-z가-힣._-]+", "_", value).strip("._")
@@ -400,6 +412,15 @@ def _multiply(left: Matrix4, right: Matrix4) -> Matrix4:
     ]
 
 
+def _unity_world_to_obj_matrix(matrix: Matrix4) -> Matrix4:
+    """Match a Unity world transform to UnityPy's X-reflected OBJ vertices."""
+
+    return _multiply(
+        _multiply(UNITY_TO_OBJ_BASIS, matrix),
+        UNITY_TO_OBJ_BASIS,
+    )
+
+
 def _world_matrices(transforms: dict[int, dict[str, Any]]) -> dict[int, Matrix4]:
     identity: Matrix4 = [
         [1.0, 0.0, 0.0, 0.0],
@@ -650,7 +671,7 @@ def _assemble(
         instances += 1
         mesh_counts[mesh_name] += 1
         object_name = safe_name(f"{reader_name(game_object_reader)}_{game_object_id}")
-        matrix = worlds[transform_id]
+        matrix = _unity_world_to_obj_matrix(worlds[transform_id])
         normal_matrix = _inverse_transpose(matrix)
         local_counts = [0, 0, 0]
         materials = renderer_materials.get(game_object_id) or [default_material]
@@ -797,6 +818,12 @@ def extract_blitz(args: Any, output_dir: Path) -> dict[str, Any]:
         "lod": int(args.lod),
         "formats": ["obj"],
         "obj_file": str(assembled["obj_path"]),
+        "coordinate_system": {
+            "source": "Unity left-handed Y-up",
+            "target": "OBJ right-handed Y-up",
+            "basis_conversion": "diag(-1, 1, 1, 1)",
+            "placement_formula": "B * UnityWorld * B",
+        },
         "mtl_file": str(assembled["mtl_path"]),
         "object_count": assembled["instances"],
         "vertex_count": assembled["vertices"],

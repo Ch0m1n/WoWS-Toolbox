@@ -72,6 +72,14 @@ PATTERNS = (
     (r"함선/장비 데이터 ([\d,]+)개를 변환하는 중", r"Converting \1 ship/equipment records"),
     (r"필요한 리소스 ([\d,]+)개를 추출하는 중", r"Extracting \1 required resources"),
     (r"Blender 없이 함선 부품 ([\d,]+)개를 준비하는 중", r"Preparing \1 ship parts without Blender"),
+    (
+        r"Blender 없는 부품 변환 ([\d,]+)/([\d,]+) · 실행 중 ([\d,]+)개 · 최장 ([\d.]+)초: (.+)",
+        r"Blender-free part conversion \1/\2 · \3 active · oldest \4s: \5",
+    ),
+    (
+        r"Blender 없는 부품 변환 ([\d,]+)/([\d,]+) · 실행 중 ([\d,]+)개",
+        r"Blender-free part conversion \1/\2 · \3 active",
+    ),
     (r"Blender 없는 부품 변환 ([\d,]+)/([\d,]+)", r"Blender-free part conversion \1/\2"),
     (r"부품 변환 준비 ([\d,]+)/([\d,]+)", r"Preparing part conversion \1/\2"),
     (r"편집 파트 ([\d,]+)개 · ([A-Za-z0-9,+ ]+) 추출 완료", r"Extracted \1 editable parts · \2"),
@@ -166,7 +174,7 @@ def translate_line(line: str) -> str:
         return line
     prefix = ""
     payload_text = line
-    label = re.match(r"^(\[[A-Z]+\]\s+)(.*)$", line)
+    label = re.match(r"^(\[[A-Z_]+\]\s+)(.*)$", line)
     if label:
         prefix, payload_text = label.group(1), label.group(2)
         nested = re.match(r"^(\[[A-Z]+\]\s+)(.*)$", payload_text)

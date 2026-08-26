@@ -228,6 +228,7 @@ class NativeGlbExportTests(unittest.TestCase):
                 "[WARN] 장갑 메시 추출을 건너뛰어요: exit 2",
                 "[PROGRESS] 함선/장비 데이터 20,811개를 변환하는 중",
                 "[PROGRESS] 필요한 리소스 74개를 추출하는 중",
+                '[PROGRESS] {"message":"Blender 없는 부품 변환 0/105 · 실행 중 2개 · 최장 15.0초: hull.model"}',
             )
             for sample in samples:
                 with self.subTest(sample=sample):
