@@ -1161,7 +1161,7 @@ async function loadModelMetadata(url) {
       if (token.includes('air_defense') || /hp_[a-z]ga/.test(token)) return 'anti_air';
       if (token.includes('torpedo')) return 'torpedo';
       if (token.includes('missile')) return 'missile_launcher';
-      if (token.includes('radar') || token.includes('director')) return 'radar_sensor';
+      if (token.includes('radar') || token.includes('director') || token.includes('rangefinder')) return 'radar_sensor';
       if (token.includes('air_armament') || token.includes('aircraft') || /hp_[a-z]c/.test(token)) return 'aircraft';
       if (token.includes('misc')) return 'decoration';
       return 'other';

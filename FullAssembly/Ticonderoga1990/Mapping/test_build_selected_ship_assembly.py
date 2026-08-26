@@ -153,6 +153,68 @@ class SelectedShipMappingTests(unittest.TestCase):
         )
         self.assertNotIn("HP_AGM_1", [mount["hardpoint"] for mount in mounts])
 
+    def test_numbered_exact_family_outranks_shared_ab_family(self) -> None:
+        class FakeShip:
+            def __init__(self, components: dict[str, object]) -> None:
+                self.state = (None, None, components)
+
+        hull_dir = "content/gameplay/usa/ship/destroyer/ASD005_Farragut"
+        hull_model = f"{hull_dir}/ASD005_Farragut.model"
+        shared_model = (
+            "content/gameplay/usa/gun/secondary/AGS084/AGS084.model"
+        )
+        exact_model = (
+            "content/gameplay/usa/gun/secondary/AGS062/AGS062.model"
+        )
+        components = {
+            "C_Hull": {"model": hull_model},
+            "AB1_127_38": {
+                "HP_AGM_5": {"models": [shared_model]},
+            },
+            "C1_127_38": {
+                "HP_AGM_4": {"models": [exact_model]},
+            },
+        }
+        assets = FakeAssets([hull_model])
+        prototypes = FakePrototypes(set(assets.path_to_id.values()))
+
+        mounts, evidence = selected.gameparams_mounts(
+            {"PASD005_Farragut": FakeShip(components)},
+            "PASD005_Farragut",
+            assets,
+            prototypes,
+            hull_dir,
+        )
+
+        self.assertEqual(evidence["mapped_components"], ["C1_127_38"])
+        self.assertEqual([mount["hardpoint"] for mount in mounts], ["HP_AGM_4"])
+
+    def test_uniform_hp_offset_aligns_to_authored_hull_sequence(self) -> None:
+        mounts = [
+            {
+                "component": "A_AirDefense",
+                "category": "air_defense",
+                "hardpoint": f"HP_GGA_{number}",
+                "selection_evidence": {},
+            }
+            for number in range(4, 18)
+        ]
+        sources = {
+            f"HP_GGA_{number}": [("hull.model", {"index": number})]
+            for number in range(1, 15)
+        }
+
+        aligned, adjustments = selected.align_contiguous_mount_hardpoints(
+            mounts, sources
+        )
+
+        self.assertEqual(
+            [mount["hardpoint"] for mount in aligned],
+            [f"HP_GGA_{number}" for number in range(1, 15)],
+        )
+        self.assertEqual(adjustments[0]["numeric_offset"], -3)
+        self.assertEqual(aligned[0]["original_hardpoint"], "HP_GGA_4")
+
     def test_nested_combat_hardpoint_composes_parent_mount_transform(self) -> None:
         def matrix(x: float, y: float, z: float) -> dict[str, object]:
             values = list(selected.core.IDENTITY)
@@ -457,6 +519,208 @@ class SelectedShipMappingTests(unittest.TestCase):
         self.assertEqual(
             selected._variant_family("ArtilleryDefault", "Artillery"), ""
         )
+
+    def test_model_paths_classify_custom_legends_component_names(self) -> None:
+        main = {
+            "HP_JGM_1": {
+                "models": [
+                    "content/gameplay/japan/gun/main/JGM001/JGM001.model"
+                ]
+            }
+        }
+        torpedo = {
+            "HP_JGT_1": {
+                "models": [
+                    "content/gameplay/japan/gun/torpedo/JGT001/JGT001.model"
+                ]
+            }
+        }
+
+        self.assertEqual(
+            selected._component_category_from_value("AB_127_50", main),
+            ("127_50", "main_artillery"),
+        )
+        self.assertEqual(
+            selected._component_category_from_value("A1_610", torpedo),
+            ("610", "torpedo_launcher"),
+        )
+        self.assertIsNone(
+            selected._component_category_from_value("B_Hull", main)
+        )
+        self.assertEqual(
+            selected._component_category("B_AirDedense"),
+            ("AirDedense", "air_defense"),
+        )
+        self.assertEqual(
+            selected._component_category("FindersDefault"),
+            ("Finders", "rangefinder"),
+        )
+        self.assertIsNotNone(selected.MAIN_ARTILLERY_HP_RE.match("HP_AGM_1"))
+        self.assertIsNotNone(selected.MAIN_ARTILLERY_HP_RE.match("HP_GGM_1"))
+        self.assertIsNotNone(selected.MAIN_ARTILLERY_HP_RE.match("HP_JGM_1"))
+        self.assertIsNone(selected.MAIN_ARTILLERY_HP_RE.match("HP_GGS_1"))
+
+    def test_sole_cross_family_component_is_safe_fallback(self) -> None:
+        class FakeShip:
+            def __init__(self, components: dict[str, object]) -> None:
+                self.state = (None, None, components)
+
+        hull_dir = "content/gameplay/ussr/ship/destroyer/RSD999_Meteor"
+        hull_model = f"{hull_dir}/RSD999_Meteor.model"
+        director_model = (
+            "content/gameplay/ussr/director/RD001/RD001.model"
+        )
+        components = {
+            "B_Hull": {"model": hull_model},
+            "A_Directors": {
+                "HP_RD_1": {"models": [director_model]},
+            },
+        }
+        assets = FakeAssets([hull_model])
+        prototypes = FakePrototypes(set(assets.path_to_id.values()))
+
+        mounts, evidence = selected.gameparams_mounts(
+            {"PRSD999_Meteor": FakeShip(components)},
+            "PRSD999_Meteor",
+            assets,
+            prototypes,
+            hull_dir,
+        )
+
+        self.assertEqual([item["hardpoint"] for item in mounts], ["HP_RD_1"])
+        self.assertEqual(evidence["mapped_components"], ["A_Directors"])
+        self.assertEqual(
+            evidence["fallback_mount_components"],
+            [
+                {
+                    "component": "A_Directors",
+                    "category": "director",
+                    "reason": "sole coherent cross-family HP component",
+                }
+            ],
+        )
+
+    def test_sole_cross_family_component_does_not_override_valid_family(self) -> None:
+        class FakeShip:
+            def __init__(self, components: dict[str, object]) -> None:
+                self.state = (None, None, components)
+
+        hull_dir = "content/gameplay/usa/ship/cruiser/ASC999_Test"
+        hull_model = f"{hull_dir}/ASC999_Test.model"
+        components = {
+            "B_Hull": {"model": hull_model},
+            "B_Artillery": {
+                "HP_AGM_1": {
+                    "models": [
+                        "content/gameplay/usa/gun/main/AGM001/AGM001.model"
+                    ]
+                }
+            },
+            "A_Radars": {
+                "HP_ARS_1": {
+                    "models": [
+                        "content/gameplay/usa/radar/ARS001/ARS001.model"
+                    ]
+                }
+            },
+        }
+        assets = FakeAssets([hull_model])
+        prototypes = FakePrototypes(set(assets.path_to_id.values()))
+
+        mounts, evidence = selected.gameparams_mounts(
+            {"PASC999_Test": FakeShip(components)},
+            "PASC999_Test",
+            assets,
+            prototypes,
+            hull_dir,
+        )
+
+        self.assertEqual([item["hardpoint"] for item in mounts], ["HP_AGM_1"])
+        self.assertEqual(evidence["mapped_components"], ["B_Artillery"])
+        self.assertEqual(evidence["fallback_mount_components"], [])
+        self.assertEqual(
+            evidence["skipped_mount_components"],
+            [
+                {
+                    "component": "A_Radars",
+                    "reason": "different hull variant",
+                }
+            ],
+        )
+
+    def test_identical_cross_family_components_share_safe_fallback(self) -> None:
+        class FakeShip:
+            def __init__(self, components: dict[str, object]) -> None:
+                self.state = (None, None, components)
+
+        hull_dir = "content/gameplay/japan/ship/destroyer/JSD999_Test"
+        hull_model = f"{hull_dir}/JSD999_Test.model"
+        torpedo_model = (
+            "content/gameplay/japan/gun/torpedo/JGT001/JGT001.model"
+        )
+        shared = {"HP_JGT_1": {"models": [torpedo_model]}}
+        components = {
+            "B_Hull": {"model": hull_model},
+            "A1_610": shared,
+            "A2_610": shared,
+        }
+        assets = FakeAssets([hull_model])
+        prototypes = FakePrototypes(set(assets.path_to_id.values()))
+
+        mounts, evidence = selected.gameparams_mounts(
+            {"PJSD999_Test": FakeShip(components)},
+            "PJSD999_Test",
+            assets,
+            prototypes,
+            hull_dir,
+        )
+
+        self.assertEqual([item["hardpoint"] for item in mounts], ["HP_JGT_1"])
+        self.assertEqual(evidence["mapped_components"], ["A1_610"])
+        self.assertEqual(
+            evidence["fallback_mount_components"][0]["reason"],
+            "geometry-identical cross-family HP components",
+        )
+
+    def test_different_cross_family_geometry_remains_unmapped(self) -> None:
+        class FakeShip:
+            def __init__(self, components: dict[str, object]) -> None:
+                self.state = (None, None, components)
+
+        hull_dir = "content/gameplay/japan/ship/destroyer/JSD998_Test"
+        hull_model = f"{hull_dir}/JSD998_Test.model"
+        components = {
+            "B_Hull": {"model": hull_model},
+            "A1_610": {
+                "HP_JGT_1": {
+                    "models": [
+                        "content/gameplay/japan/gun/torpedo/JGT001/JGT001.model"
+                    ]
+                }
+            },
+            "A2_610": {
+                "HP_JGT_2": {
+                    "models": [
+                        "content/gameplay/japan/gun/torpedo/JGT002/JGT002.model"
+                    ]
+                }
+            },
+        }
+        assets = FakeAssets([hull_model])
+        prototypes = FakePrototypes(set(assets.path_to_id.values()))
+
+        mounts, evidence = selected.gameparams_mounts(
+            {"PJSD998_Test": FakeShip(components)},
+            "PJSD998_Test",
+            assets,
+            prototypes,
+            hull_dir,
+        )
+
+        self.assertEqual(mounts, [])
+        self.assertEqual(evidence["mapped_components"], [])
+        self.assertEqual(evidence["fallback_mount_components"], [])
+        self.assertEqual(len(evidence["skipped_mount_components"]), 2)
 
     def test_mount_selection_separates_vls_auxiliary_model(self) -> None:
         item = {

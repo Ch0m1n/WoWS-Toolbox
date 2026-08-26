@@ -45,13 +45,26 @@ COMPONENT_SUFFIX_CATEGORIES = (
     ("UnguidedMissiles", "vertical_launch_system"),
     ("GuidedMissiles", "guided_missile_launcher"),
     ("AirDefense", "air_defense"),
+    ("AirDedense", "air_defense"),
     ("AirArmament", "air_armament"),
     ("AirSupport", "air_support"),
     ("Torpedoes", "torpedo_launcher"),
     ("Artillery", "main_artillery"),
     ("Directors", "director"),
     ("Radars", "radar"),
+    ("Finders", "rangefinder"),
     ("ATBA", "secondary_artillery"),
+)
+
+COMPONENT_MODEL_PATH_CATEGORIES = (
+    ("/gun/main/", "main_artillery"),
+    ("/gun/secondary/", "secondary_artillery"),
+    ("/gun/aaircraft/", "air_defense"),
+    ("/gun/torpedo/", "torpedo_launcher"),
+    ("/director/", "director"),
+    ("/radar/", "radar"),
+    ("/finder/", "rangefinder"),
+    ("/catapult/", "air_armament"),
 )
 
 HULL_SEGMENT_RE = re.compile(
@@ -60,6 +73,7 @@ HULL_SEGMENT_RE = re.compile(
 )
 LOD_TOKEN_RE = re.compile(r"_lod(?:shape)?\d+", re.IGNORECASE)
 MODEL_KEY_RE = re.compile(r"MP_([A-Z]+\d+)", re.IGNORECASE)
+MAIN_ARTILLERY_HP_RE = re.compile(r"^HP_[A-Z]GM_", re.IGNORECASE)
 
 
 def _unique_strings(values: Iterable[str]) -> list[str]:
@@ -210,8 +224,8 @@ def _native_exterior_overrides(
                 hull_override = model.replace("\\", "/")
         for raw_component, component_value in mapping.items():
             component = str(raw_component)
-            if _component_category(component) is None or not isinstance(
-                component_value, dict
+            if not isinstance(component_value, dict) or (
+                _component_category_from_value(component, component_value) is None
             ):
                 continue
             for hardpoint, override in component_value.items():
@@ -282,6 +296,36 @@ def _component_category(component: str) -> tuple[str, str] | None:
         ):
             return suffix, category
     return None
+
+
+def _component_category_from_value(
+    component: str, value: Any
+) -> tuple[str, str] | None:
+    if component.casefold().endswith("_hull"):
+        return None
+    named = _component_category(component)
+    if named is not None:
+        return named
+
+    inferred: set[str] = set()
+    for mapping in core.find_hp_dicts(value):
+        for hardpoint, hp_value in mapping.items():
+            if not isinstance(hardpoint, str) or not hardpoint.startswith("HP_"):
+                continue
+            for text in core.flatten_strings(hp_value):
+                if not isinstance(text, str):
+                    continue
+                normalized = text.replace("\\", "/").casefold()
+                if not normalized.endswith(".model"):
+                    continue
+                for marker, category in COMPONENT_MODEL_PATH_CATEGORIES:
+                    if marker in normalized:
+                        inferred.add(category)
+                        break
+    if len(inferred) != 1:
+        return None
+    suffix = component.split("_", 1)[1] if "_" in component else component
+    return suffix, inferred.pop()
 
 
 def _variant_family(component: str, suffix: str) -> str:
@@ -379,18 +423,19 @@ def _select_hull_model_path(
     return best[0]
 
 
-def _component_rank(component: str, suffix: str, hull_component: str) -> tuple[int, str]:
+def _component_rank(
+    component: str, suffix: str, hull_component: str
+) -> tuple[int, str]:
     family = _variant_family(component, suffix)
     hull_family = hull_component[: -len("_Hull")].upper()
     if family == hull_family:
         return 0, component.casefold()
-    if family.startswith("AB"):
-        return 1, component.casefold()
-    # Legends uses numbered module-family prefixes such as A1_Artillery and
-    # B2_Artillery. The digit identifies a module choice inside the selected
-    # hull family; it is not a different hull. Treating A1 as unrelated to
-    # A_Hull drops every HP_AGM mount on ships such as Alaska.
+    # A numbered exact family (for example C1) is more specific than the
+    # AB/ABC shared family. Farragut C_Hull otherwise receives the five-gun
+    # AB1 layout instead of its authored four-gun C1 layout.
     if re.fullmatch(re.escape(hull_family) + r"\d+", family):
+        return 1, component.casefold()
+    if family.startswith("AB"):
         return 2, component.casefold()
     if hull_family.startswith("A") and family == "A":
         return 2, component.casefold()
@@ -399,6 +444,48 @@ def _component_rank(component: str, suffix: str, hull_component: str) -> tuple[i
     if family in {"R", ""}:
         return 3, component.casefold()
     return 10, component.casefold()
+
+
+def _component_hp_candidates(value: Any) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for candidate_mapping in core.find_hp_dicts(value):
+        hp_items = {
+            key: item
+            for key, item in candidate_mapping.items()
+            if isinstance(key, str) and key.startswith("HP_")
+        }
+        if hp_items:
+            candidates.append(hp_items)
+    return candidates
+
+
+def _best_hp_mapping(
+    candidates: list[dict[str, Any]],
+) -> dict[str, Any]:
+    return max(candidates, key=lambda item: (len(item), sorted(item)))
+
+
+def _hp_mapping_signature(
+    candidates: list[dict[str, Any]],
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    mapping = _best_hp_mapping(candidates)
+    return tuple(
+        (
+            hardpoint,
+            tuple(
+                sorted(
+                    text.replace("\\", "/").casefold()
+                    for text in core.flatten_strings(item)
+                    if isinstance(text, str)
+                    and text.casefold().endswith(".model")
+                )
+            ),
+        )
+        for hardpoint, item in sorted(
+            mapping.items(), key=lambda pair: core.natural_key(pair[0])
+        )
+    )
+
 
 def discover_hull_model_paths(
     hull_model_path: str, assets: Any, prototypes: Any
@@ -557,29 +644,33 @@ def gameparams_mounts(
     discovered_components: list[str] = []
     for raw_component in components:
         component = str(raw_component)
-        classified = _component_category(component)
+        classified = _component_category_from_value(
+            component, components[raw_component]
+        )
         if classified is None:
             continue
         suffix, category = classified
         discovered_components.append(component)
         grouped.setdefault(category, []).append((component, suffix, category))
 
+    has_compatible_hp_components = any(
+        _component_rank(component, suffix, hull_component)[0] < 10
+        and bool(_component_hp_candidates(components[component]))
+        for choices in grouped.values()
+        for component, suffix, _category in choices
+    )
+
     mounts: list[dict[str, Any]] = []
     mapped_components: list[str] = []
+    fallback_components: list[dict[str, str]] = []
     skipped_components: list[dict[str, str]] = []
     for category, choices in grouped.items():
         inspected: list[tuple[tuple[str, str, str], list[dict[str, Any]]]] = []
         for choice in choices:
             component = choice[0]
-            hp_candidates = []
-            for candidate_mapping in core.find_hp_dicts(components[component]):
-                hp_items = {
-                    key: value
-                    for key, value in candidate_mapping.items()
-                    if isinstance(key, str) and key.startswith("HP_")
-                }
-                if hp_items:
-                    hp_candidates.append(hp_items)
+            hp_candidates = _component_hp_candidates(
+                components[component]
+            )
             inspected.append((choice, hp_candidates))
         inspected.sort(
             key=lambda pair: (
@@ -597,18 +688,49 @@ def gameparams_mounts(
             ),
             None,
         )
+        fallback_reason: str | None = None
+        if selected is None:
+            viable = [pair for pair in inspected if pair[1]]
+            if len(viable) == 1 and (
+                not has_compatible_hp_components
+                or viable[0][0][1] == "AirDedense"
+            ):
+                selected = viable[0]
+                fallback_reason = (
+                    "sole coherent cross-family HP component"
+                )
+            elif len(viable) > 1:
+                signatures = {
+                    _hp_mapping_signature(candidates)
+                    for _choice, candidates in viable
+                }
+                if len(signatures) == 1:
+                    selected = viable[0]
+                    fallback_reason = (
+                        "geometry-identical cross-family HP components"
+                    )
         if selected is None:
             for choice, _hp_candidates in inspected:
                 reason = (
-                    "different hull variant"
+                    "component has no HP model dictionary"
+                    if not _hp_candidates
+                    else "different hull variant"
                     if _component_rank(choice[0], choice[1], hull_component)[0] >= 10
-                    else "component has no HP model dictionary"
+                    else "unselected mount component"
                 )
                 skipped_components.append(
                     {"component": choice[0], "reason": reason}
                 )
             continue
         (component, _, _), hp_candidates = selected
+        if fallback_reason:
+            fallback_components.append(
+                {
+                    "component": component,
+                    "category": category,
+                    "reason": fallback_reason,
+                }
+            )
         for choice, candidates in inspected:
             if choice[0] == component:
                 continue
@@ -620,7 +742,7 @@ def gameparams_mounts(
             skipped_components.append(
                 {"component": choice[0], "reason": reason}
             )
-        mapping = max(hp_candidates, key=lambda item: (len(item), sorted(item)))
+        mapping = _best_hp_mapping(hp_candidates)
         mapped_components.append(component)
         for hardpoint, item in mapping.items():
             mounts.append(_mount_from_item(component, category, hardpoint, item))
@@ -663,6 +785,7 @@ def gameparams_mounts(
         "component_order": list(components.keys()),
         "discovered_mount_components": discovered_components,
         "mapped_components": mapped_components,
+        "fallback_mount_components": fallback_components,
         "skipped_mount_components": skipped_components,
         "hull_component": hull_component,
         "base_hull_model_path": base_hull_model_path,
@@ -850,6 +973,96 @@ def _texture_properties(model: dict[str, Any]) -> list[dict[str, Any]]:
         for prop in material.get("properties", [])
         if prop.get("type") == "texture"
     ]
+
+
+def align_contiguous_mount_hardpoints(
+    gp_mounts: list[dict[str, Any]],
+    hp_sources: dict[str, list[tuple[str, dict[str, Any]]]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Align a uniformly shifted direct HP sequence to authored hull nodes."""
+
+    aligned = [dict(mount) for mount in gp_mounts]
+    grouped: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for mount in aligned:
+        key = (mount["component"], mount["category"])
+        grouped.setdefault(key, []).append(mount)
+
+    adjustments: list[dict[str, Any]] = []
+    numbered_hp = re.compile(r"^(HP_[A-Z]+_)(\d+)$", re.IGNORECASE)
+    for (component, category), mounts in grouped.items():
+        matches = [numbered_hp.fullmatch(mount["hardpoint"]) for mount in mounts]
+        if not matches or any(match is None for match in matches):
+            continue
+        typed_matches = [match for match in matches if match is not None]
+        prefixes = {match.group(1).upper() for match in typed_matches}
+        if len(prefixes) != 1:
+            continue
+        if all(len(hp_sources.get(mount["hardpoint"], [])) == 1 for mount in mounts):
+            continue
+
+        prefix = next(iter(prefixes))
+        source_numbers = sorted(int(match.group(2)) for match in typed_matches)
+        target_matches = [
+            (hardpoint, numbered_hp.fullmatch(hardpoint))
+            for hardpoint in hp_sources
+            if hardpoint.upper().startswith(prefix)
+        ]
+        targets = [
+            (hardpoint, match)
+            for hardpoint, match in target_matches
+            if match is not None
+            and match.group(1).upper() == prefix
+            and len(hp_sources[hardpoint]) == 1
+        ]
+        target_numbers = sorted(int(match.group(2)) for _hp, match in targets)
+        if len(source_numbers) != len(target_numbers) or not source_numbers:
+            continue
+        if source_numbers != list(range(source_numbers[0], source_numbers[-1] + 1)):
+            continue
+        if target_numbers != list(range(target_numbers[0], target_numbers[-1] + 1)):
+            continue
+        offsets = {
+            target - source
+            for source, target in zip(source_numbers, target_numbers)
+        }
+        if len(offsets) != 1 or offsets == {0}:
+            continue
+
+        offset = next(iter(offsets))
+        replacements = {}
+        for mount, match in zip(mounts, typed_matches):
+            original = mount["hardpoint"]
+            replacement = f"{match.group(1)}{int(match.group(2)) + offset}"
+            if len(hp_sources.get(replacement, [])) != 1:
+                replacements = {}
+                break
+            replacements[original] = replacement
+        if len(replacements) != len(mounts):
+            continue
+
+        for mount in mounts:
+            original = mount["hardpoint"]
+            mount["hardpoint"] = replacements[original]
+            mount["original_hardpoint"] = original
+            mount["selection_evidence"] = {
+                **mount["selection_evidence"],
+                "authored_contiguous_hp_offset": offset,
+            }
+        adjustments.append(
+            {
+                "component": component,
+                "category": category,
+                "numeric_offset": offset,
+                "hardpoints": replacements,
+                "rule": (
+                    "uniform contiguous GameParams HP sequence aligned to "
+                    "the equally sized authored hull HP sequence"
+                ),
+            }
+        )
+
+    aligned.sort(key=lambda item: core.natural_key(item["hardpoint"]))
+    return aligned, adjustments
 
 
 def resolve_combat_mounts(
@@ -1049,6 +1262,11 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
             misc_key_paths[key] = model_path
             mp_nodes.append((path, node, key))
 
+    gp_mounts, hardpoint_alignment = align_contiguous_mount_hardpoints(
+        gp_mounts, hp_sources
+    )
+    gp_metadata["hardpoint_alignment_overrides"] = hardpoint_alignment
+
     combat_paths = {item["model_path"] for item in gp_mounts}
     action_paths = {
         path
@@ -1189,14 +1407,13 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
     }
     duplicate_hps.update(mount_resolution_duplicates)
     main_artillery_discovered = any(
-        _component_category(str(component)) == ("Artillery", "main_artillery")
-        for component in gp_metadata["discovered_mount_components"]
+        item["category"] == "main_artillery" for item in gp_mounts
     )
     authored_main_hps = sorted(
         (
             hardpoint
             for hardpoint in hp_sources
-            if hardpoint.upper().startswith("HP_AGM_")
+            if MAIN_ARTILLERY_HP_RE.match(hardpoint)
         ),
         key=core.natural_key,
     )
