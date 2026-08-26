@@ -25,6 +25,7 @@ from extract_ship import (  # noqa: E402
     safe_name,
     ship_output_stem,
     validate_camouflage_selection,
+    validate_camouflage_color_scheme,
     validate_output_child,
     validate_output_location,
 )
@@ -182,6 +183,9 @@ def item_namespace(common: dict, item: dict) -> SimpleNamespace:
             item.get("camouflage", common.get("camouflage", "default"))
         ),
         display_name=str(item.get("display_name", "")),
+        camouflage_color_scheme=validate_camouflage_color_scheme(
+            item.get("camouflage_color_scheme", common.get("camouflage_color_scheme", ""))
+        ),
         oodle_dll=p(common.get("oodle_dll")),
         cache_root=p(common.get("cache_root")),
         overwrite=bool(common.get("overwrite", False)),
@@ -215,7 +219,11 @@ def output_for(args: SimpleNamespace, reserved: set[str]) -> Path:
         return candidate
 
     stem = ship_output_stem(
-        args.display_name, args.ship_index, args.ship_key, args.camouflage
+        args.display_name,
+        args.ship_index,
+        args.ship_key,
+        args.camouflage,
+        args.camouflage_color_scheme,
     )
     candidate = next_output_dir(args.output_root, stem, args.overwrite)
     serial = 2
@@ -287,6 +295,8 @@ def item_contract(args: SimpleNamespace, index: int) -> dict:
             errors.append("Legends 영구 위장 추출은 아직 지원하지 않아요")
         if not args.ship_key:
             errors.append("Legends 함선 키가 비어 있어요")
+        if getattr(args, "camouflage_color_scheme", ""):
+            errors.append("Legends 영구 위장 색상표 추출은 아직 지원하지 않아요")
         model_path = args.selected_model_path.replace("\\", "/").strip("/")
         if model_path:
             segments = [segment for segment in model_path.split("/") if segment]

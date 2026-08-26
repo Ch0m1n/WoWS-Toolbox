@@ -66,6 +66,44 @@ The release package includes a private CPython 3.10 runtime and Pillow. Blender 
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.59 viewer texture-cache and interaction hotfix
+
+- Fixes duplicate asynchronous image requests used by materials that reference the same PNG as both `map_Kd` and `map_d`.
+- Prevents an undefined cached `ImageBitmap` from stopping the WebGL render loop, which left some materials dark or incomplete and made camera/part movement appear unresponsive.
+- Live Mecklenburg G validation loaded all 508 parts and 93 materials in both default and detailed PBR modes with zero invalid textures or browser errors; part move and undo remained visible while render frames continued advancing.
+
+## 5.0.58 partial native-exterior hotfix
+
+- Accepts linked Legends `Exterior`/`Skin` records that only specify a runtime material tint and do not replace `A_Hull` or hardpoint models. The exporter keeps the selected base hull instead of aborting the queue item.
+- Fixes Incomparable SE failing with `PBES709_INCOMPARABLE_EXCLUSIVE has no A_Hull model` and records its `mat_SteelStyle2021` material style in the assembly metadata.
+- Live Incomparable SE validation resolved 99/99 combat hardpoints and 610/610 authored misc placements, converted 83 PBR models and 116/116 render sets, and assembled 757 editable objects with 440 textures and no missing map.
+## 5.0.57 Legends native exterior and nested-mount fix
+
+- Applies the default `Exterior`/`Skin` record linked by Legends GameParams instead of exporting the shared undressed module hull. Mecklenburg G now uses its dedicated `GSB423_Mecklenburg_Birthday_26` hull, `GGM3162` main guns, `GGS3163` secondary guns, and golden texture set automatically.
+- Composes turret-mounted AA hardpoints from the parent's raw attachment transform, keeping mesh-axis correction out of authored child coordinates. The four AA mounts on Mecklenburg G's second and third turrets are no longer mirrored toward the opposite side of the turret.
+- Live Mecklenburg G validation resolved all 68 combat hardpoints and converted 67 models, 116 render sets, 508 editable objects, and 306 textures without a missing model, render set, or map.
+- Clarifies in the Legends UI that selectable camouflage variants remain unavailable while each special ship's authored appearance and dedicated models are applied automatically.
+
+## 5.0.56 faster model viewer loading
+
+- Deduplicates repeated MTL texture references and shares identical decoded images and material variants across independently editable parts.
+- Loads only albedo and alpha channels for the initial model view. Normal, roughness, and AO textures are loaded on demand when **Detailed PBR preview** is enabled, while the unused legacy specular map is no longer decoded.
+- Uses asynchronous `ImageBitmap` decoding with a safe `TextureLoader` fallback and avoids cloning geometry that `OBJLoader` already owns uniquely.
+- In the same headless Edge test, the 519-part Mecklenburg G viewer load dropped from 131.7 s to 21.8 s (about 83% faster), resource requests from 262 to 55, and the longest main-thread stall from 87.2 s to about 1.0 s. Deferred PBR channels loaded in about 3.4 s.
+
+## 5.0.55 faster lossless extraction
+
+- Runs lossless PNG compression in a bounded four-worker pool and reuses a decoded-pixel texture cache across later PC/Korabli exports without hard-linking editable outputs.
+- Caches resolved PBR source selections and extracts independent package chunks in parallel, eliminating repeated alias scans while preserving the exact decoded texture pixels.
+- Extracts independent Legends resources with four bounded workers while preserving deterministic CRC records and output order.
+- Live Patrie timing dropped from 105.7 s to 46.9 s with a cold PBR cache and from 26.7 s to 7.5 s on a repeated export. A 234-resource Legends extraction dropped from 23.3 s to 15.9 s.
+## 5.0.54 lossless output optimization and nested Legends mounts
+
+- Reduces full-resolution PC/Korabli OBJ packages by removing same-role duplicate textures, publishing scalar PBR channels as lossless grayscale PNGs, and using maximum lossless PNG compression. A live Patrie extraction dropped from 213.2 MB to 88.7 MB without changing OBJ geometry or decoded texture pixels.
+- Resolves hash-only base-image names through their associated material names so PBR maps are not silently omitted, and versions negative/conversion caches when the channel contract changes.
+- Resolves recursively nested Legends hardpoints such as AA guns mounted on main-gun turrets. The live Mecklenburg G extraction now resolves all 68 combat hardpoints and completes its full OBJ/PBR pipeline.
+- Expands PC/Korabli camouflage selection, preserves alternate color schemes, and localizes camouflage names to the active application language.
+- Expands the Legends catalog from the selected client resources instead of the previous incomplete subset.
 ## 5.0.53 readable texture filenames
 
 - Publishes final PC, Korabli, and Legends texture files with readable material/part names and explicit channel suffixes such as `_albedo`, `_normal`, `_ao`, `_roughness`, and `_metalness`.
@@ -243,7 +281,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.53 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.59 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -354,7 +392,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.53 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.59 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 

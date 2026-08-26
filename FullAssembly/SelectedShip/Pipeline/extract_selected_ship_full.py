@@ -11,6 +11,7 @@ require ``--execute`` and an existing run is never reused unless
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import binascii
 import hashlib
 import json
@@ -634,9 +635,23 @@ def _extract_located(
     max_single_mib: int,
     skip_existing_system: bool = False,
 ) -> tuple[list[Any], list[dict[str, Any]]]:
-    results = []
-    crc_records: list[dict[str, Any]] = []
-    for definition, entry in located:
+    # Resolve the common root before worker threads create child directories.
+    # Windows may otherwise mix normal and extended-length path spellings.
+    extracted_root.mkdir(parents=True, exist_ok=True)
+    configured = os.environ.get(
+        "WOWS_TOOLBOX_LEGENDS_EXTRACT_WORKERS", ""
+    ).strip()
+    try:
+        requested = int(configured) if configured else 4
+    except ValueError:
+        requested = 4
+    workers = max(1, min(8, requested, max(1, len(located))))
+
+    def extract_one(
+        index: int,
+        definition: Mapping[str, Any],
+        entry: AssetEntry,
+    ) -> tuple[int, Any | None, dict[str, Any]]:
         target = extracted_root.joinpath(
             *PurePosixPath(entry.virtual_path).parts
         )
@@ -650,7 +665,9 @@ def _extract_located(
                 raise PipelineError(
                     f"existing sidecar CRC mismatch: {entry.virtual_path}"
                 )
-            crc_records.append(
+            return (
+                index,
+                None,
                 {
                     "path": entry.virtual_path,
                     "kind": definition["kind"],
@@ -658,9 +675,9 @@ def _extract_located(
                     "sha256": actual_sha256,
                     "bytes": target.stat().st_size,
                     "status": "reused",
-                }
+                },
             )
-            continue
+
         result = extract_asset(
             entry,
             extracted_root,
@@ -673,8 +690,9 @@ def _extract_located(
             raise PipelineError(
                 f"post-write CRC mismatch for {entry.virtual_path}"
             )
-        results.append(result)
-        crc_records.append(
+        return (
+            index,
+            result,
             {
                 "path": entry.virtual_path,
                 "kind": definition["kind"],
@@ -682,8 +700,35 @@ def _extract_located(
                 "sha256": actual_sha256,
                 "bytes": result.target.stat().st_size,
                 "status": result.status,
-            }
+            },
         )
+
+    ordered: dict[int, tuple[Any | None, dict[str, Any]]] = {}
+    if workers == 1:
+        for index, (definition, entry) in enumerate(located):
+            completed_index, result, record = extract_one(
+                index, definition, entry
+            )
+            ordered[completed_index] = (result, record)
+    else:
+        with ThreadPoolExecutor(
+            max_workers=workers, thread_name_prefix="wows-legends-extract"
+        ) as pool:
+            futures = {
+                pool.submit(extract_one, index, definition, entry): index
+                for index, (definition, entry) in enumerate(located)
+            }
+            for future in as_completed(futures):
+                completed_index, result, record = future.result()
+                ordered[completed_index] = (result, record)
+
+    results = []
+    crc_records: list[dict[str, Any]] = []
+    for index in range(len(located)):
+        result, record = ordered[index]
+        if result is not None:
+            results.append(result)
+        crc_records.append(record)
     return results, crc_records
 
 

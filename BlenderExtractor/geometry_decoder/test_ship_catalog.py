@@ -28,7 +28,9 @@ from extract_legends_ship import find_ship_index, select_hull_assets  # noqa: E4
 from ship_catalog import (  # noqa: E402
     HULL_SUFFIXES,
     MoFormatError,
+    NeutralObject,
     _candidate_row,
+    _game_params_catalog_rows,
     deduplicate_catalog,
     find_global_mo,
     localize_catalog_rows,
@@ -87,6 +89,13 @@ def hull_assets(base: str, parent: str | None = None) -> list[AssetEntry]:
     return result
 
 
+def game_params_ship(model_path: str | None) -> NeutralObject:
+    ship = NeutralObject()
+    components = {"A_Hull": {"model": model_path}} if model_path is not None else {}
+    ship.state = (None, None, components)
+    return ship
+
+
 def mo_fixture(
     entries: list[tuple[bytes, bytes]],
     *,
@@ -136,11 +145,7 @@ def mo_fixture(
         for descriptor in translation_descriptors
     )
     return bytes(
-        header
-        + original_table
-        + translation_table
-        + original_blob
-        + translation_blob
+        header + original_table + translation_table + original_blob + translation_blob
     )
 
 
@@ -159,7 +164,6 @@ class VertexLayoutTests(unittest.TestCase):
         self.assertTrue(VERTEX_LAYOUTS[parsed_format].is_skinned)
         self.assertEqual((1.0, 3.0, 2.0), vertices[0].position)
         self.assertEqual((0.75, 0.75), vertices[0].uv)
-
 
     def test_face_winding_consensus_flips_globally_inverted_normals(self):
         vertices = [
@@ -185,6 +189,7 @@ class VertexLayoutTests(unittest.TestCase):
         self.assertFalse(flipped)
         self.assertEqual(vertices, repaired)
 
+
 class ShipCatalogTests(unittest.TestCase):
     def test_powershell_wrappers_disable_bytecode_cache(self):
         for filename in (
@@ -197,9 +202,7 @@ class ShipCatalogTests(unittest.TestCase):
                 self.assertNotIn("& $Python @arguments", source)
 
     def test_t8l_and_update_filename_identity(self):
-        identity = parse_index_identity(
-            "zupd007_T8L_PJSB018_Yamato_1944.idx"
-        )
+        identity = parse_index_identity("zupd007_T8L_PJSB018_Yamato_1944.idx")
         self.assertIsNotNone(identity)
         self.assertEqual(identity["tier"], 8)
         self.assertEqual(identity["ship_code"], "PJSB018")
@@ -213,17 +216,13 @@ class ShipCatalogTests(unittest.TestCase):
             "JSB409_Yamato_NY",
             "JSB039_Yamato_1945",
         ]
-        entries = [
-            entry for variant in variants for entry in hull_assets(variant)
-        ]
+        entries = [entry for variant in variants for entry in hull_assets(variant)]
         discovered = find_complete_hull_geometries(entries)
         self.assertEqual(
             {base for _, base, _ in discovered},
             set(variants),
         )
-        identity = parse_index_identity(
-            "zupd007_T8L_PJSB018_Yamato_1944.idx"
-        )
+        identity = parse_index_identity("zupd007_T8L_PJSB018_Yamato_1944.idx")
         rows = [
             _candidate_row(
                 Path("zupd007_T8L_PJSB018_Yamato_1944.idx"),
@@ -239,10 +238,84 @@ class ShipCatalogTests(unittest.TestCase):
         self.assertTrue(all(row["selectable"] for row in rows))
         self.assertTrue(
             any(
-                row["display_label"]
-                == "Yamato StarTrek [JSB403] — Tier 8"
+                row["display_label"] == "Yamato StarTrek [JSB403] — Tier 8"
                 for row in rows
             )
+        )
+
+    def test_live_game_params_hull_without_legacy_diffuse_is_selectable(self):
+        base = "GSB047_Mecklenburg_1945"
+        parent = f"content/gameplay/germany/ship/battleship/{base}"
+        model_path = f"{parent}/{base}.model"
+        entries = [
+            entry
+            for entry in hull_assets(base, parent)
+            if entry.extension == ".geometry"
+        ]
+        identity = parse_index_identity("zupd127_PGSB610_Mecklenburg.idx")
+        package_row = _candidate_row(
+            Path("zupd127_PGSB610_Mecklenburg.idx"),
+            identity,
+            (parent, base, entries),
+            entries,
+            False,
+        )
+
+        rows = _game_params_catalog_rows(
+            [package_row],
+            {"PGSB610_Mecklenburg": game_params_ship(model_path)},
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["selectable"])
+        self.assertEqual(rows[0]["support_level"], "full-assembly")
+        self.assertEqual(rows[0]["game_params_key"], "PGSB610_Mecklenburg")
+        self.assertEqual(rows[0]["model_path"], model_path)
+
+    def test_package_only_hull_is_not_emitted_as_a_live_ship(self):
+        base = "ASC003_Albany_1898"
+        parent = f"content/gameplay/usa/ship/cruiser/{base}"
+        entries = hull_assets(base, parent)
+        package_row = _candidate_row(
+            Path("PASC003_Albany_1898.idx"),
+            parse_index_identity("PASC003_Albany_1898.idx"),
+            (parent, base, entries[: len(HULL_SUFFIXES)]),
+            entries,
+            False,
+        )
+
+        rows = _game_params_catalog_rows(
+            [package_row],
+            {"PASC003_Albany_1898": game_params_ship(None)},
+        )
+
+        self.assertEqual(rows, [])
+
+    def test_distinct_ship_keys_sharing_one_live_model_are_preserved(self):
+        base = "GSB047_Mecklenburg_1945"
+        parent = f"content/gameplay/germany/ship/battleship/{base}"
+        model_path = f"{parent}/{base}.model"
+        entries = hull_assets(base, parent)
+        package_row = _candidate_row(
+            Path("zupd127_PGSB610_Mecklenburg.idx"),
+            parse_index_identity("zupd127_PGSB610_Mecklenburg.idx"),
+            (parent, base, entries[: len(HULL_SUFFIXES)]),
+            entries,
+            False,
+        )
+
+        rows = _game_params_catalog_rows(
+            [package_row],
+            {
+                "PGSB610_Mecklenburg": game_params_ship(model_path),
+                "PGSB810_Mecklenburg_GOLDEN": game_params_ship(model_path),
+            },
+        )
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(
+            {row["game_params_key"] for row in rows},
+            {"PGSB610_Mecklenburg", "PGSB810_Mecklenburg_GOLDEN"},
         )
 
     def test_dedup_prefers_selectable_then_latest_update(self):
@@ -295,8 +368,6 @@ class ShipCatalogTests(unittest.TestCase):
         self.assertTrue(all(not row["selectable"] for row in rows))
         self.assertEqual(len({row["id"] for row in rows}), 2)
         self.assertEqual(len({row["output_slug"] for row in rows}), 2)
-
-
 
 
 class MoLocalizationTests(unittest.TestCase):
@@ -355,18 +426,14 @@ class MoLocalizationTests(unittest.TestCase):
                 read_mo_exact(out_of_range, ["IDS_PASB705"])
 
             missing_nul = root / "missing_nul.mo"
-            missing_nul.write_bytes(
-                mo_fixture([(b"IDS_PASB705", b"Texas")])[:-1]
-            )
+            missing_nul.write_bytes(mo_fixture([(b"IDS_PASB705", b"Texas")])[:-1])
             with self.assertRaisesRegex(MoFormatError, "range|terminating NUL"):
                 read_mo_exact(missing_nul, ["IDS_PASB705"])
 
     def test_exact_selected_translation_must_be_utf8(self):
         with tempfile.TemporaryDirectory() as temp:
             mo_path = Path(temp) / "global.mo"
-            mo_path.write_bytes(
-                mo_fixture([(b"IDS_PASB705", b"Texas\xff")])
-            )
+            mo_path.write_bytes(mo_fixture([(b"IDS_PASB705", b"Texas\xff")]))
             with self.assertRaisesRegex(MoFormatError, "is not UTF-8"):
                 read_mo_exact(mo_path, ["IDS_PASB705"])
 
@@ -381,14 +448,7 @@ class MoLocalizationTests(unittest.TestCase):
             self.assertEqual(resolved, fallback.resolve())
             self.assertEqual(language, "ko")
 
-            preferred = (
-                game
-                / "res"
-                / "texts"
-                / "ko"
-                / "LC_MESSAGES"
-                / "global.mo"
-            )
+            preferred = game / "res" / "texts" / "ko" / "LC_MESSAGES" / "global.mo"
             preferred.parent.mkdir(parents=True)
             preferred.write_bytes(mo_fixture([(b"IDS_TEST", b"preferred")]))
             resolved, _language = find_global_mo(game, "ko")
@@ -432,12 +492,8 @@ class MoLocalizationTests(unittest.TestCase):
 
     def test_multi_hull_rows_share_playable_name_but_keep_variants(self):
         variants = ["JSB403_Yamato_StarTrek", "JSB039_Yamato_1945"]
-        entries = [
-            entry for variant in variants for entry in hull_assets(variant)
-        ]
-        identity = parse_index_identity(
-            "zupd007_T8L_PJSB018_Yamato_1944.idx"
-        )
+        entries = [entry for variant in variants for entry in hull_assets(variant)]
+        identity = parse_index_identity("zupd007_T8L_PJSB018_Yamato_1944.idx")
         rows = [
             _candidate_row(
                 Path("zupd007_T8L_PJSB018_Yamato_1944.idx"),
@@ -449,9 +505,7 @@ class MoLocalizationTests(unittest.TestCase):
             for hull in find_complete_hull_geometries(entries)
         ]
         original_ids = {str(row["id"]) for row in rows}
-        localized = localize_catalog_rows(
-            rows, {"IDS_PJSB018": "야마토"}, "ko"
-        )
+        localized = localize_catalog_rows(rows, {"IDS_PJSB018": "야마토"}, "ko")
         self.assertEqual({row["display_label"] for row in localized}, {"야마토"})
         self.assertEqual({row["localized_name"] for row in localized}, {"야마토"})
         self.assertEqual({row["ship_code"] for row in localized}, {"PJSB018"})
@@ -459,9 +513,7 @@ class MoLocalizationTests(unittest.TestCase):
             {row["localization_key"] for row in localized},
             {"IDS_PJSB018"},
         )
-        self.assertEqual(
-            {str(row["id"]) for row in localized}, original_ids
-        )
+        self.assertEqual({str(row["id"]) for row in localized}, original_ids)
         self.assertEqual(len({row["variant_label"] for row in localized}), 2)
         self.assertEqual(
             [str(row["variant_label"]).casefold() for row in localized],
@@ -469,12 +521,12 @@ class MoLocalizationTests(unittest.TestCase):
         )
 
     def test_powershell_wrapper_forwards_language(self):
-        source = (TOOL_DIR / "List-LegendsShips.ps1").read_text(
-            encoding="utf-8-sig"
-        )
+        source = (TOOL_DIR / "List-LegendsShips.ps1").read_text(encoding="utf-8-sig")
         self.assertIn('[string]$Language = "ko"', source)
         self.assertIn('"--language", $Language', source)
         self.assertIn("ValidatePattern", source)
+
+
 class ExactShipSelectorTests(unittest.TestCase):
     def test_exact_index_basename_and_traversal_rejection(self):
         # Import after the implementation patch so this test also guards the
@@ -487,10 +539,7 @@ class ExactShipSelectorTests(unittest.TestCase):
             package_dir.mkdir()
             exact = package_dir / "zupd601_PXSD307_Ticonderoga_1990.idx"
             exact.write_bytes(b"fixture")
-            similar = (
-                package_dir
-                / "zupd601_PXSD307_Ticonderoga_1990_extra.idx"
-            )
+            similar = package_dir / "zupd601_PXSD307_Ticonderoga_1990_extra.idx"
             similar.write_bytes(b"fixture")
             self.assertEqual(
                 find_ship_index_file(game, exact.name),
@@ -624,9 +673,7 @@ class GeometrySelectionTests(unittest.TestCase):
             mesh_part("Bow_lodShape1"),
             mesh_part("Bow_lod1Shape"),
         ]
-        selected, selected_lod, fallback_used = select_intact_parts(
-            parts, intact_lod=0
-        )
+        selected, selected_lod, fallback_used = select_intact_parts(parts, intact_lod=0)
         self.assertEqual([part.name for part in selected], ["BowShape"])
         self.assertEqual(selected_lod, 0)
         self.assertFalse(fallback_used)
@@ -637,9 +684,7 @@ class GeometrySelectionTests(unittest.TestCase):
             mesh_part("Bow_lod3Shape"),
             mesh_part("Bow_deadShape"),
         ]
-        selected, selected_lod, fallback_used = select_intact_parts(
-            parts, intact_lod=0
-        )
+        selected, selected_lod, fallback_used = select_intact_parts(parts, intact_lod=0)
         self.assertEqual([part.name for part in selected], ["Bow_lodShape2"])
         self.assertEqual(selected_lod, 2)
         self.assertTrue(fallback_used)
@@ -664,6 +709,7 @@ class GeometrySelectionTests(unittest.TestCase):
         ]
         with self.assertRaises(GeometryError):
             select_intact_parts(parts, intact_lod=0)
+
 
 if __name__ == "__main__":
     unittest.main()

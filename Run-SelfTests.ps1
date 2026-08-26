@@ -97,6 +97,12 @@ if ($englishMain.language -ne 'en' -or
 
 Write-Host '2/9 Ship picker and modern queue UI checks'
 $guiText = Get-Content -Raw -LiteralPath $mainGui
+$catalogLocalizationOk =
+    $guiText.Contains('$catalogLanguage = if ($script:WoWSToolboxLanguage') -and
+    $guiText.Contains('"$Source-v$catalogVersion-$catalogLanguage-$installToken.json"')
+if (-not $catalogLocalizationOk) {
+    throw 'Language-specific ship/camouflage catalog caching is missing.'
+}
 $unsafeInterpolation = [regex]::Match($guiText, '\$[A-Za-z_][A-Za-z0-9_]*[가-힣]+')
 if ($unsafeInterpolation.Success) {
     throw "Unsafe Korean variable interpolation: $($unsafeInterpolation.Value)"
@@ -130,7 +136,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.53',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.59',
     'ConvertTo-ValidatedQueueEntries', '[PIPELINE] ', 'child_heartbeat',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -143,6 +149,7 @@ foreach ($marker in @(
     "SettingsSchema = '2'", "TextureMaxSize = '0'",
     'ModelWebView.Dispose()', 'function Write-JsonAtomic',
     'Local\WoWSToolbox.Gui.v1', 'function Update-QualityControls',
+    'Ship-specific appearance · automatic',
     'AutoUpdateCheck', 'CheckUpdateButton', 'function Start-UpdateCheck',
     'Test-Path -LiteralPath $InitialPath -PathType Container',
     '$initial = [string] $script:Settings.OutputPath',
@@ -315,6 +322,8 @@ $viewerCss = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\
 $viewerLightingCss = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\viewer-lighting-fix.css')
 $viewerScript = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\viewer.js')
 $viewerVendor = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\vendor\three.module.js')
+$viewerCore = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\vendor\three.core.js')
+$viewerMtlLoader = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\vendor\MTLLoader.js')
 
 $viewerI18n = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\i18n.js')
 $advanced = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\viewer-advanced.js')
@@ -326,7 +335,7 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerI18n -notmatch 'formalKoreanReplacements' -or
     $viewerI18n -notmatch 'language === ''ko''.*formalizeKorean' -or
     $viewerIndex -match 'v=5\.0\.30' -or
-    $viewerScript -notmatch "version: '5\.0\.53'" -or
+    $viewerScript -notmatch "version: '5\.0\.59'" -or
     $advanced -match 'v=5\.0\.30' -or
     $viewerCss -notmatch '#app \{[^}]*grid-template-rows: minmax\(0, 1fr\);[^}]*overflow: hidden' -or
     $viewerCss -notmatch '\.inspector \{[^}]*min-height: 0;[^}]*overflow: hidden;' -or
@@ -406,6 +415,18 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerIndex -notmatch 'id="normalStrengthControl"' -or
     $viewerIndex -notmatch 'id="pbrPreviewControl"' -or
     $viewerScript -notmatch 'viewerPbrChannels' -or
+    $viewerScript -notmatch 'THREE\.Cache\.enabled = true' -or
+    $viewerScript -notmatch 'DEFERRED_PBR_TEXTURES' -or
+    $viewerScript -notmatch 'ensurePbrTexturesLoaded' -or
+    $viewerScript -notmatch 'geometryUseCounts' -or
+    $viewerScript -notmatch 'sideVariants' -or
+    $viewerMtlLoader -notmatch 'this\.textureCache = new Map' -or
+    $viewerMtlLoader -notmatch 'ignoreTextureTypes' -or
+    $viewerMtlLoader -notmatch 'new ImageBitmapLoader' -or
+    $viewerCore -notmatch 'Duplicate texture requests can subscribe' -or
+    $viewerCore -notmatch 'return imageBitmap;' -or
+    $advanced -notmatch 'ignoreTextureTypes' -or
+    $viewerI18n -notmatch "'PBR 텍스처 읽는 중': 'Loading PBR textures'" -or
     $viewerIndex -notmatch 'id="albedoPreviewControl"' -or
     $viewerScript -notmatch 'applyAlbedoPreview' -or
     $viewerScript -notmatch 'albedoPreview: false' -or
@@ -422,8 +443,8 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerVendor -match 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
     $viewerIndex -notmatch '조명과 표면' -or
     $viewerLightingCss -notmatch '\.lighting-desk' -or
-    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.53\.1' -or
-    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.53\.1' -or
+    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.59\.1' -or
+    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.59\.1' -or
     $viewerScript -notmatch 'loadAssemblyMetadata' -or
     $viewerScript -notmatch 'matrixRowsDeterminant' -or
     $viewerScript -notmatch 'assembly-mirrored-standard-double-sided-v4' -or
@@ -545,8 +566,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.53.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.53') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.59.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.59') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -644,10 +665,13 @@ if ($threeCore.Length -lt 1000000 -or $threeModule.Length -lt 500000 -or
     $notices -notmatch 'RPC\s+`FLOAT64`\s+support') {
     throw 'Dependency or license acceptance failed.'
 }
-$expectedExporterHash = '401077298F115655650E3CCB60B65A55533D3B1DD5B39EC433998D655A0264C6'
-foreach ($relative in @('Backend\wowsunpack.exe', 'Backend\wowsunpack_armor.exe')) {
+$expectedExporterHashes = @{
+    'Backend\wowsunpack.exe' = '61964E7B197CC84FDDC629238CD5F0490F8EBD46F7788F6D65500C4F03BE70E6'
+    'Backend\wowsunpack_armor.exe' = '401077298F115655650E3CCB60B65A55533D3B1DD5B39EC433998D655A0264C6'
+}
+foreach ($relative in $expectedExporterHashes.Keys) {
     $actualHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $relative) -Algorithm SHA256).Hash
-    if ($actualHash -ne $expectedExporterHash) {
+    if ($actualHash -ne $expectedExporterHashes[$relative]) {
         throw "Bundled exporter hash is wrong: $relative"
     }
 }
@@ -677,6 +701,7 @@ $expectedFiles = @(Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -File -Forc
             (-not $relative.StartsWith('.test-', [StringComparison]::OrdinalIgnoreCase)) -and
             (-not $relative.StartsWith('test-results/', [StringComparison]::OrdinalIgnoreCase)) -and
             (-not $relative.StartsWith('output/', [StringComparison]::OrdinalIgnoreCase)) -and
+            (-not $relative.StartsWith('validation/', [StringComparison]::OrdinalIgnoreCase)) -and
             (-not $relative.Contains('/__pycache__/')) -and
             (-not $relative.Contains('/.pytest_cache/'))
         )
@@ -690,9 +715,9 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.53 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.59 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.53 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.59 self-tests passed.'
 }
 

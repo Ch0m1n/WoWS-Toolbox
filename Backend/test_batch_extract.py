@@ -163,6 +163,7 @@ class ItemContractTests(unittest.TestCase):
         args = BATCH.item_namespace(common, item)
         self.assertEqual((args.requested_lod, args.lod), (2, 0))
         self.assertEqual(args.camouflage, "default")
+        self.assertEqual(args.camouflage_color_scheme, "")
         self.assertEqual(
             (args.requested_texture_max_size, args.texture_max_size),
             (1024, 0),
@@ -205,13 +206,16 @@ class ItemContractTests(unittest.TestCase):
             "ship_index": "PJSD001",
             "display_name": "Aki G",
             "camouflage": "PJES397_Golden_Aki",
+            "camouflage_color_scheme": "colorSchemeIJN_alt",
         }
         args = BATCH.item_namespace(common, item)
         self.assertEqual(args.camouflage, "PJES397_Golden_Aki")
+        self.assertEqual(args.camouflage_color_scheme, "colorSchemeIJN_alt")
         with tempfile.TemporaryDirectory() as temporary:
             args.output_root = Path(temporary)
             output = BATCH.output_for(args, set())
         self.assertIn("camo-PJES397_Golden_Aki", output.name)
+        self.assertIn("color-colorSchemeIJN_alt", output.name)
 
     def test_legends_rejects_non_default_camouflage(self) -> None:
         common = {
@@ -294,6 +298,21 @@ class ValidationTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "안전하지"):
             EXTRACT.validate_camouflage_selection("../unsafe")
+        self.assertEqual(
+            EXTRACT.validate_camouflage_color_scheme("colorSchemeGER07"),
+            "colorSchemeGER07",
+        )
+        self.assertEqual(
+            EXTRACT.ship_output_stem(
+                "Mecklenburg",
+                "PGSB610",
+                camouflage="PCEP120_Permo_Upgr_10_lvl",
+                camouflage_color_scheme="colorSchemeGER07",
+            ),
+            "Mecklenburg_PGSB610_camo-PCEP120_Permo_Upgr_10_lvl_color-colorSchemeGER07",
+        )
+        with self.assertRaisesRegex(ValueError, "안전하지"):
+            EXTRACT.validate_camouflage_color_scheme("../unsafe")
 
     def test_prefetch_cancel_only_applies_before_promotion(self) -> None:
         args = SimpleNamespace(

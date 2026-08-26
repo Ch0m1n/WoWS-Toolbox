@@ -324,7 +324,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.53'
+$script:AppVersion = '5.0.59'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -882,7 +882,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.53"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.59"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1328,7 +1328,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.53 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.59 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -2049,7 +2049,8 @@ function New-ShipQueueEntry {
         [string] $GamePath = '',
         [string] $CamouflageId = '',
         [string] $CamouflageName = '',
-        [string] $CamouflageScheme = ''
+        [string] $CamouflageScheme = '',
+        [string] $CamouflageColorScheme = ''
     )
     if ([string]::IsNullOrWhiteSpace($GamePath)) {
         $GamePath = Get-GamePath $Source
@@ -2066,12 +2067,25 @@ function New-ShipQueueEntry {
     if ([string]::IsNullOrWhiteSpace($CamouflageScheme)) {
         $CamouflageScheme = Get-OptionalShipValue -Ship $Ship -Name 'SelectedCamouflageScheme'
     }
-    if ($Source -eq 'legends' -or [string]::IsNullOrWhiteSpace($CamouflageId)) {
+    if ([string]::IsNullOrWhiteSpace($CamouflageColorScheme)) {
+        $CamouflageColorScheme = Get-OptionalShipValue -Ship $Ship -Name 'SelectedCamouflageColorScheme'
+    }
+    if ($Source -eq 'legends') {
+        $CamouflageId = 'default'
+        $CamouflageName = Get-UiText '함선 고유 외형' 'Ship-specific appearance'
+        $CamouflageScheme = ''
+        $CamouflageColorScheme = ''
+    }
+    elseif ([string]::IsNullOrWhiteSpace($CamouflageId)) {
         $CamouflageId = 'default'
         $CamouflageName = Get-UiText '위장 없음' 'No camouflage'
         $CamouflageScheme = ''
+        $CamouflageColorScheme = ''
     }
-    $camouflageLabel = if ($CamouflageId -eq 'default') {
+    $camouflageLabel = if ($Source -eq 'legends') {
+        Get-UiText '함선 고유 외형' 'Ship-specific appearance'
+    }
+    elseif ($CamouflageId -eq 'default') {
         Get-UiText '위장 없음' 'No camouflage'
     }
     elseif ([string]::IsNullOrWhiteSpace($CamouflageName)) { $CamouflageId }
@@ -2087,6 +2101,7 @@ function New-ShipQueueEntry {
         CamouflageId = $CamouflageId
         CamouflageName = $CamouflageName
         CamouflageScheme = $CamouflageScheme
+        CamouflageColorScheme = $CamouflageColorScheme
         Key = Get-ShipQueueKey -Source $Source -Ship $Ship -GamePath $GamePath
         Display = "$installLabel  ·  $($Ship.LocalizedName)  ·  $tier  ·  $($Ship.ShipCode)  ·  $camouflageLabel"
     }
@@ -2222,7 +2237,7 @@ function Start-ToolProcess {
         throw '이미 다른 작업이 실행 중이에요.'
     }
     $runner = [WoWSToolboxV5.GuiProcessRunner]::new()
-    $env:WOWS_TOOLBOX_LANGUAGE = [string] $script:Settings.Language
+    $env:WOWS_TOOLBOX_LANGUAGE = [string] $script:WoWSToolboxLanguage
     $runner.Start($script:PythonCommand, $Arguments, $script:PackageRoot)
     $script:ActiveRunner = $runner
     $script:ActiveOperation = $Operation
@@ -2234,7 +2249,11 @@ function Start-ToolProcess {
 function Get-CatalogPath {
     param([string] $Source)
     $installToken = Get-GamePathToken (Get-GamePath $Source)
-    return Join-Path $script:CatalogRoot "$Source-$installToken.json"
+    $catalogLanguage = if ($script:WoWSToolboxLanguage -eq 'ko') { 'ko' } else { 'en' }
+    # Legends v3 binds rows to exact live GameParams Hull model relationships.
+    # Language-specific caches keep ship and camouflage names aligned with the UI.
+    $catalogVersion = if ($Source -eq 'legends') { 3 } else { 1 }
+    return Join-Path $script:CatalogRoot "$Source-v$catalogVersion-$catalogLanguage-$installToken.json"
 }
 
 function Load-CatalogFile {
@@ -2252,8 +2271,8 @@ function Load-CatalogFile {
     })
     $extractableCount = $script:Catalogs[$Source].Count
     if ($discoveredCount -gt $extractableCount) {
-        $catalogMessageKo = "$((Get-SourceDisplay $Source)) 함선 ${extractableCount}개를 불러왔어요. 발견 ${discoveredCount}개 중 완전 조립 가능한 항목만 표시해요."
-        $catalogMessageEn = "Loaded $extractableCount extractable ships for $(Get-SourceDisplay $Source). $discoveredCount records were discovered; only fully assemblable entries are shown."
+        $catalogMessageKo = "$((Get-SourceDisplay $Source)) 함선 ${extractableCount}개를 불러왔어요. 발견 ${discoveredCount}개 중 현재 설치본에서 선택 가능한 항목만 표시해요."
+        $catalogMessageEn = "Loaded $extractableCount selectable ships for $(Get-SourceDisplay $Source). $discoveredCount records were discovered; only entries backed by installed game resources are shown."
         Add-Log (Get-UiText $catalogMessageKo $catalogMessageEn)
     }
     else {
@@ -2282,7 +2301,7 @@ function Start-CatalogRefresh {
     $script:CatalogRefreshOutput = $output
     $script:PendingPicker = $OpenPickerAfter
     $controls.ProgressStage.Text = '함선 목록을 읽는 중'
-    $controls.ProgressMessage.Text = Convert-ToUiText '게임 패키지는 수정하지 않고 인덱스와 번역 데이터만 읽어요.'
+    $controls.ProgressMessage.Text = Convert-ToUiText '게임 패키지는 수정하지 않고 인덱스, GameParams, 번역 데이터만 읽어요.'
     $controls.MainProgress.IsIndeterminate = $true
     Add-Log "$(Get-SourceDisplay $source) 함선 목록 새로고침을 시작해요."
     $catalogCompletion = {
@@ -2304,8 +2323,8 @@ function Start-CatalogRefresh {
         } else {
             $extractableCount
         }
-        $progressMessageKo = "발견 ${discoveredCount}개 중 완전 조립 가능한 ${extractableCount}개 항목에서 함선을 고를 수 있어요."
-        $progressMessageEn = "Choose from $extractableCount fully assemblable ships out of $discoveredCount discovered records."
+        $progressMessageKo = "발견 ${discoveredCount}개 중 현재 설치본에서 선택 가능한 ${extractableCount}개 항목에서 함선을 고를 수 있어요."
+        $progressMessageEn = "Choose from $extractableCount installed-resource-backed ships out of $discoveredCount discovered records."
         $controls.ProgressMessage.Text = Get-UiText $progressMessageKo $progressMessageEn
         $controls.MainProgress.Value = 100
         if ($script:PendingPicker) {
@@ -2318,7 +2337,7 @@ function Start-CatalogRefresh {
         '--source', $source,
         '--game-dir', $gamePath,
         '--toolbox-root', $script:PackageRoot,
-        '--language', [string] $script:Settings.Language,
+        '--language', [string] $script:WoWSToolboxLanguage,
         '--output', $output
     ) -Completion $catalogCompletion
 }
@@ -2336,7 +2355,7 @@ function Show-ShipPicker {
         $versionValue = 0
         $versionIsCurrent = $null -ne $versionProperty -and
             [int]::TryParse([string] $versionProperty.Value, [ref] $versionValue) -and
-            $versionValue -ge 1
+            $versionValue -ge 2
         -not $versionIsCurrent
     }).Count -gt 0
     if ($source -ne 'legends' -and $staleCamouflageCatalog) {
@@ -2381,7 +2400,8 @@ function Show-ShipPicker {
         foreach ($property in @(
             @('SelectedCamouflageId', 'default'),
             @('SelectedCamouflageName', (Get-UiText '위장 없음' 'No camouflage')),
-            @('SelectedCamouflageScheme', '')
+            @('SelectedCamouflageScheme', ''),
+            @('SelectedCamouflageColorScheme', '')
         )) {
             if ($null -eq $row.PSObject.Properties[$property[0]]) {
                 $row | Add-Member -NotePropertyName $property[0] -NotePropertyValue $property[1]
@@ -2393,11 +2413,13 @@ function Show-ShipPicker {
             $row.SelectedCamouflageId = [string] $queuedEntry.CamouflageId
             $row.SelectedCamouflageName = [string] $queuedEntry.CamouflageName
             $row.SelectedCamouflageScheme = [string] $queuedEntry.CamouflageScheme
+            $row.SelectedCamouflageColorScheme = [string] $queuedEntry.CamouflageColorScheme
         }
         elseif ($source -eq 'legends') {
             $row.SelectedCamouflageId = 'default'
             $row.SelectedCamouflageName = Get-UiText '위장 없음' 'No camouflage'
             $row.SelectedCamouflageScheme = ''
+            $row.SelectedCamouflageColorScheme = ''
         }
         $row.Favorite = $favoritesSet.Contains($rowKey)
         $row.Recent = $recentSet.Contains($rowKey)
@@ -2649,8 +2671,14 @@ function Show-ShipPicker {
     $camoUpdating = $false
     $defaultCamo = [pscustomobject] @{
         Id = 'default'
-        Name = Get-UiText '위장 없음 · 기본 상태' 'No camouflage · default appearance'
+        Name = if ($source -eq 'legends') {
+            Get-UiText '함선 고유 외형 · 자동 적용' 'Ship-specific appearance · automatic'
+        }
+        else {
+            Get-UiText '위장 없음 · 기본 상태' 'No camouflage · default appearance'
+        }
         Scheme = ''
+        ColorScheme = ''
         Species = 'default'
     }
     $dialog.FindName('PickerSourceLabel').Text = Get-SourceDisplay $source
@@ -2718,11 +2746,26 @@ function Show-ShipPicker {
     $showCamoDetail = {
         param($Item)
         if ($null -eq $Item -or [string] $Item.Id -eq 'default') {
-            $camoDetail.Text = Get-UiText '원본 함선 외형 · 영구 위장 미적용' 'Original ship appearance · no permanent camouflage'
+            $camoDetail.Text = if ($source -eq 'legends') {
+                Get-UiText (
+                    'GameParams에 연결된 함선 고유 외형을 자동 적용해요.'
+                ) (
+                    'The ship-specific appearance linked by GameParams is applied automatically.'
+                )
+            }
+            else {
+                Get-UiText '원본 함선 외형 · 영구 위장 미적용' 'Original ship appearance · no permanent camouflage'
+            }
             return
         }
         $scheme = if ([string]::IsNullOrWhiteSpace([string] $Item.Scheme)) { '-' } else { [string] $Item.Scheme }
-        $camoDetail.Text = "$(Get-UiText '영구 위장 식별자' 'Permanent camouflage ID'): $($Item.Id)$([Environment]::NewLine)Scheme: $scheme"
+        $colorScheme = if ([string]::IsNullOrWhiteSpace([string] $Item.ColorScheme)) {
+            Get-UiText '고정 텍스처 또는 기본 색상' 'Fixed texture or default color'
+        }
+        else {
+            [string] $Item.ColorScheme
+        }
+        $camoDetail.Text = "$(Get-UiText '영구 위장 식별자' 'Permanent camouflage ID'): $($Item.Id)$([Environment]::NewLine)Scheme: $scheme$([Environment]::NewLine)$(Get-UiText '색상표' 'Color scheme'): $colorScheme"
     }
     $updateDetail = {
         $row = $grid.SelectedItem
@@ -2751,18 +2794,68 @@ function Show-ShipPicker {
         $options.Add($defaultCamo)
         if ($source -ne 'legends' -and $null -ne $row.PSObject.Properties['Camouflages']) {
             foreach ($camouflage in @($row.Camouflages)) {
-                if ($null -ne $camouflage -and -not [string]::IsNullOrWhiteSpace([string] $camouflage.Id)) {
-                    $options.Add($camouflage)
+                if ($null -eq $camouflage -or [string]::IsNullOrWhiteSpace([string] $camouflage.Id)) {
+                    continue
+                }
+                $colors = @()
+                if ($null -ne $camouflage.PSObject.Properties['ColorSchemes']) {
+                    $colors = @($camouflage.ColorSchemes | Where-Object {
+                        $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string] $_.Id)
+                    })
+                }
+                if ($colors.Count -eq 0) {
+                    $options.Add([pscustomobject] @{
+                        Id = [string] $camouflage.Id
+                        Name = [string] $camouflage.Name
+                        Scheme = [string] $camouflage.Scheme
+                        ColorScheme = ''
+                        Species = [string] $camouflage.Species
+                        Nation = [string] $camouflage.Nation
+                    })
+                    continue
+                }
+                foreach ($color in $colors) {
+                    $order = [int] $color.Order
+                    $colorLabel = if ($order -le 1) {
+                        Get-UiText '기본 색상' 'Default color'
+                    }
+                    elseif ($order -eq 2) {
+                        Get-UiText '대체 색상' 'Alternate color'
+                    }
+                    else {
+                        Get-UiText "대체 색상 $order" "Alternate color $order"
+                    }
+                    $optionName = if ($colors.Count -gt 1) {
+                        "$($camouflage.Name) · $colorLabel"
+                    }
+                    else {
+                        [string] $camouflage.Name
+                    }
+                    $options.Add([pscustomobject] @{
+                        Id = [string] $camouflage.Id
+                        Name = $optionName
+                        Scheme = [string] $camouflage.Scheme
+                        ColorScheme = [string] $color.Id
+                        Species = [string] $camouflage.Species
+                        Nation = [string] $camouflage.Nation
+                    })
                 }
             }
         }
         $currentId = [string] $row.SelectedCamouflageId
-        $selectedCamo = $options | Where-Object { [string] $_.Id -eq $currentId } | Select-Object -First 1
+        $currentColor = [string] $row.SelectedCamouflageColorScheme
+        $selectedCamo = $options | Where-Object {
+            [string] $_.Id -eq $currentId -and (
+                [string]::IsNullOrWhiteSpace($currentColor) -or
+                [string] $_.ColorScheme -eq $currentColor
+            )
+        } | Select-Object -First 1
         if ($null -eq $selectedCamo) {
             $selectedCamo = $defaultCamo
             $row.SelectedCamouflageId = 'default'
             $row.SelectedCamouflageName = Get-UiText '위장 없음' 'No camouflage'
             $row.SelectedCamouflageScheme = ''
+            $row.SelectedCamouflageColorScheme = ''
         }
         $script:PickerCamoUpdating = $true
         try {
@@ -2786,6 +2879,7 @@ function Show-ShipPicker {
         $selectedCamo = $camoCombo.SelectedItem
         if ($null -eq $row -or $null -eq $selectedCamo) { return }
         $row.SelectedCamouflageId = [string] $selectedCamo.Id
+        $row.SelectedCamouflageColorScheme = [string] $selectedCamo.ColorScheme
         $row.SelectedCamouflageName = if ([string] $selectedCamo.Id -eq 'default') {
             Get-UiText '위장 없음' 'No camouflage'
         }
@@ -3352,7 +3446,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.53&lang=' +
+            'https://viewer.local/index.html?app=5.0.59&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -3606,7 +3700,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.53&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.59&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }
@@ -3716,9 +3810,9 @@ function Update-QualityControls {
         Select-ComboTag $controls.TextureCombo '0'
         Select-ComboTag $controls.LodCombo '0'
         $controls.CamouflageCombo.ToolTip = Get-UiText (
-            'Legends는 별도 추출 경로를 사용하므로 현재 기본 도색만 지원합니다.'
+            'Legends의 개별 위장 선택은 지원하지 않지만, 특수 함선의 고유 외형과 전용 모델은 자동 적용해요.'
         ) (
-            'Legends uses a separate extraction path; permanent camouflage is not supported yet.'
+            'Legends camouflage selection is unavailable, but special-ship appearances and dedicated models are applied automatically.'
         )
         $controls.TextureCombo.ToolTip = Get-UiText (
             'Legends는 선언된 원본 크기 컬러 텍스처를 사용해요.'
@@ -3878,6 +3972,7 @@ function New-BatchManifest {
             ship_class = [string] $ship.ShipClass
             tier = [int] $ship.Tier
             camouflage = [string] $entry.CamouflageId
+            camouflage_color_scheme = [string] $entry.CamouflageColorScheme
         }
     })
     $manifest = [ordered] @{
@@ -3897,6 +3992,7 @@ function New-BatchManifest {
             texture_max_size = [int] (Get-ComboTag $controls.TextureCombo)
             lod = [int] (Get-ComboTag $controls.LodCombo)
             camouflage = 'default'
+            camouflage_color_scheme = ''
         }
         items = $items
     }
@@ -4146,6 +4242,7 @@ function Save-QueueFile {
             camouflage_id = [string] $_.CamouflageId
             camouflage_name = [string] $_.CamouflageName
             camouflage_scheme = [string] $_.CamouflageScheme
+            camouflage_color_scheme = [string] $_.CamouflageColorScheme
             ship = $_.Ship
         }
     })
@@ -4190,8 +4287,9 @@ function ConvertTo-ValidatedQueueEntries {
             throw "대기열 $($index + 1)번째 게임 경로가 너무 길어요."
         }
         $camouflageId = 'default'
-        $camouflageName = if ($script:CurrentLanguage -eq 'en') { 'No camouflage · default appearance' } else { '위장 없음 · 기본 상태' }
+        $camouflageName = if ($script:WoWSToolboxLanguage -eq 'en') { 'No camouflage · default appearance' } else { '위장 없음 · 기본 상태' }
         $camouflageScheme = ''
+        $camouflageColorScheme = ''
         if ($null -ne $row.PSObject.Properties['camouflage_id'] -and
             -not [string]::IsNullOrWhiteSpace([string] $row.camouflage_id)) {
             $camouflageId = ([string] $row.camouflage_id).Trim()
@@ -4203,19 +4301,28 @@ function ConvertTo-ValidatedQueueEntries {
         if ($null -ne $row.PSObject.Properties['camouflage_scheme']) {
             $camouflageScheme = ([string] $row.camouflage_scheme).Trim()
         }
+        if ($null -ne $row.PSObject.Properties['camouflage_color_scheme']) {
+            $camouflageColorScheme = ([string] $row.camouflage_color_scheme).Trim()
+        }
         if ($camouflageId -notmatch '^(?i:default|native|[A-Za-z0-9_.-]{1,200})$') {
             throw "대기열 $($index + 1)번째 영구 위장 식별자가 잘못됐어요."
+        }
+        if ($camouflageColorScheme -and $camouflageColorScheme -notmatch '^[A-Za-z0-9_.-]{1,200}$') {
+            throw "대기열 $($index + 1)번째 영구 위장 색상표 식별자가 잘못됐어요."
         }
         if ($camouflageName.Length -gt 300 -or $camouflageScheme.Length -gt 300) {
             throw "대기열 $($index + 1)번째 영구 위장 정보가 너무 길어요."
         }
+        if ($camouflageColorScheme.Length -gt 200) {
+            throw "대기열 $($index + 1)번째 영구 위장 색상표 정보가 너무 길어요."
+        }
         if ($source -eq 'legends') {
             $camouflageId = 'default'
-            $camouflageName = if ($script:CurrentLanguage -eq 'en') { 'No camouflage · default appearance' } else { '위장 없음 · 기본 상태' }
+            $camouflageName = if ($script:WoWSToolboxLanguage -eq 'en') { 'No camouflage · default appearance' } else { '위장 없음 · 기본 상태' }
             $camouflageScheme = ''
+            $camouflageColorScheme = ''
         }
-        $entry = New-ShipQueueEntry -Source $source -Ship $ship -GamePath $gamePath `
-            -CamouflageId $camouflageId -CamouflageName $camouflageName -CamouflageScheme $camouflageScheme
+        $entry = New-ShipQueueEntry -Source $source -Ship $ship -GamePath $gamePath -CamouflageId $camouflageId -CamouflageName $camouflageName -CamouflageScheme $camouflageScheme -CamouflageColorScheme $camouflageColorScheme
         if ([string]::IsNullOrWhiteSpace([string] $entry.Key)) {
             throw "대기열 $($index + 1)번째 함선 키를 만들지 못했어요."
         }

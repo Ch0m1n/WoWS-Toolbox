@@ -675,12 +675,19 @@ if (core) {
     ensureTrustedCompareUrl(message.assemblyReportUrl, '비교 조립 방향');
     ensureTrustedCompareUrl(message.modelReportUrl, '비교 파트 원점');
     core.setStatus('비교 모델을 읽는 중이에요...');
+    THREE.Cache.clear();
     const manager = new THREE.LoadingManager();
     const loader = new OBJLoader(manager);
     let materials = null;
     if (message.mtlUrl) {
       try {
         const mtlLoader = new MTLLoader(manager);
+        mtlLoader.setMaterialOptions({
+          ignoreTextureTypes: [
+            'specularMap', 'normalMap', 'bumpMap', 'roughnessMap',
+            'metalnessMap', 'aoMap', 'emissiveMap', 'displacementMap',
+          ],
+        });
         if (message.resourceBaseUrl) mtlLoader.setResourcePath(message.resourceBaseUrl);
         materials = await core.loadResourceWithRetry(
           mtlLoader,

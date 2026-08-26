@@ -59,6 +59,9 @@ The Inno Setup installer carries Microsoft's signed Evergreen bootstrapper only 
 Only the modules needed by the local viewer are included. They do not contact a
 CDN or external service.
 
+WoWS Toolbox carries a local ImageBitmapLoader compatibility fix so duplicate
+asynchronous requests for one cached image resolve to the decoded bitmap.
+
 ## landaire/wowsunpack
 
 - Repository: <https://github.com/landaire/wowsunpack>
@@ -158,4 +161,4 @@ replays, animation data, names, and other game content remain assets of their
 respective rights holders. Users must supply files from their own installation
 and follow the game's terms and applicable law. This notice is not legal advice.
 
-CPython and Pillow are bundled under their licenses. PowerShell 5.1/7 is provided by Windows or the user. Blender is not required or invoked by WoWS Toolbox 5.0.53. The WebView2 bootstrapper is redistributed as described above; the WebView2 Runtime is supplied by Microsoft. Oodle runtimes are never redistributed and must come from the user's legally installed software.
+CPython and Pillow are bundled under their licenses. PowerShell 5.1/7 is provided by Windows or the user. Blender is not required or invoked by WoWS Toolbox 5.0.59. The WebView2 bootstrapper is redistributed as described above; the WebView2 Runtime is supplied by Microsoft. Oodle runtimes are never redistributed and must come from the user's legally installed software.

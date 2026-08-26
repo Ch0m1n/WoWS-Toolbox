@@ -4,6 +4,11 @@ import { TransformControls } from './vendor/TransformControls.js';
 import { OBJLoader } from './vendor/OBJLoader.js';
 import { MTLLoader } from './vendor/MTLLoader.js';
 
+// WoWS MTL files intentionally reuse the same source texture across many
+// independently editable parts. Coalesce concurrent image decoding while a
+// model is loading instead of asking WebView2 to decode every reference again.
+THREE.Cache.enabled = true;
+
 const canvas = document.querySelector('#viewport');
 const viewportShell = document.querySelector('.viewport-shell');
 const backgroundButton = document.querySelector('#backgroundButton');
@@ -137,6 +142,28 @@ let activeNormalStrength = LIGHTING_DEFAULTS.normalStrength;
 let activeFlatLightingGain = 1;
 let pbrPreviewEnabled = LIGHTING_DEFAULTS.pbrPreview;
 let albedoPreviewEnabled = LIGHTING_DEFAULTS.albedoPreview;
+const DEFERRED_PBR_TEXTURES = Object.freeze([
+  'specularMap',
+  'normalMap',
+  'bumpMap',
+  'roughnessMap',
+  'metalnessMap',
+  'aoMap',
+  'emissiveMap',
+  'displacementMap',
+]);
+const PBR_ONLY_TEXTURES = Object.freeze([
+  'map',
+  'alphaMap',
+  'specularMap',
+  'metalnessMap',
+  'emissiveMap',
+  'displacementMap',
+]);
+let activeModelResources = null;
+let pbrTexturesLoaded = false;
+let pbrTextureLoadPromise = null;
+let deferredPbrMaterialCreator = null;
 const viewerMaterialUpgrades = new WeakMap();
 const viewerPbrMaterials = new WeakMap();
 const viewerPaintMaterials = new WeakMap();
@@ -329,6 +356,131 @@ function applyPbrPreview(enabled) {
   if (restoreAlbedo && modelContent) applyAlbedoPreview(true);
   pbrPreviewControl.checked = pbrPreviewEnabled;
   normalStrengthControl.disabled = !pbrPreviewEnabled;
+}
+function applyDeferredPbrMaterials(creator) {
+  if (!modelContent || !creator?.materials) return 0;
+  const configuredTextures = new Set();
+  const visitedMaterials = new Set();
+  let applied = 0;
+  modelContent.traverse((node) => {
+    if (!node.isMesh) return;
+    const materials = Array.isArray(node.material) ? node.material : [node.material];
+    for (const material of materials.filter(Boolean)) {
+      const paint = material.userData.viewerPbrPreview
+        ? viewerPaintMaterials.get(material)
+        : material;
+      const detailed = material.userData.viewerPbrPreview
+        ? material
+        : viewerPbrMaterials.get(material);
+      if (!paint || !detailed || visitedMaterials.has(detailed)) continue;
+      visitedMaterials.add(detailed);
+      const source = creator.materials[detailed.name];
+      if (!source) continue;
+      const pbr = source.userData?.wowsPbr || {};
+      detailed.normalMap = source.normalMap || source.bumpMap || null;
+      detailed.roughnessMap = pbr.roughnessMap || null;
+      detailed.aoMap = pbr.aoMap || null;
+      detailed.roughness = detailed.roughnessMap ? 1 : 0.82;
+      detailed.normalScale?.set(activeNormalStrength, activeNormalStrength);
+      detailed.userData.viewerPbrChannels = {
+        normalMap: detailed.normalMap,
+        roughnessMap: detailed.roughnessMap,
+        aoMap: detailed.aoMap,
+      };
+      paint.userData.viewerPbrChannels = detailed.userData.viewerPbrChannels;
+      for (const texture of Object.values(detailed.userData.viewerPbrChannels).filter(Boolean)) {
+        if (configuredTextures.has(texture)) continue;
+        configuredTextures.add(texture);
+        texture.colorSpace = THREE.NoColorSpace;
+        texture.anisotropy = maxTextureAnisotropy;
+        texture.magFilter = THREE.LinearFilter;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+        texture.generateMipmaps = true;
+      }
+      detailed.needsUpdate = true;
+      applied += 1;
+    }
+  });
+  return applied;
+}
+
+async function ensurePbrTexturesLoaded() {
+  if (pbrTexturesLoaded || !modelContent || !activeModelResources?.mtlUrl) return true;
+  if (pbrTextureLoadPromise) return pbrTextureLoadPromise;
+  const loadId = modelLoadSerial;
+  const resources = activeModelResources;
+  pbrTextureLoadPromise = (async () => {
+    showLoading('PBR 텍스처 읽는 중', '선택한 상세 표면 채널을 준비하고 있어요.');
+    setStatus('PBR 상세 텍스처 로딩 중');
+    pbrPreviewControl.disabled = true;
+    const manager = new THREE.LoadingManager();
+    manager.onProgress = (_, loaded, total) => {
+      if (loadId === modelLoadSerial) {
+        loadingDetail.textContent = `PBR 리소스 ${loaded} / ${Math.max(total, loaded)} 불러오는 중`;
+      }
+    };
+    let creator = null;
+    try {
+      const loader = new MTLLoader(manager);
+      loader.setMaterialOptions({ ignoreTextureTypes: PBR_ONLY_TEXTURES });
+      if (resources.resourceBaseUrl) loader.setResourcePath(resources.resourceBaseUrl);
+      creator = await loadResourceWithRetry(
+        loader,
+        resources.mtlUrl,
+        () => loadId === modelLoadSerial,
+        'PBR MTL',
+      );
+      if (loadId !== modelLoadSerial) {
+        disposeMaterialCreator(creator);
+        return false;
+      }
+      let textureLoadStarted = false;
+      let finishTextures;
+      const texturesReady = new Promise((resolve) => { finishTextures = resolve; });
+      manager.onStart = () => { textureLoadStarted = true; };
+      manager.onLoad = () => finishTextures();
+      creator.preload();
+      if (!textureLoadStarted) finishTextures();
+      await texturesReady;
+      if (loadId !== modelLoadSerial) {
+        disposeMaterialCreator(creator);
+        return false;
+      }
+      applyDeferredPbrMaterials(creator);
+      deferredPbrMaterialCreator = creator;
+      pbrTexturesLoaded = true;
+      setStatus('PBR 상세 텍스처 준비 완료');
+      return true;
+    } catch (error) {
+      if (creator) disposeMaterialCreator(creator);
+      if (loadId === modelLoadSerial) {
+        console.warn('Deferred PBR texture load failed.', error);
+        hostMessage({ type: 'warning', message: `PBR 텍스처 불러오기 실패: ${error.message || error}` });
+        setStatus('PBR 상세 텍스처를 불러오지 못했어요', true);
+      }
+      return false;
+    } finally {
+      if (loadId === modelLoadSerial) {
+        pbrPreviewControl.disabled = false;
+        hideLoading();
+      }
+      pbrTextureLoadPromise = null;
+    }
+  })();
+  return pbrTextureLoadPromise;
+}
+
+async function requestPbrPreview(enabled) {
+  const checked = Boolean(enabled);
+  if (checked && modelContent && !pbrTexturesLoaded) {
+    const loaded = await ensurePbrTexturesLoaded();
+    if (!loaded) {
+      pbrPreviewControl.checked = false;
+      return false;
+    }
+  }
+  selectSurfacePreview('pbr', checked);
+  return true;
 }
 function applyAlbedoPreview(enabled) {
   albedoPreviewEnabled = Boolean(enabled);
@@ -665,10 +817,17 @@ function isAssemblyMirroredNode(node, assemblyMetadata) {
 }
 
 
-function cloneNodeMaterialsForSide(node, side, policy) {
+function cloneNodeMaterialsForSide(node, side, policy, variantCache) {
   const originals = Array.isArray(node.material) ? node.material : [node.material];
   const clones = originals.map((material) => {
     if (!material) return material;
+    let variants = variantCache.get(material);
+    if (!variants) {
+      variants = new Map();
+      variantCache.set(material, variants);
+    }
+    const variantKey = `${side}:${policy}`;
+    if (variants.has(variantKey)) return variants.get(variantKey);
     const clone = material.clone();
     clone.userData = { ...(material.userData || {}) };
     clone.side = side;
@@ -683,6 +842,7 @@ function cloneNodeMaterialsForSide(node, side, policy) {
       viewerPaintMaterials.set(pbrClone, clone);
     }
     clone.needsUpdate = true;
+    variants.set(variantKey, clone);
     return clone;
   });
   node.material = Array.isArray(node.material) ? clones : clones[0];
@@ -691,6 +851,7 @@ function cloneNodeMaterialsForSide(node, side, policy) {
 
 function normalizeModelMaterials(root, assemblyMetadata = null) {
   const normalized = new Set();
+  const sideVariants = new WeakMap();
   let mirroredPartMaterials = 0;
   root?.traverse((node) => {
     if (!node.isMesh) return;
@@ -718,6 +879,7 @@ function normalizeModelMaterials(root, assemblyMetadata = null) {
       node,
       THREE.DoubleSide,
       windingPolicy,
+      sideVariants,
     );
   });
   swapPbrMaterials(root, pbrPreviewEnabled);
@@ -914,6 +1076,11 @@ function clearModel(invalidateLoads = true) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(viewportShell.clientWidth, viewportShell.clientHeight, false);
   if (shipRoot) disposeObject3D(shipRoot);
+  if (deferredPbrMaterialCreator) disposeMaterialCreator(deferredPbrMaterialCreator);
+  deferredPbrMaterialCreator = null;
+  activeModelResources = null;
+  pbrTexturesLoaded = false;
+  pbrTextureLoadPromise = null;
   shipRoot = null;
   modelContent = null;
   armorRoot = null;
@@ -1019,6 +1186,11 @@ async function loadModelMetadata(url) {
 
 function applyModelMetadata(root, metadata) {
   if (!metadata) return 0;
+  const geometryUseCounts = new Map();
+  root.traverse((node) => {
+    if (!node.isMesh || !node.geometry) return;
+    geometryUseCounts.set(node.geometry, (geometryUseCounts.get(node.geometry) || 0) + 1);
+  });
   const normalizedObjects = metadata.objects
     .map((item) => ({
       item,
@@ -1050,7 +1222,11 @@ function applyModelMetadata(root, metadata) {
         sourcePivot[2],
       );
     if (![pivot.x, pivot.y, pivot.z].every(Number.isFinite)) return;
-    node.geometry = node.geometry.clone();
+    // OBJLoader already creates independent geometries for normal WoWS parts.
+    // Clone only genuinely shared geometry before moving its local pivot.
+    if ((geometryUseCounts.get(node.geometry) || 0) > 1) {
+      node.geometry = node.geometry.clone();
+    }
     node.geometry.translate(-pivot.x, -pivot.y, -pivot.z);
     node.position.add(pivot);
     node.userData.viewerPivot = pivot.clone();
@@ -1643,6 +1819,10 @@ async function loadShip(message) {
   showLoading('모델 읽는 중', '재질과 OBJ 파트를 준비하고 있어요.');
   setStatus('모델 로딩 중');
   modelName.textContent = message.displayName || message.objName || '함선 모델';
+  // Virtual-host mappings can point the same URL at a newly exported file.
+  // Clear between model loads, then keep caching enabled for duplicates within
+  // this load only so edited textures can never be mistaken for stale images.
+  THREE.Cache.clear();
   const manager = new THREE.LoadingManager();
   manager.onProgress = (_, loaded, total) => {
     if (loadId === modelLoadSerial) {
@@ -1667,6 +1847,9 @@ async function loadShip(message) {
     if (message.mtlUrl) {
       try {
         const mtlLoader = new MTLLoader(manager);
+        mtlLoader.setMaterialOptions({
+          ignoreTextureTypes: DEFERRED_PBR_TEXTURES,
+        });
         if (message.resourceBaseUrl) mtlLoader.setResourcePath(message.resourceBaseUrl);
         materials = await loadResourceWithRetry(
           mtlLoader,
@@ -1742,6 +1925,11 @@ async function loadShip(message) {
       return;
     }
     const pivotCount = applyModelMetadata(root, modelMetadata);
+    activeModelResources = {
+      mtlUrl: message.mtlUrl || '',
+      resourceBaseUrl: message.resourceBaseUrl || '',
+    };
+    pbrTexturesLoaded = !message.mtlUrl;
     shipRoot = new THREE.Group();
     shipRoot.name = String(message.displayName || 'SHIP_ROOT').slice(0, 160);
     modelContent = new THREE.Group();
@@ -1790,6 +1978,11 @@ async function loadShip(message) {
       pivotParts: pivotCount,
       axisMode: axisOrientation.mode,
     });
+    if (pbrPreviewEnabled && message.mtlUrl) {
+      window.setTimeout(() => {
+        if (loadId === modelLoadSerial) requestPbrPreview(true);
+      }, 0);
+    }
   } catch (error) {
     if (loadId !== modelLoadSerial) {
       if (root && !root.parent) disposeObject3D(root);
@@ -1848,7 +2041,9 @@ for (const control of [exposureControl, keyLightControl, environmentControl, nor
   control.addEventListener('input', () => applyLightingSettings(currentLightingSettings()));
 }
 albedoPreviewControl.addEventListener('change', () => selectSurfacePreview('albedo', albedoPreviewControl.checked));
-pbrPreviewControl.addEventListener('change', () => selectSurfacePreview('pbr', pbrPreviewControl.checked));
+pbrPreviewControl.addEventListener('change', () => {
+  requestPbrPreview(pbrPreviewControl.checked);
+});
 lightingReset.addEventListener('click', () => { applyLightingSettings(LIGHTING_DEFAULTS); setStatus('조명 기본값을 복원했습니다.'); });
 document.querySelector('#gridButton').addEventListener('click', (event) => { grid.visible = !grid.visible; event.currentTarget.classList.toggle('active', grid.visible); });
 document.querySelector('#wireButton').addEventListener('click', (event) => {
@@ -1999,7 +2194,8 @@ window.WoWSViewerCore = {
   redoViewerEdit,
   rememberOriginalTransform,
   loadResourceWithRetry,
+  ensurePbrTexturesLoaded,
   setStatus,
   hostMessage,
 };
-hostMessage({ type: 'ready', version: '5.0.53' });
+hostMessage({ type: 'ready', version: '5.0.59' });

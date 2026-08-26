@@ -4,10 +4,12 @@ import {
 	DefaultLoadingManager,
 	FileLoader,
 	FrontSide,
+	ImageBitmapLoader,
 	Loader,
 	LoaderUtils,
 	MeshPhongMaterial,
 	RepeatWrapping,
+	Texture,
 	TextureLoader,
 	Vector2,
 	SRGBColorSpace
@@ -187,6 +189,7 @@ class MTLLoader extends Loader {
  * @property {(RepeatWrapping|ClampToEdgeWrapping|MirroredRepeatWrapping)} [wrap=RepeatWrapping] - What type of wrapping to apply for textures.
  * @property {boolean} [normalizeRGB=false] - Whether RGB colors should be normalized to `0-1` from `0-255`.
  * @property {boolean} [ignoreZeroRGBs=false] - Ignore values of RGBs (Ka,Kd,Ks) that are all 0's.
+ * @property {string[]} [ignoreTextureTypes] - Texture slots that should not be loaded.
  */
 
 class MaterialCreator {
@@ -199,6 +202,7 @@ class MaterialCreator {
 		this.materials = {};
 		this.materialsArray = [];
 		this.nameLookup = {};
+		this.textureCache = new Map();
 
 		this.crossOrigin = 'anonymous';
 
@@ -371,9 +375,25 @@ class MaterialCreator {
 		function setMapForType( mapType, value ) {
 
 			if ( params[ mapType ] ) return; // Keep the first encountered texture
+			if ( scope.options.ignoreTextureTypes?.includes( mapType ) ) return;
 
 			const texParams = scope.getTextureParams( value, params );
-			const map = scope.loadTexture( resolveURL( scope.baseUrl, texParams.url ) );
+			const textureUrl = resolveURL( scope.baseUrl, texParams.url );
+			const textureKey = [
+				mapType,
+				textureUrl,
+				texParams.scale.x,
+				texParams.scale.y,
+				texParams.offset.x,
+				texParams.offset.y
+			].join( '|' );
+			let map = scope.textureCache.get( textureKey );
+			if ( map === undefined ) {
+
+				map = scope.loadTexture( textureUrl );
+				scope.textureCache.set( textureKey, map );
+
+			}
 
 			map.repeat.copy( texParams.scale );
 			map.offset.copy( texParams.offset );
@@ -619,6 +639,23 @@ class MaterialCreator {
 		let loader = manager.getHandler( url );
 
 		if ( loader === null ) {
+
+			if ( typeof createImageBitmap !== 'undefined' ) {
+
+				const texture = new Texture();
+				loader = new ImageBitmapLoader( manager );
+				loader.setOptions( { imageOrientation: 'flipY', premultiplyAlpha: 'none' } );
+				loader.load( url, function ( imageBitmap ) {
+
+					texture.image = imageBitmap;
+					texture.needsUpdate = true;
+					if ( onLoad !== undefined ) onLoad( texture );
+
+				}, onProgress, onError );
+				if ( mapping !== undefined ) texture.mapping = mapping;
+				return texture;
+
+			}
 
 			loader = new TextureLoader( manager );
 

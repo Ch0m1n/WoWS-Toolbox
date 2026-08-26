@@ -1,24 +1,29 @@
 #!/usr/bin/env python3
 """Read-only, deterministic ship catalog for a WoWS Legends installation.
 
-One IDX can contain several complete hull variants.  The catalog therefore
-emits one row per complete five-part hull resource, not one row per IDX.
-Selectable rows satisfy the catalog-time input checks for the bundled
-generic *hull-only* exporter. Payload CRC and geometry decoding are verified
-only when extraction runs. No game package payload is extracted here.
+The installed GameParams ship keys and their exact live Hull model paths are
+the source of truth. A row is selectable when that live model also resolves to
+a complete five-part hull geometry set with supported package storage. Fixed
+legacy diffuse filenames are not required because extraction resolves textures
+from ModelUber material references. The GameParams payload is decoded in memory;
+no game files are written. Geometry decoding and final assembly validation run
+only during extraction.
 """
 
 from __future__ import annotations
 
 import argparse
+import functools
 import hashlib
+import io
 import json
+import pickle
 import re
 import struct
 import sys
 from collections import Counter
 from pathlib import Path, PurePosixPath
-from typing import Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -32,10 +37,12 @@ if str(BLENDER_EXTRACTOR_DIR) not in sys.path:
 
 from legends_assets.core import (  # noqa: E402
     AssetEntry,
+    ExtractionError,
     IdxFormatError,
     UnsafePathError,
     assets_from_index,
     parse_legends_idx,
+    read_asset_bytes,
 )
 
 
@@ -54,6 +61,11 @@ HULL_RESOURCE_RE = re.compile(
 UPDATE_RE = re.compile(r"^zupd(?P<number>\d+)(?:_|$)", re.IGNORECASE)
 SAFE_SLUG_RE = re.compile(r"[^A-Za-z0-9._-]+")
 LANGUAGE_RE = re.compile(r"^[A-Za-z]{2,3}(?:_[A-Za-z]{2,4})?$")
+SHIP_KEY_RE = re.compile(
+    r"^(?P<ship_code>P(?P<nation>[A-Z])S(?P<class>[ABCDS])(?P<number>\d+))"
+    r"(?:_|$)",
+    re.IGNORECASE,
+)
 
 MO_MAGIC_LITTLE = b"\xde\x12\x04\x95"
 MO_MAGIC_BIG = b"\x95\x04\x12\xde"
@@ -61,6 +73,8 @@ MO_HEADER_SIZE = 7 * 4
 MAX_MO_FILE_BYTES = 64 * 1024 * 1024
 MAX_MO_MESSAGES = 1_000_000
 MAX_MO_HASH_ENTRIES = 2_000_000
+MAX_GAME_PARAMS_BYTES = 128 * 1024 * 1024
+GAME_PARAMS_PATHS = ("content/GameParams.data", "content/GameParams_py2.data")
 
 NATIONS = {
     "A": "USA",
@@ -85,6 +99,40 @@ SHIP_CLASSES = {
     "S": "Submarine",
 }
 
+
+class NeutralObject:
+    """Inert target for Cython objects in the trusted local game archive."""
+
+    def __init__(self, *args: Any) -> None:
+        self.constructor_args = args
+        self.state: Any = None
+
+    def __setstate__(self, state: Any) -> None:
+        self.state = state
+
+
+def _neutral_factory(module: str, name: str, *args: Any) -> NeutralObject:
+    return NeutralObject(module, name, *args)
+
+
+class InertGameParamsUnpickler(pickle.Unpickler):
+    """Prevent GameParams pickle data from resolving imported callables."""
+
+    def find_class(self, module: str, name: str) -> Any:
+        if module in ("__builtin__", "builtins") and name in (
+            "set",
+            "frozenset",
+        ):
+            return {"set": set, "frozenset": frozenset}[name]
+        if name.startswith("__pyx_unpickle_"):
+            return functools.partial(_neutral_factory, module, name)
+        return type(name, (NeutralObject,), {"__module__": "__inert__"})
+
+
+class GameParamsFormatError(ValueError):
+    """Raised when Legends GameParams data is absent or malformed."""
+
+
 class MoFormatError(ValueError):
     """Raised when a GNU MO file is structurally unsafe or unsupported."""
 
@@ -104,17 +152,8 @@ def find_global_mo(game_dir: Path, language: str) -> tuple[Path, str]:
     normalized = normalize_language(language)
     game_root = game_dir.resolve()
     candidates = (
-        game_root
-        / "res"
-        / "texts"
-        / normalized
-        / "LC_MESSAGES"
-        / "global.mo",
-        game_root
-        / "texts"
-        / normalized
-        / "LC_MESSAGES"
-        / "global.mo",
+        game_root / "res" / "texts" / normalized / "LC_MESSAGES" / "global.mo",
+        game_root / "texts" / normalized / "LC_MESSAGES" / "global.mo",
     )
     for candidate in candidates:
         if not candidate.is_file():
@@ -129,8 +168,7 @@ def find_global_mo(game_dir: Path, language: str) -> tuple[Path, str]:
         return resolved, normalized
     searched = ", ".join(str(path) for path in candidates)
     raise FileNotFoundError(
-        f"global.mo for language {normalized!r} was not found; searched: "
-        f"{searched}"
+        f"global.mo for language {normalized!r} was not found; searched: {searched}"
     )
 
 
@@ -146,9 +184,7 @@ def _checked_mo_range(
         raise MoFormatError(f"{label} has a negative offset or length")
     end = offset + length
     if offset > file_size or end > file_size:
-        raise MoFormatError(
-            f"{label} range {offset}:{end} exceeds MO size {file_size}"
-        )
+        raise MoFormatError(f"{label} range {offset}:{end} exceeds MO size {file_size}")
     return offset, end
 
 
@@ -174,8 +210,7 @@ def read_mo_exact(
     size = mo_path.stat().st_size
     if size > MAX_MO_FILE_BYTES:
         raise MoFormatError(
-            f"MO file is too large ({size} bytes; maximum "
-            f"{MAX_MO_FILE_BYTES})"
+            f"MO file is too large ({size} bytes; maximum {MAX_MO_FILE_BYTES})"
         )
     data = mo_path.read_bytes()
     if len(data) != size:
@@ -193,9 +228,7 @@ def read_mo_exact(
     elif magic_bytes == MO_MAGIC_BIG:
         byte_order = ">"
     else:
-        raise MoFormatError(
-            f"invalid GNU MO magic bytes: {magic_bytes.hex()}"
-        )
+        raise MoFormatError(f"invalid GNU MO magic bytes: {magic_bytes.hex()}")
     (
         _magic,
         revision,
@@ -208,13 +241,10 @@ def read_mo_exact(
 
     major_revision = revision >> 16
     if major_revision not in (0, 1):
-        raise MoFormatError(
-            f"unsupported GNU MO major revision {major_revision}"
-        )
+        raise MoFormatError(f"unsupported GNU MO major revision {major_revision}")
     if message_count > MAX_MO_MESSAGES:
         raise MoFormatError(
-            f"MO message count {message_count} exceeds "
-            f"{MAX_MO_MESSAGES}"
+            f"MO message count {message_count} exceeds {MAX_MO_MESSAGES}"
         )
     table_bytes = message_count * 8
     _checked_mo_range(
@@ -231,8 +261,7 @@ def read_mo_exact(
     )
     if hash_size > MAX_MO_HASH_ENTRIES:
         raise MoFormatError(
-            f"MO hash entry count {hash_size} exceeds "
-            f"{MAX_MO_HASH_ENTRIES}"
+            f"MO hash entry count {hash_size} exceeds {MAX_MO_HASH_ENTRIES}"
         )
     if hash_size:
         _checked_mo_range(
@@ -288,9 +317,7 @@ def read_mo_exact(
             ) from exc
         previous = result.get(exact_key)
         if previous is not None and previous != translation:
-            raise MoFormatError(
-                f"MO contains conflicting duplicate key {exact_key!r}"
-            )
+            raise MoFormatError(f"MO contains conflicting duplicate key {exact_key!r}")
         result[exact_key] = translation
     return result
 
@@ -325,11 +352,7 @@ def parse_index_identity(index_filename: str) -> dict[str, object] | None:
         "ship_code": match.group("ship_code").upper(),
         "nation_code": match.group("nation").upper(),
         "class_code": match.group("class").upper(),
-        "tier": (
-            int(match.group("tier"))
-            if match.group("tier") is not None
-            else None
-        ),
+        "tier": (int(match.group("tier")) if match.group("tier") is not None else None),
         "label": _humanize(label_token),
     }
 
@@ -351,9 +374,7 @@ def _update_sequence(index_filename: str) -> int:
 
 
 def _path_parts(entry: AssetEntry) -> tuple[str, ...]:
-    return tuple(
-        part.casefold() for part in PurePosixPath(entry.virtual_path).parts
-    )
+    return tuple(part.casefold() for part in PurePosixPath(entry.virtual_path).parts)
 
 
 def find_complete_hull_geometries(
@@ -390,6 +411,255 @@ def find_complete_hull_geometries(
             )
     complete.sort(key=lambda item: (item[1].casefold(), item[0].casefold()))
     return complete
+
+
+def _flatten_strings(value: Any) -> list[str]:
+    """Return strings from inert GameParams values without following cycles."""
+    result: list[str] = []
+    seen: set[int] = set()
+
+    def visit(item: Any) -> None:
+        if isinstance(item, str):
+            result.append(item)
+            return
+        if not isinstance(item, (dict, tuple, list, set, frozenset, NeutralObject)):
+            return
+        object_id = id(item)
+        if object_id in seen:
+            return
+        seen.add(object_id)
+        if isinstance(item, dict):
+            for key, nested in item.items():
+                visit(key)
+                visit(nested)
+        elif isinstance(item, (tuple, list, set, frozenset)):
+            for nested in item:
+                visit(nested)
+        else:
+            visit(item.constructor_args)
+            visit(item.state)
+
+    visit(value)
+    return result
+
+
+def decode_game_params(payload: bytes) -> dict[str, Any]:
+    """Decode Legends GameParams bytes with an import-blocking unpickler."""
+    if len(payload) > MAX_GAME_PARAMS_BYTES:
+        raise GameParamsFormatError(
+            f"GameParams payload is too large ({len(payload)} bytes)"
+        )
+    if not payload.startswith(b"%bin"):
+        raise GameParamsFormatError("GameParams.data lacks the %bin header")
+    try:
+        root = InertGameParamsUnpickler(
+            io.BytesIO(payload[4:]), encoding="latin1"
+        ).load()
+    except (
+        EOFError,
+        pickle.UnpicklingError,
+        AttributeError,
+        TypeError,
+        ValueError,
+    ) as exc:
+        raise GameParamsFormatError(f"GameParams decode failed: {exc}") from exc
+    if not isinstance(root, dict):
+        raise GameParamsFormatError("GameParams root is not a dictionary")
+    return root
+
+
+def read_game_params(
+    package_dir: Path,
+    package_lookup: Mapping[str, Path],
+) -> dict[str, Any]:
+    """Read only the live GameParams payload from system_data packages."""
+    system_index = next(
+        (
+            path
+            for path in package_dir.glob("*.idx")
+            if path.is_file() and path.name.casefold() == "system_data.idx"
+        ),
+        None,
+    )
+    if system_index is None:
+        raise FileNotFoundError("system_data.idx was not found")
+    entries = list(
+        assets_from_index(parse_legends_idx(system_index), package_dir, package_lookup)
+    )
+    by_path = {entry.virtual_path.casefold(): entry for entry in entries}
+    selected = next(
+        (
+            by_path[path.casefold()]
+            for path in GAME_PARAMS_PATHS
+            if path.casefold() in by_path
+        ),
+        None,
+    )
+    if selected is None:
+        raise FileNotFoundError(
+            "system_data.idx contains neither GameParams.data nor GameParams_py2.data"
+        )
+    return decode_game_params(
+        read_asset_bytes(selected, max_unpacked_size=MAX_GAME_PARAMS_BYTES)
+    )
+
+
+def game_params_hull_models(
+    root: Mapping[str, Any],
+) -> list[tuple[str, str, str]]:
+    """Return exact playable ship key, Hull component, and live model path."""
+    discovered: dict[tuple[str, str], tuple[str, str, str]] = {}
+    for raw_key in sorted(root, key=lambda value: str(value).casefold()):
+        ship_key = str(raw_key)
+        match = SHIP_KEY_RE.match(ship_key)
+        if match is None or match.group("nation").upper() not in NATIONS:
+            continue
+        ship = root[raw_key]
+        state = getattr(ship, "state", None)
+        if (
+            not isinstance(state, (tuple, list))
+            or len(state) <= 2
+            or not isinstance(state[2], dict)
+        ):
+            continue
+        for raw_component, value in state[2].items():
+            component = str(raw_component)
+            if not component.casefold().endswith("_hull"):
+                continue
+            models = sorted(
+                {
+                    text.strip().replace("\\", "/")
+                    for text in _flatten_strings(value)
+                    if text.strip().casefold().endswith(".model")
+                    and "/ship/" in text.replace("\\", "/").casefold()
+                    and not text.strip().casefold().endswith("_dead.model")
+                },
+                key=str.casefold,
+            )
+            for model_path in models:
+                pair = (ship_key.casefold(), model_path.casefold())
+                candidate = (ship_key, component, model_path)
+                previous = discovered.get(pair)
+                if previous is None or component.casefold() < previous[1].casefold():
+                    discovered[pair] = candidate
+    return sorted(
+        discovered.values(),
+        key=lambda item: (item[0].casefold(), item[2].casefold()),
+    )
+
+
+def _game_params_catalog_rows(
+    package_rows: Iterable[dict[str, object]],
+    root: Mapping[str, Any],
+) -> list[dict[str, object]]:
+    """Bind package geometry to exact live GameParams ship/Hull relationships."""
+    by_model: dict[str, dict[str, object]] = {}
+    for row in package_rows:
+        model_path = str(row.get("model_path") or "")
+        if not model_path:
+            continue
+        key = model_path.casefold()
+        previous = by_model.get(key)
+        rank = (
+            bool(row["selectable"]),
+            int(row["_update_sequence"]),
+            str(row["index_filename"]).casefold(),
+        )
+        previous_rank = (
+            (
+                bool(previous["selectable"]),
+                int(previous["_update_sequence"]),
+                str(previous["index_filename"]).casefold(),
+            )
+            if previous is not None
+            else None
+        )
+        if previous_rank is None or rank > previous_rank:
+            by_model[key] = row
+
+    rows: list[dict[str, object]] = []
+    for ship_key, component, model_path in game_params_hull_models(root):
+        match = SHIP_KEY_RE.match(ship_key)
+        assert match is not None
+        ship_code = match.group("ship_code").upper()
+        nation_code = match.group("nation").upper()
+        class_code = match.group("class").upper()
+        package_row = by_model.get(model_path.casefold())
+        if package_row is None:
+            model = PurePosixPath(model_path)
+            resource = model.stem
+            display, _model_nation, _model_class = _variant_display(resource, None)
+            combined_identity = f"{ship_key}::{resource}"
+            rows.append(
+                {
+                    "ship_code": ship_code,
+                    "game_params_key": ship_key,
+                    "hull_component": component,
+                    "model_path": model_path,
+                    "id": combined_identity,
+                    "index_filename": "",
+                    "resource_path": "",
+                    "hull_resource": resource,
+                    "hull_resource_path": model.parent.as_posix(),
+                    "output_slug": _safe_slug(combined_identity),
+                    "display_label": display,
+                    "variant_label": display,
+                    "nation": NATIONS[nation_code],
+                    "nation_code": nation_code,
+                    "class": SHIP_CLASSES[class_code],
+                    "class_code": class_code,
+                    "tier": None,
+                    "support_level": "unsupported",
+                    "support_reason": (
+                        "live GameParams Hull model has no complete five-part "
+                        "geometry set in the installed packages"
+                    ),
+                    "selectable": False,
+                }
+            )
+            continue
+
+        row = dict(package_row)
+        combined_identity = f"{ship_key}::{row['hull_resource']}"
+        row.update(
+            {
+                "ship_code": ship_code,
+                "game_params_key": ship_key,
+                "hull_component": component,
+                "model_path": model_path,
+                "id": combined_identity,
+                "output_slug": _safe_slug(combined_identity),
+                "nation": NATIONS[nation_code],
+                "nation_code": nation_code,
+                "class": SHIP_CLASSES[class_code],
+                "class_code": class_code,
+                "support_level": (
+                    "full-assembly" if row["selectable"] else "unsupported"
+                ),
+                "support_reason": (
+                    "exact live GameParams Hull model resolves to a complete "
+                    "five-part geometry set; ModelUber textures and payload "
+                    "integrity are validated during extraction"
+                    if row["selectable"]
+                    else row["support_reason"]
+                ),
+            }
+        )
+        row.pop("_update_sequence", None)
+        rows.append(row)
+
+    rows.sort(
+        key=lambda row: (
+            not bool(row["selectable"]),
+            str(row["nation"]).casefold(),
+            str(row["class"]).casefold(),
+            row["tier"] is None,
+            int(row["tier"]) if row["tier"] is not None else 999,
+            str(row["variant_label"]).casefold(),
+            str(row["id"]).casefold(),
+        )
+    )
+    return rows
 
 
 def _diffuse_entries(
@@ -430,9 +700,7 @@ def _diffuse_entries(
     return selected, None
 
 
-def _variant_display(
-    hull_resource: str, tier: int | None
-) -> tuple[str, str, str]:
+def _variant_display(hull_resource: str, tier: int | None) -> tuple[str, str, str]:
     match = HULL_RESOURCE_RE.match(hull_resource)
     if match is None:
         label = _humanize(hull_resource)
@@ -459,35 +727,41 @@ def _candidate_row(
     duplicate_base: bool,
 ) -> dict[str, object]:
     parent, base, geometry_entries = hull
-    diffuse_entries, diffuse_error = _diffuse_entries(all_entries, base)
-    selected_assets = [*geometry_entries, *diffuse_entries]
-    storage_ok = bool(selected_assets) and all(
+    _, diffuse_error = _diffuse_entries(all_entries, base)
+    storage_ok = bool(geometry_entries) and all(
         (
             entry.file_info.compression_type_1,
             entry.file_info.compression_type_2,
         )
         == (5, 1)
-        for entry in selected_assets
+        for entry in geometry_entries
     )
-    selectable = not duplicate_base and diffuse_error is None and storage_ok
+    selectable = not duplicate_base and storage_ok
     if duplicate_base:
         reason = (
             "same hull resource basename occurs under multiple virtual parents; "
             "exact resource selection would be ambiguous"
         )
-    elif diffuse_error is not None:
-        reason = diffuse_error
     elif not storage_ok:
         reason = "package storage variant is not verified"
+    elif diffuse_error is not None:
+        reason = (
+            "catalog metadata found a complete five-part hull with expected "
+            "storage flags; legacy diffuse-name probe did not match "
+            f"({diffuse_error}), but the full assembly pipeline resolves "
+            "textures from ModelUber material references"
+        )
     else:
         reason = (
-            "catalog metadata found five geometry and two diffuse inputs "
-            "with expected storage flags; payload CRC and geometry decode "
-            "are validated only during extraction"
+            "catalog metadata found a complete five-part hull with expected "
+            "storage flags; textures are resolved from ModelUber material "
+            "references and payload CRC and geometry decode are validated "
+            "only during extraction"
         )
 
     display, nation_code, class_code = _variant_display(
-        base, identity["tier"]  # type: ignore[arg-type]
+        base,
+        identity["tier"],  # type: ignore[arg-type]
     )
     combined_identity = f"{index_path.stem}::{base}"
     path_digest = hashlib.sha256(parent.casefold().encode("utf-8")).hexdigest()[:8]
@@ -497,11 +771,10 @@ def _candidate_row(
         "ship_code": str(identity["ship_code"]),
         "id": combined_identity,
         "index_filename": index_path.name,
-        "resource_path": PurePosixPath(
-            "res_packages", index_path.name
-        ).as_posix(),
+        "resource_path": PurePosixPath("res_packages", index_path.name).as_posix(),
         "hull_resource": base,
         "hull_resource_path": parent,
+        "model_path": (PurePosixPath(parent) / f"{base}.model").as_posix(),
         "output_slug": _safe_slug(combined_identity),
         "display_label": display,
         "variant_label": display,
@@ -510,7 +783,7 @@ def _candidate_row(
         "class": SHIP_CLASSES.get(class_code, class_code),
         "class_code": class_code,
         "tier": identity["tier"],
-        "support_level": "hull-only" if selectable else "unsupported",
+        "support_level": "full-assembly" if selectable else "unsupported",
         "support_reason": reason,
         "selectable": selectable,
         "_update_sequence": _update_sequence(index_path.name),
@@ -533,9 +806,7 @@ def _unsupported_index_row(
         "ship_code": str(identity["ship_code"]),
         "id": index_identity,
         "index_filename": index_path.name,
-        "resource_path": PurePosixPath(
-            "res_packages", index_path.name
-        ).as_posix(),
+        "resource_path": PurePosixPath("res_packages", index_path.name).as_posix(),
         "hull_resource": None,
         "hull_resource_path": None,
         "output_slug": _safe_slug(index_identity),
@@ -694,12 +965,11 @@ def build_catalog(
                 )
         except (IdxFormatError, UnsafePathError, FileNotFoundError, OSError) as exc:
             rows.append(
-                _unsupported_index_row(
-                    idx_path, identity, f"IDX scan failed: {exc}"
-                )
+                _unsupported_index_row(idx_path, identity, f"IDX scan failed: {exc}")
             )
 
-    result = deduplicate_catalog(rows)
+    game_params = read_game_params(package_dir, package_lookup)
+    result = _game_params_catalog_rows(rows, game_params)
     if supported_only:
         result = [row for row in result if bool(row["selectable"])]
     message_keys = {
@@ -711,16 +981,14 @@ def build_catalog(
         )
     }
     messages = read_mo_exact(mo_path, message_keys)
-    return localize_catalog_rows(
-        result, messages, normalized_language
-    )
+    return localize_catalog_rows(result, messages, normalized_language)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Print a read-only WoWS Legends ship catalog as a JSON array. "
-            "No game package payload is extracted."
+            "Only the live GameParams payload is read; no files are written."
         )
     )
     parser.add_argument("--game-dir", required=True, type=Path)
@@ -732,7 +1000,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--supported-only",
         action="store_true",
-        help="omit rows the bundled generic hull exporter cannot process",
+        help="omit live Hull rows without a complete five-part geometry set",
     )
     return parser
 
@@ -747,7 +1015,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         print(json.dumps(catalog, ensure_ascii=False, separators=(",", ":")))
         return 0
-    except (FileNotFoundError, ValueError, OSError) as exc:
+    except (ExtractionError, FileNotFoundError, ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

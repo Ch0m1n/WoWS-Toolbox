@@ -19,6 +19,7 @@ function Test-ExcludedSourcePath {
         $normalized.StartsWith('.test-', [StringComparison]::OrdinalIgnoreCase) -or
         $normalized.StartsWith('test-results/', [StringComparison]::OrdinalIgnoreCase) -or
         $normalized.StartsWith('output/', [StringComparison]::OrdinalIgnoreCase) -or
+        $normalized.StartsWith('validation/', [StringComparison]::OrdinalIgnoreCase) -or
         $normalized.Contains('/__pycache__/') -or
         $normalized.Contains('/.pytest_cache/')
     )

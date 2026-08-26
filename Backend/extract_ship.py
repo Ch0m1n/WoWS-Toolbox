@@ -75,19 +75,31 @@ def validate_camouflage_selection(value: str | None) -> str:
     return selection
 
 
+def validate_camouflage_color_scheme(value: str | None) -> str:
+    selection = str(value or "").strip()
+    if not selection:
+        return ""
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,200}", selection):
+        raise ValueError("영구 위장 색상표 식별자가 안전하지 않아요")
+    return selection
+
+
 def ship_output_stem(
     display_name: str,
     ship_index: str,
     ship_key: str = "",
     camouflage: str = "default",
+    camouflage_color_scheme: str = "",
 ) -> str:
     identity = ship_index or ship_key
     stem = f"{display_name or identity}_{identity}"
     selection = validate_camouflage_selection(camouflage)
     if selection != "default":
         stem += f"_camo-{safe_name(selection)}"
+    color_selection = validate_camouflage_color_scheme(camouflage_color_scheme)
+    if color_selection:
+        stem += f"_color-{safe_name(color_selection)}"
     return safe_name(stem)
-
 
 def _is_relative_to(path: Path, parent: Path) -> bool:
     try:
@@ -761,6 +773,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
         / exporter_fingerprint
         / f"lod-{args.lod}"
         / ("camo-" + safe_name(args.camouflage or "default"))
+        / ("color-" + safe_name(args.camouflage_color_scheme or "default"))
         / (safe_name(args.ship_index) + ".glb")
     )
     glb_cache_reused = valid_glb(glb_cache)
@@ -815,6 +828,11 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
                 *(
                     ["--camouflage", args.camouflage]
                     if args.camouflage and args.camouflage != "default"
+                    else []
+                ),
+                *(
+                    ["--camouflage-color-scheme", args.camouflage_color_scheme]
+                    if args.camouflage_color_scheme
                     else []
                 ),
                 "--output",
@@ -1000,6 +1018,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
                 "texture_max_size": args.texture_max_size,
                 "original_textures": args.texture_max_size == 0,
                 "camouflage": args.camouflage or "default",
+                "camouflage_color_scheme": args.camouflage_color_scheme or "",
                 "source_policy": "wowsunpack export-ship LOD index",
             },
             "cache": cache_info,
@@ -1008,6 +1027,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
             "exporter_fingerprint": exporter_fingerprint,
             "ship_glb_cache_reused": glb_cache_reused,
             "camouflage": args.camouflage or "default",
+            "camouflage_color_scheme": args.camouflage_color_scheme or "",
             "armor_glb_cache": str(armor_cache) if armor_cache else None,
             "armor_metadata_cache": (
                 str(armor_metadata_cache) if armor_metadata_cache else None
@@ -1052,6 +1072,7 @@ def main() -> int:
     parser.add_argument("--ship-index", default="")
     parser.add_argument("--hull-upgrade", default="")
     parser.add_argument("--camouflage", default="default")
+    parser.add_argument("--camouflage-color-scheme", default="")
     parser.add_argument("--display-name", default="")
     parser.add_argument("--oodle-dll", type=Path)
     parser.add_argument("--cache-root", type=Path)
@@ -1062,6 +1083,9 @@ def main() -> int:
     parser.add_argument("--texture-max-size", type=int, choices=(0, 1024, 2048, 4096), default=0)
     args = parser.parse_args()
     args.camouflage = validate_camouflage_selection(args.camouflage)
+    args.camouflage_color_scheme = validate_camouflage_color_scheme(
+        args.camouflage_color_scheme
+    )
 
     args.game_dir = args.game_dir.resolve()
     args.toolbox_root = args.toolbox_root.resolve()
@@ -1088,7 +1112,11 @@ def main() -> int:
         )
     else:
         stem = ship_output_stem(
-            args.display_name, args.ship_index, args.ship_key, args.camouflage
+            args.display_name,
+            args.ship_index,
+            args.ship_key,
+            args.camouflage,
+            args.camouflage_color_scheme,
         )
         output_dir = next_output_dir(args.output_root, stem, args.overwrite)
     output_dir = validate_output_child(args.output_root, output_dir)

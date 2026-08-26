@@ -4,6 +4,7 @@ import argparse
 import json
 import re
 import subprocess
+import xml.etree.ElementTree as ET
 import sys
 from pathlib import Path
 from typing import Any
@@ -56,7 +57,7 @@ CLASS_KO = {
 # Increment when the per-ship camouflage payload changes. Cached catalog rows
 # carry this marker so the GUI can rebuild old files that already contained an
 # empty Camouflages array and would otherwise look current.
-CAMOUFLAGE_CATALOG_VERSION = 1
+CAMOUFLAGE_CATALOG_VERSION = 2
 
 
 def _translation(game_dir: Path, language: str) -> tuple[MoCatalog, str]:
@@ -117,7 +118,9 @@ def _pc_hull_candidates(data: dict[str, Any]) -> list[tuple[str, str, str]]:
     """Return (upgrade, component, model path) in deterministic loadout order."""
     candidates: list[tuple[str, str, str]] = []
     upgrades = _dict(data.get("ShipUpgradeInfo"))
-    for upgrade_name, upgrade_value in sorted(upgrades.items(), key=lambda item: str(item[0])):
+    for upgrade_name, upgrade_value in sorted(
+        upgrades.items(), key=lambda item: str(item[0])
+    ):
         upgrade = _dict(upgrade_value)
         if upgrade.get("ucType") != "_Hull":
             continue
@@ -167,11 +170,146 @@ def _fallback_name(param_key: str, index: str) -> str:
     return tail.replace("_", " ").strip() or index
 
 
+def _rgba_values(value: str | None) -> list[float]:
+    if not value:
+        return []
+    try:
+        return [float(item) for item in value.split()[:4]]
+    except ValueError:
+        return []
+
+
+def _rgb_hex(values: list[float]) -> str:
+    if len(values) < 3:
+        return ""
+    channels = [max(0, min(255, round(channel * 255))) for channel in values[:3]]
+    return "#" + "".join(f"{channel:02X}" for channel in channels)
+
+
+def _camouflage_database(raw: bytes) -> dict[str, Any]:
+    try:
+        root = ET.fromstring(raw)
+    except (ET.ParseError, ValueError):
+        return {"Groups": {}, "Entries": {}}
+
+    groups: dict[str, set[str]] = {}
+    groups_node = root.find("shipgroups.xml")
+    if groups_node is not None:
+        for group_node in groups_node:
+            ships = group_node.findtext("ships") or ""
+            groups[group_node.tag] = {
+                ship.casefold() for ship in ships.split() if ship
+            }
+
+    palettes: dict[str, list[str]] = {}
+    palettes_node = root.find("colorschemes.xml")
+    if palettes_node is not None:
+        for scheme_node in palettes_node.findall("colorScheme"):
+            name = (scheme_node.findtext("name") or "").strip()
+            if not name:
+                continue
+            palette = [
+                _rgb_hex(_rgba_values(scheme_node.findtext(f"color{index}")))
+                for index in range(4)
+            ]
+            palettes[name.casefold()] = [color for color in palette if color]
+
+    entries: dict[str, list[dict[str, Any]]] = {}
+    camos_node = root.find("camouflages.xml")
+    if camos_node is None:
+        return {"Groups": groups, "Entries": entries}
+
+    for camo_node in camos_node.findall("camouflage"):
+        name = (camo_node.findtext("name") or "").strip()
+        if not name:
+            continue
+        targets = {
+            ship.casefold()
+            for node in camo_node.findall("targetShip")
+            for ship in (node.text or "").split()
+            if ship
+        }
+        ship_groups = {
+            group
+            for group in (camo_node.findtext("shipGroups") or "").split()
+            if group
+        }
+        color_schemes: list[dict[str, Any]] = []
+        seen_colors: set[str] = set()
+        for order, color_node in enumerate(camo_node.findall("colorSchemes"), 1):
+            color_id = ((color_node.text or "").strip().split() or [""])[0]
+            marker = color_id.casefold()
+            if not color_id or marker in seen_colors:
+                continue
+            seen_colors.add(marker)
+            palette = palettes.get(marker, [])
+            preview = _rgb_hex(_rgba_values(color_node.findtext("colorUI")))
+            if not preview and palette:
+                preview = palette[0]
+            color_schemes.append(
+                {
+                    "Id": color_id,
+                    "Order": order,
+                    "PreviewColor": preview,
+                    "Palette": palette,
+                }
+            )
+        tiled = (camo_node.findtext("tiled") or "").strip().casefold() == "true"
+        uses_palette = (
+            (camo_node.findtext("useColorScheme") or "").strip().casefold()
+            == "true"
+        )
+        if not tiled and not uses_palette:
+            color_schemes = []
+
+        entries.setdefault(name.casefold(), []).append(
+            {
+                "Targets": targets,
+                "Groups": ship_groups,
+                "ColorSchemes": color_schemes,
+            }
+        )
+
+    return {"Groups": groups, "Entries": entries}
+
+
+def _camouflage_color_schemes(
+    database: dict[str, Any] | None,
+    camouflage_name: str,
+    ship_param_name: str,
+) -> list[dict[str, Any]]:
+    if not database or not camouflage_name:
+        return []
+    variants = _dict(database.get("Entries")).get(camouflage_name.casefold(), [])
+    if not isinstance(variants, list):
+        return []
+    selector = ship_param_name.casefold()
+
+    if selector:
+        for variant in variants:
+            if selector in variant.get("Targets", set()):
+                return list(variant.get("ColorSchemes", []))
+
+        groups = _dict(database.get("Groups"))
+        for variant in variants:
+            for group in variant.get("Groups", set()):
+                members = groups.get(group, set())
+                if selector in members:
+                    return list(variant.get("ColorSchemes", []))
+
+    for variant in variants:
+        if not variant.get("Targets") and not variant.get("Groups"):
+            return list(variant.get("ColorSchemes", []))
+    return []
+
+
 def _pc_camouflages(
     vehicle: dict[str, Any],
     params_by_name: dict[str, dict[str, Any]],
     params_by_index: dict[str, dict[str, Any]],
     translations: MoCatalog,
+    ship_param_name: str = "",
+    camouflage_database: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Return permanent camouflage choices attached to one ship.
 
@@ -208,6 +346,11 @@ def _pc_camouflages(
                 "Index": str(exterior.get("index") or ""),
                 "Species": str(type_info.get("species") or ""),
                 "Nation": str(type_info.get("nation") or ""),
+                "ColorSchemes": _camouflage_color_schemes(
+                    camouflage_database,
+                    scheme,
+                    ship_param_name,
+                ),
             }
         )
 
@@ -222,6 +365,19 @@ def pc_catalog(game_dir: Path, language: str, source: str) -> list[dict[str, Any
     params = root_params(decode_game_params(raw))
     translations, translation_language = _translation(game_dir, language)
     params_by_name: dict[str, dict[str, Any]] = {}
+    camouflage_database: dict[str, Any] = {"Groups": {}, "Entries": {}}
+    camouflage_entry = next(
+        (
+            value
+            for key, value in entries.items()
+            if key.casefold() == "/camouflages.xml"
+        ),
+        None,
+    )
+    if camouflage_entry is not None:
+        camouflage_database = _camouflage_database(
+            extract_entry(game_dir, camouflage_entry)
+        )
     params_by_index: dict[str, dict[str, Any]] = {}
     for param_key, param_value in params.items():
         param_data = _dict(param_value)
@@ -306,7 +462,12 @@ def pc_catalog(game_dir: Path, language: str, source: str) -> list[dict[str, Any
                 "ArchiveHullVerified": supported,
                 "CamouflageCatalogVersion": CAMOUFLAGE_CATALOG_VERSION,
                 "Camouflages": _pc_camouflages(
-                    data, params_by_name, params_by_index, translations
+                    data,
+                    params_by_name,
+                    params_by_index,
+                    translations,
+                    ship_param_name=internal_name,
+                    camouflage_database=camouflage_database,
                 ),
                 "UnsupportedReason": (
                     "현재 게임 빌드에 선체 geometry가 없어요"
@@ -328,13 +489,10 @@ def pc_catalog(game_dir: Path, language: str, source: str) -> list[dict[str, Any
     return rows
 
 
-def legends_catalog(toolbox_root: Path, game_dir: Path, language: str) -> list[dict[str, Any]]:
-    script = (
-        toolbox_root
-        / "BlenderExtractor"
-        / "geometry_decoder"
-        / "ship_catalog.py"
-    )
+def legends_catalog(
+    toolbox_root: Path, game_dir: Path, language: str
+) -> list[dict[str, Any]]:
+    script = toolbox_root / "BlenderExtractor" / "geometry_decoder" / "ship_catalog.py"
     process = subprocess.run(
         [
             sys.executable,
@@ -355,11 +513,13 @@ def legends_catalog(toolbox_root: Path, game_dir: Path, language: str) -> list[d
     for legacy in legacy_rows:
         ship_code = str(legacy.get("ship_code") or "")
         resource = str(legacy.get("hull_resource") or "")
-        suffix_match = re.match(r"^[A-Z]S[A-Z]\d+_(.+)$", resource)
-        suffix = suffix_match.group(1) if suffix_match else resource
-        game_params_key = (
-            f"{ship_code}_{suffix}" if ship_code and suffix else ship_code
-        )
+        game_params_key = str(legacy.get("game_params_key") or "").strip()
+        if not game_params_key:
+            suffix_match = re.match(r"^[A-Z]S[A-Z]\d+_(.+)$", resource)
+            suffix = suffix_match.group(1) if suffix_match else resource
+            game_params_key = (
+                f"{ship_code}_{suffix}" if ship_code and suffix else ship_code
+            )
         variant = str(
             legacy.get("variant_label")
             or legacy.get("display_label")
@@ -382,9 +542,7 @@ def legends_catalog(toolbox_root: Path, game_dir: Path, language: str) -> list[d
                 "Build": "",
                 "ShipCode": ship_code,
                 "LocalizedName": localized,
-                "LocalizedLanguage": str(
-                    legacy.get("localized_language") or language
-                ),
+                "LocalizedLanguage": str(legacy.get("localized_language") or language),
                 "InternalName": game_params_key or resource,
                 "VariantLabel": variant,
                 "ShipResource": resource,
@@ -395,9 +553,14 @@ def legends_catalog(toolbox_root: Path, game_dir: Path, language: str) -> list[d
                 "Tier": tier,
                 "GameParamsKey": game_params_key,
                 "GameParamsIndex": ship_code,
-                "ModelPath": str(legacy.get("hull_resource_path") or ""),
+                "ModelPath": str(
+                    legacy.get("model_path") or legacy.get("hull_resource_path") or ""
+                ),
                 "Id": legacy.get("id"),
                 "Supported": bool(legacy.get("selectable")),
+                "ArchiveHullVerified": bool(legacy.get("selectable")),
+                "HullComponent": str(legacy.get("hull_component") or ""),
+                "UnsupportedReason": str(legacy.get("support_reason") or ""),
                 "CamouflageCatalogVersion": CAMOUFLAGE_CATALOG_VERSION,
                 "Camouflages": [],
             }
@@ -410,6 +573,8 @@ def legends_catalog(toolbox_root: Path, game_dir: Path, language: str) -> list[d
         )
     )
     return rows
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="WoWS Toolbox unified ship catalog")
     parser.add_argument("--source", choices=("legends", "pc", "korabli"), required=True)

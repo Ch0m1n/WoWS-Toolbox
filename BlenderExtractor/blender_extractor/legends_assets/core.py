@@ -235,11 +235,25 @@ def normalize_virtual_path(raw_path: str) -> str:
     return PurePosixPath(*parts).as_posix()
 
 
+def _comparison_path(path: Path) -> Path:
+    """Normalize equivalent Win32 and extended-length path spellings."""
+
+    value = os.path.normcase(str(path))
+    if os.name == "nt":
+        if value.startswith("\\\\?\\UNC\\"):
+            value = "\\\\" + value[8:]
+        elif value.startswith("\\\\?\\"):
+            value = value[4:]
+    return Path(value)
+
+
 def ensure_within_root(path: Path, root: Path) -> Path:
     resolved_root = root.resolve()
     resolved_path = path.resolve()
     try:
-        resolved_path.relative_to(resolved_root)
+        _comparison_path(resolved_path).relative_to(
+            _comparison_path(resolved_root)
+        )
     except ValueError as exc:
         raise UnsafePathError(
             f"output path escapes allowed root: {resolved_path} (root: {resolved_root})"

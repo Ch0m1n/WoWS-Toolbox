@@ -49943,6 +49943,12 @@ class ImageBitmapLoader extends Loader {
 
 			scope.manager.itemEnd( url );
 
+			// Duplicate texture requests can subscribe to this cached promise
+			// before the first request finishes (for example map_Kd + map_d).
+			// Preserve the decoded bitmap as the promise result so every
+			// subscriber receives valid image data instead of `undefined`.
+			return imageBitmap;
+
 		} ).catch( function ( e ) {
 
 			if ( onError ) onError( e );

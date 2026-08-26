@@ -3,6 +3,7 @@ from __future__ import annotations
 """Convert the PC/Korabli exporter GLB to editable OBJ without Blender."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 import hashlib
 import json
@@ -11,6 +12,7 @@ import os
 import re
 import shutil
 import struct
+import time
 from pathlib import Path
 from typing import Iterable, Iterator
 
@@ -293,26 +295,57 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def publish_shared_texture(target: Path, library: Path | None) -> bool:
-    if library is None:
-        return False
-    digest = sha256(target)
-    shared = library / digest[:2] / f"{digest}.png"
-    shared.parent.mkdir(parents=True, exist_ok=True)
-    temporary = shared.with_suffix(f".{os.getpid()}.{id(target)}.part")
-    if not shared.is_file() or shared.stat().st_size <= 0:
-        shutil.copy2(target, temporary)
-        try:
+def texture_worker_count(item_count: int) -> int:
+    """Keep PNG compression parallel but bounded on ordinary desktop PCs."""
+
+    configured = os.environ.get("WOWS_TOOLBOX_TEXTURE_WORKERS", "").strip()
+    try:
+        requested = int(configured) if configured else min(4, os.cpu_count() or 1)
+    except ValueError:
+        requested = min(4, os.cpu_count() or 1)
+    return max(1, min(8, requested, max(1, item_count)))
+
+
+def publish_shared_texture(
+    image: Image.Image,
+    target: Path,
+    library: Path | None,
+    content_key: str,
+) -> bool:
+    """Encode once per decoded image and copy independent outputs from cache."""
+
+    try:
+        if library is None:
+            image.save(target, format="PNG", compress_level=9)
+            return False
+
+        shared = (
+            library
+            / "decoded-pixels-v1"
+            / content_key[:2]
+            / f"{content_key}.png"
+        )
+        shared.parent.mkdir(parents=True, exist_ok=True)
+        reused = shared.is_file() and shared.stat().st_size > 0
+        if not reused:
+            temporary = shared.with_suffix(
+                f".png.{os.getpid()}.{id(image)}.part"
+            )
             try:
-                os.replace(temporary, shared)
-            except PermissionError:
-                if not shared.is_file() or shared.stat().st_size <= 0:
-                    raise
-        finally:
-            temporary.unlink(missing_ok=True)
-    # The exported file must remain independent. Hard-linking it to the
-    # shared cache would let an editor mutate the cache and other exports.
-    return False
+                image.save(temporary, format="PNG", compress_level=9)
+                try:
+                    os.replace(temporary, shared)
+                except PermissionError:
+                    if not shared.is_file() or shared.stat().st_size <= 0:
+                        raise
+            finally:
+                temporary.unlink(missing_ok=True)
+        # Each export remains independent so editing it cannot mutate the
+        # shared cache or another ship's files.
+        shutil.copy2(shared, target)
+        return reused
+    finally:
+        image.close()
 
 
 def image_payload(document: dict, binary: bytes, image: dict, source: Path) -> bytes:
@@ -378,29 +411,70 @@ def export_textures(
     paths: list[str] = []
     resized = 0
     linked = 0
-    for index, image in enumerate(images):
-        payload = image_payload(document, binary, image, source)
-        target = texture_dir / f"{names[index]}.png"
-        with Image.open(BytesIO(payload)) as opened:
-            converted = (
-                opened.convert("RGBA")
-                if opened.mode not in {"RGB", "RGBA"}
-                else opened.copy()
+    allocations: dict[str, str] = {}
+    workers = texture_worker_count(len(images))
+    pending = []
+    with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="wows-png") as pool:
+        for index, image in enumerate(images):
+            payload = image_payload(document, binary, image, source)
+            with Image.open(BytesIO(payload)) as opened:
+                converted = (
+                    opened.convert("RGBA")
+                    if opened.mode not in {"RGB", "RGBA"}
+                    else opened.copy()
+                )
+            if max_size > 0 and max(converted.size) > max_size:
+                scale = max_size / max(converted.size)
+                resized_image = converted.resize(
+                    (
+                        max(1, round(converted.width * scale)),
+                        max(1, round(converted.height * scale)),
+                    ),
+                    Image.Resampling.LANCZOS,
+                )
+                converted.close()
+                converted = resized_image
+                resized += 1
+            if (
+                converted.mode == "RGBA"
+                and converted.getchannel("A").getextrema() == (255, 255)
+            ):
+                # Opaque alpha carries no visual information. RGB keeps every color
+                # pixel intact while avoiding a redundant fourth PNG channel.
+                rgb = converted.convert("RGB")
+                converted.close()
+                converted = rgb
+
+            digest = hashlib.sha256()
+            digest.update(converted.mode.encode("ascii"))
+            digest.update(struct.pack("<II", converted.width, converted.height))
+            digest.update(converted.tobytes())
+            content_key = digest.hexdigest()
+            previous = allocations.get(content_key)
+            if previous is not None:
+                converted.close()
+                mapping[index] = previous
+                continue
+
+            target = texture_dir / f"{names[index]}.png"
+            relative = f"textures/{target.name}"
+            allocations[content_key] = relative
+            mapping[index] = relative
+            paths.append(str(target))
+            pending.append(
+                pool.submit(
+                    publish_shared_texture,
+                    converted,
+                    target,
+                    library,
+                    content_key,
+                )
             )
-        if max_size > 0 and max(converted.size) > max_size:
-            scale = max_size / max(converted.size)
-            converted = converted.resize(
-                (
-                    max(1, round(converted.width * scale)),
-                    max(1, round(converted.height * scale)),
-                ),
-                Image.Resampling.LANCZOS,
-            )
-            resized += 1
-        converted.save(target, format="PNG", compress_level=3)
-        linked += int(publish_shared_texture(target, library))
-        mapping[index] = f"textures/{target.name}"
-        paths.append(str(target))
+            # Bound decoded image memory while still keeping every CPU core busy.
+            if len(pending) >= workers:
+                linked += sum(int(future.result()) for future in pending)
+                pending.clear()
+        linked += sum(int(future.result()) for future in pending)
     return mapping, paths, resized, linked
 
 
@@ -817,6 +891,7 @@ def export_obj(
 
 
 def build(args: argparse.Namespace) -> dict:
+    total_started = time.perf_counter()
     formats = {
         part.strip().casefold() for part in args.formats.split(",") if part.strip()
     } or {"obj"}
@@ -831,11 +906,14 @@ def build(args: argparse.Namespace) -> dict:
         )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.report.parent.mkdir(parents=True, exist_ok=True)
+    load_started = time.perf_counter()
     document, binary = load_glb(args.input)
+    load_seconds = time.perf_counter() - load_started
     progress("obj", 12, "원본 GLB 구조를 읽는 중", "Reading the source GLB structure")
     image_paths: dict[int, str] = {}
     textures: list[str] = []
     resized = linked = 0
+    texture_seconds = 0.0
     if "obj" in formats:
         progress(
             "texture",
@@ -843,6 +921,7 @@ def build(args: argparse.Namespace) -> dict:
             "텍스처를 PNG로 준비하는 중",
             "Preparing textures as PNG files",
         )
+        texture_started = time.perf_counter()
         image_paths, textures, resized, linked = export_textures(
             document,
             binary,
@@ -851,10 +930,12 @@ def build(args: argparse.Namespace) -> dict:
             max(0, args.texture_max_size),
             args.texture_library,
         )
+        texture_seconds = time.perf_counter() - texture_started
     pbr_contract = None
     pbr_exporter = getattr(args, "pbr_exporter", None)
     pbr_game_dir = getattr(args, "pbr_game_dir", None)
     pbr_cache = getattr(args, "pbr_cache", None)
+    pbr_seconds = 0.0
     if "obj" in formats and pbr_exporter and pbr_game_dir and pbr_cache:
         progress(
             "texture",
@@ -863,6 +944,7 @@ def build(args: argparse.Namespace) -> dict:
             "Preparing high-resolution normal, roughness, metalness, and AO maps",
         )
         try:
+            pbr_started = time.perf_counter()
             pbr_contract = PBR.prepare_pbr_materials(
                 document,
                 exporter=Path(pbr_exporter),
@@ -872,6 +954,7 @@ def build(args: argparse.Namespace) -> dict:
                 cache_root=Path(pbr_cache),
                 max_size=max(0, args.texture_max_size),
             )
+            pbr_seconds = time.perf_counter() - pbr_started
             args.output.with_suffix(".pbr.json").write_text(
                 json.dumps(pbr_contract, ensure_ascii=False, indent=2),
                 encoding="utf-8",
@@ -900,11 +983,14 @@ def build(args: argparse.Namespace) -> dict:
     )
     objects: list[dict] = []
     vertices = triangle_count = 0
+    obj_seconds = 0.0
     if "obj" in formats:
         progress("obj", 68, "파트별 OBJ를 쓰는 중", "Writing the part-based OBJ")
+        obj_started = time.perf_counter()
         objects, vertices, triangle_count = export_obj(
             document, binary, args.output, material_names
         )
+        obj_seconds = time.perf_counter() - obj_started
     editable_glb = args.output.with_suffix(".editable.glb")
     if "glb" in formats:
         progress(
@@ -998,6 +1084,13 @@ def build(args: argparse.Namespace) -> dict:
         "armor": {"available": False, "path": None, "groups": 0, "triangles": 0},
         "axis_forward": "-Z",
         "axis_up": "Y",
+        "native_timings": {
+            "load_glb_seconds": round(load_seconds, 3),
+            "base_texture_seconds": round(texture_seconds, 3),
+            "pbr_seconds": round(pbr_seconds, 3),
+            "obj_seconds": round(obj_seconds, 3),
+            "total_seconds": round(time.perf_counter() - total_started, 3),
+        },
     }
     args.report.write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"

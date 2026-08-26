@@ -1,8 +1,9 @@
 # Legends 함선 선택·번역 백엔드
 
 GUI는 `List-LegendsShips.ps1`을 별도 프로세스로 실행하고 stdout의 JSON
-배열을 읽습니다. 이 작업은 `res_packages`의 IDX 메타데이터와 선택한 언어의
-`global.mo`만 읽으며 게임 파일을 추출하거나 수정하지 않습니다.
+배열을 읽습니다. 이 작업은 `res_packages`의 IDX 메타데이터, `GameParams.data`,
+선택한 언어의 `global.mo`를 읽습니다. GameParams는 메모리에서만 해석하며
+게임 설치 파일을 추출 경로에 쓰거나 수정하지 않습니다.
 
 ```powershell
 .\List-LegendsShips.ps1 `
@@ -23,19 +24,22 @@ GUI는 `List-LegendsShips.ps1`을 별도 프로세스로 실행하고 stdout의 
 
 각 행의 주요 필드는 다음과 같습니다.
 
-- `id`: 정확한 IDX와 내부 hull resource를 결합한 안정 식별자
-- `index_filename`: `res_packages`에 있는 정확한 IDX basename
+- `id`: 정확한 `game_params_key`와 내부 hull resource를 결합한 안정 식별자
+- `game_params_key`: `GameParams.data`의 정확한 플레이 가능 함선 키
+- `ship_code`: GameParams 키의 함선 코드(예: `PGSB610`)
+- `hull_component`: 실제 모델을 참조한 Hull component(예: `A_Hull`)
+- `model_path`: Hull component가 가리키는 정확한 `.model` 가상 경로
+- `index_filename`: geometry를 공급하는 정확한 IDX basename
 - `hull_resource`: IDX 안의 정확한 5분할 선체 resource 이름
 - `hull_resource_path`: 선체 geometry가 있는 가상 parent 경로
 - `output_slug`: 출력 하위 폴더로 바로 쓸 수 있는 안전한 이름
-- `ship_code`: IDX의 플레이 가능 함선 코드(예: `PJSB018`)
 - `localization_key`: 항상 `IDS_<ship_code>` 형식인 기본 번역 키
 - `localized_name`: `global.mo`에서 찾은 실제 게임 표시명, 없으면 `null`
 - `localized_language`: 정규화된 언어 토큰
 - `display_label`: `localized_name`이 있으면 그 값, 없으면 `variant_label`
-- `variant_label`: 종전 `display_label`이었던 내부 변형·resource 구분명
-- `support_level`: `hull-only` 또는 `unsupported`
-- `selectable`: 현재 범용 선체 추출기로 처리 가능한지 여부
+- `variant_label`: 내부 hull resource를 구분하는 변형명
+- `support_level`: 호환성을 위해 유지하는 `full-assembly` 또는 `unsupported`
+- `selectable`: live Hull 모델과 완전한 5분할 geometry가 정확히 연결되는지 여부
 
 `id`, `output_slug`, `index_filename`, `hull_resource`는 번역 적용 전후에 바뀌지
 않습니다. 정렬은 번역 적용 뒤 `localized_name`(없으면 `variant_label`)의 `casefold()`와
@@ -43,11 +47,10 @@ GUI는 `List-LegendsShips.ps1`을 별도 프로세스로 실행하고 stdout의 
 기호 및 기타 UTF-8 문자는 게임 파일 원문 그대로 보존합니다. 검색용 공백
 정규화가 필요하면 GUI에서 별도로 처리해야 합니다.
 
-하나의 IDX에 Yamato 기본형·ARP·Star Trek 같은 여러 완전한 선체가 있으면
-각 `hull_resource`를 별도 행으로 냅니다. 이 행들은 같은 `ship_code`와
-`localized_name`을 공유하지만 서로 다른 `variant_label`, `id`,
-`hull_resource`로 구분됩니다. GUI는 사람이 고를 때 다음처럼 실제 이름과
-변형명을 함께 보여주는 것이 좋습니다.
+기본형·콜라보·Golden 함선처럼 서로 다른 GameParams 키가 같은 선체 모델을
+공유해도 각각 별도 행으로 보존합니다. 하나의 GameParams 키가 여러 live Hull
+모델을 가리키는 경우에도 키와 모델 조합마다 행을 냅니다. GUI는 사람이 고를
+때 실제 이름과 내부 변형명을 함께 보여주는 것이 좋습니다.
 
 ```text
 Yamato — Yamato StarTrek [JSB403] — Tier 8
@@ -82,9 +85,11 @@ NUL 종료를 확인합니다. 필요한 키의 번역만 UTF-8로 해석하므�
 GUI는 모호한 substring 대신 `-ShipIndexFile`과 `-ShipResource`를 사용해야
 합니다.
 
-`hull-only`는 카탈로그가 IDX 메타데이터에서 선체 geometry 5개,
-diffuse map 2개와 예상 storage flag `(5, 1)`을 찾았다는 뜻입니다. 카탈로그
-단계에서는 package payload를 읽거나 geometry를 디코딩하지 않습니다.
-CRC·geometry decode와 OBJ/GLB/BLEND 결과 검증은 실제 추출 때 수행됩니다.
-따라서 이 표시는 포탑·레이더·보트 등의 장착 계층까지 범용으로 조립된다는
-뜻이 아닙니다.
+`full-assembly`는 기존 JSON 계약과의 호환을 위한 이름입니다. 실제 의미는
+GameParams의 정확한 live Hull 모델과 IDX의 완전한 5분할 geometry, 예상 storage
+flag `(5, 1)`이 연결됐다는 뜻입니다. 텍스처는 추출 단계에서 ModelUber 재질
+참조로 계산하므로 예전 고정 diffuse 파일명인 `*_a.dds`와
+`*_DeckHouse_a.dds`는 요구하지 않습니다. 카탈로그는 GameParams payload와 CRC를
+읽어 검증하지만 geometry payload는 디코딩하지 않습니다. 하드포인트 매핑,
+geometry decode, 최종 OBJ 조립 검증은 실제 추출 때 수행되므로 카탈로그의
+`selectable`이 모든 함선의 최종 조립 성공을 보장하지는 않습니다.

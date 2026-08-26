@@ -117,6 +117,152 @@ def _ship_components(root: dict[str, Any], ship_key: str) -> dict[str, Any]:
         raise TypeError(f"{ship_key} does not expose a ship component dictionary")
     return state[2]
 
+
+def _nested_dicts(value: Any) -> list[dict[str, Any]]:
+    """Return every dictionary reachable through inert GameParams objects."""
+
+    found: list[dict[str, Any]] = []
+    seen: set[int] = set()
+
+    def visit(item: Any) -> None:
+        if not isinstance(
+            item, (dict, tuple, list, set, frozenset, core.NeutralObject)
+        ):
+            return
+        object_id = id(item)
+        if object_id in seen:
+            return
+        seen.add(object_id)
+        if isinstance(item, dict):
+            found.append(item)
+            for nested in item.values():
+                visit(nested)
+        elif isinstance(item, (tuple, list, set, frozenset)):
+            for nested in item:
+                visit(nested)
+        else:
+            visit(item.state)
+
+    visit(value)
+    return found
+
+
+def _native_exterior_overrides(
+    root: dict[str, Any],
+    ship_key: str,
+    hull_component: str,
+    assets: Any,
+    prototypes: Any,
+) -> dict[str, Any] | None:
+    """Resolve the ship's authored default Exterior/Skin model replacements.
+
+    Legends special ships can share the ordinary ship module tree while their
+    preview appearance is supplied by a linked ``Exterior`` record. That record
+    can replace the hull and selected hardpoint models, but some records only
+    supply a material tint. Treating every linked exterior as a full model
+    replacement rejects valid special ships such as Incomparable SE.
+    """
+
+    ship = root[ship_key]
+    ship_state = getattr(ship, "state", None)
+    general_state = (
+        getattr(ship_state[0], "state", None)
+        if isinstance(ship_state, (tuple, list)) and ship_state
+        else None
+    )
+    preferred = (
+        general_state[27]
+        if isinstance(general_state, (tuple, list))
+        and len(general_state) > 27
+        and isinstance(general_state[27], str)
+        else None
+    )
+    # state[27] is the active authored exterior. state[33] also lists optional
+    # purchasable camouflages, which must never be applied implicitly.
+    exterior_key = (
+        preferred
+        if preferred in root
+        and any(
+            text.casefold().endswith("exterior")
+            for text in core.flatten_strings(root[preferred])
+        )
+        and any(
+            text.casefold().endswith("skin")
+            for text in core.flatten_strings(root[preferred])
+        )
+        else None
+    )
+    if exterior_key is None:
+        return None
+
+    record = root[exterior_key]
+    hull_override: str | None = None
+    mount_overrides: dict[str, dict[str, dict[str, Any]]] = {}
+    for mapping in _nested_dicts(record):
+        hull_value = mapping.get(hull_component)
+        if isinstance(hull_value, dict):
+            model = hull_value.get("model")
+            if (
+                isinstance(model, str)
+                and model.endswith(".model")
+                and "/ship/" in model.replace("\\", "/").casefold()
+            ):
+                hull_override = model.replace("\\", "/")
+        for raw_component, component_value in mapping.items():
+            component = str(raw_component)
+            if _component_category(component) is None or not isinstance(
+                component_value, dict
+            ):
+                continue
+            for hardpoint, override in component_value.items():
+                if (
+                    not isinstance(hardpoint, str)
+                    or not hardpoint.startswith("HP_")
+                    or not isinstance(override, dict)
+                ):
+                    continue
+                model = override.get("model")
+                if not isinstance(model, str) or not model.endswith(".model"):
+                    continue
+                mount_overrides.setdefault(component, {})[hardpoint] = {
+                    "model": model.replace("\\", "/"),
+                    "dead_mesh": str(override.get("deadMesh") or "").replace(
+                        "\\", "/"
+                    ),
+                    "misc_filter": list(override.get("miscFilter") or []),
+                    "filter_mode": bool(override.get("filterMode", False)),
+                }
+
+    required = [hull_override] if hull_override else []
+    required.extend(
+        override["model"]
+        for component in mount_overrides.values()
+        for override in component.values()
+    )
+    unavailable = [
+        path
+        for path in _unique_strings(required)
+        if not _available_model_path(path, assets, prototypes)
+    ]
+    if unavailable:
+        raise ValueError(
+            f"linked native exterior {exterior_key} has unavailable models: "
+            f"{unavailable}"
+        )
+    return {
+        "id": exterior_key,
+        "hull_model_path": hull_override,
+        "mount_overrides": mount_overrides,
+        "material_tints": sorted(
+            {
+                text
+                for text in core.flatten_strings(record)
+                if isinstance(text, str) and text.startswith("mat_")
+            }
+        ),
+    }
+
+
 def _available_model_path(
     path: str, assets: Any, prototypes: Any
 ) -> bool:
@@ -383,8 +529,16 @@ def gameparams_mounts(
     components = _ship_components(root, ship_key)
     if selected_model_path:
         selected_model_path = _normalize_selected_model_path(selected_model_path)
-    hull_component, hull_model_path = _select_hull_model_path(
+    hull_component, base_hull_model_path = _select_hull_model_path(
         components, assets, prototypes, selected_model_path
+    )
+    exterior = _native_exterior_overrides(
+        root, ship_key, hull_component, assets, prototypes
+    )
+    hull_model_path = (
+        exterior["hull_model_path"] or base_hull_model_path
+        if exterior
+        else base_hull_model_path
     )
 
     grouped: dict[str, list[tuple[str, str, str]]] = {}
@@ -458,6 +612,34 @@ def gameparams_mounts(
         mapped_components.append(component)
         for hardpoint, item in mapping.items():
             mounts.append(_mount_from_item(component, category, hardpoint, item))
+    applied_overrides: list[dict[str, str]] = []
+    if exterior:
+        exterior_mounts = exterior["mount_overrides"]
+        for mount in mounts:
+            override = exterior_mounts.get(mount["component"], {}).get(
+                mount["hardpoint"]
+            )
+            if override is None:
+                continue
+            original = mount["model_path"]
+            mount["model_path"] = override["model"]
+            mount["original_model_path"] = original
+            mount["native_exterior_id"] = exterior["id"]
+            if override["dead_mesh"]:
+                mount["dead_model_paths"] = [override["dead_mesh"]]
+            mount["selection_evidence"] = {
+                **mount["selection_evidence"],
+                "native_exterior_override": exterior["id"],
+                "base_model_path": original,
+            }
+            applied_overrides.append(
+                {
+                    "component": mount["component"],
+                    "hardpoint": mount["hardpoint"],
+                    "base_model_path": original,
+                    "model_path": mount["model_path"],
+                }
+            )
     mounts.sort(key=lambda item: core.natural_key(item["hardpoint"]))
     return mounts, {
         "ship_key": ship_key,
@@ -471,12 +653,25 @@ def gameparams_mounts(
         "mapped_components": mapped_components,
         "skipped_mount_components": skipped_components,
         "hull_component": hull_component,
+        "base_hull_model_path": base_hull_model_path,
         "hull_model_path": hull_model_path,
         "selected_model_path": selected_model_path,
         "selected_model_exact": (
             not selected_model_path
-            or hull_model_path.casefold()
+            or base_hull_model_path.casefold()
             == selected_model_path.replace("\\", "/").casefold()
+        ),
+        "native_exterior": (
+            {
+                "id": exterior["id"],
+                "base_hull_model_path": base_hull_model_path,
+                "hull_model_path": hull_model_path,
+                "hull_model_overridden": bool(exterior["hull_model_path"]),
+                "material_tints": exterior["material_tints"],
+                "applied_mount_overrides": applied_overrides,
+            }
+            if exterior
+            else None
         ),
     }
 
@@ -645,6 +840,142 @@ def _texture_properties(model: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def resolve_combat_mounts(
+    gp_mounts: list[dict[str, Any]],
+    hp_sources: dict[str, list[tuple[str, dict[str, Any]]]],
+    models: dict[str, dict[str, Any]],
+    corrections: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, list[str]]]:
+    """Resolve direct and recursively nested GameParams hardpoints.
+
+    Some ships mount AA guns on authored nodes inside a main-gun model. Their
+    GameParams keys encode the chain as ``HP_GGM_2_HP_GGA_1`` rather than
+    exposing the final node on the hull. Resolve the longest already-mounted
+    parent and compose its raw attachment placement with the child node matrix.
+    """
+
+    resolved: dict[str, dict[str, Any]] = {}
+    combat_mounts: list[dict[str, Any]] = []
+    duplicate_sources: dict[str, list[str]] = {}
+    pending = list(enumerate(gp_mounts))
+
+    while pending:
+        deferred: list[tuple[int, dict[str, Any]]] = []
+        progressed = False
+        for sequence, mount in pending:
+            hardpoint = mount["hardpoint"]
+            model_path = mount["model_path"]
+            if model_path not in models or model_path not in corrections:
+                deferred.append((sequence, mount))
+                continue
+
+            source_path: str | None = None
+            source_node: dict[str, Any] | None = None
+            parent_mount: dict[str, Any] | None = None
+            local_hardpoint = hardpoint
+            hp_world: list[float] | None = None
+            direct_sources = hp_sources.get(hardpoint, [])
+            if direct_sources:
+                if len(direct_sources) != 1:
+                    duplicate_sources[hardpoint] = [
+                        path for path, _node in direct_sources
+                    ]
+                    deferred.append((sequence, mount))
+                    continue
+                source_path, source_node = direct_sources[0]
+                hp_world = source_node["world_matrix"]["column_major"]
+            else:
+                parent_candidates = [
+                    (parent_hardpoint, candidate)
+                    for parent_hardpoint, candidate in resolved.items()
+                    if hardpoint.startswith(parent_hardpoint + "_HP_")
+                ]
+                if not parent_candidates:
+                    deferred.append((sequence, mount))
+                    continue
+                parent_hardpoint, parent_mount = max(
+                    parent_candidates, key=lambda item: len(item[0])
+                )
+                local_hardpoint = hardpoint[len(parent_hardpoint) + 1 :]
+                source_path = parent_mount["model_path"]
+                child_nodes = [
+                    node
+                    for node in models[source_path]["model_uber"][
+                        "visual_nodes"
+                    ]["nodes"]
+                    if (node.get("name") or "") == local_hardpoint
+                ]
+                if len(child_nodes) != 1:
+                    if len(child_nodes) > 1:
+                        duplicate_sources[hardpoint] = [
+                            source_path for _node in child_nodes
+                        ]
+                    deferred.append((sequence, mount))
+                    continue
+                source_node = child_nodes[0]
+                # The parent model correction aligns decoded mesh axes only.
+                # Game-authored child HP nodes already live in the parent's raw
+                # attachment space, so applying that correction here mirrors
+                # turret-mounted AA positions to the opposite side.
+                hp_world = core.mat_mul(
+                    parent_mount["hp_world_matrix"]["column_major"],
+                    source_node["world_matrix"]["column_major"],
+                )
+
+            assert source_path is not None
+            assert source_node is not None
+            assert hp_world is not None
+            correction = corrections[model_path]
+            corrected = core.mat_mul(
+                hp_world,
+                correction["correction_matrix"]["column_major"],
+            )
+            item = dict(mount)
+            item.update(
+                {
+                    "sequence": sequence,
+                    "render_required": True,
+                    "source_hull_model_path": source_path,
+                    "source_hull_model_resource_id": models[source_path][
+                        "resource_id"
+                    ],
+                    "source_hull_prototype_location": models[source_path][
+                        "prototype_location"
+                    ],
+                    "source_node_index": source_node["index"],
+                    "source_node_parent_index": source_node["parent_index"],
+                    "hp_world_matrix": core.matrix_record(hp_world),
+                    "attachment_parent_hardpoint": (
+                        parent_mount["hardpoint"] if parent_mount else None
+                    ),
+                    "attachment_depth": (
+                        int(parent_mount.get("attachment_depth", 0)) + 1
+                        if parent_mount
+                        else 0
+                    ),
+                    "local_hardpoint": local_hardpoint,
+                    "model_resource_id": models[model_path]["resource_id"],
+                    "model_prototype_location": models[model_path][
+                        "prototype_location"
+                    ],
+                    "correction": correction,
+                    "corrected_gltf_rh_y_up_matrix": core.matrix_record(
+                        corrected
+                    ),
+                }
+            )
+            resolved[hardpoint] = item
+            combat_mounts.append(item)
+            progressed = True
+
+        if not progressed:
+            break
+        pending = deferred
+
+    combat_mounts.sort(key=lambda item: item["sequence"])
+    return combat_mounts, duplicate_sources
+
+
 def build(args: argparse.Namespace) -> dict[str, Any]:
     assets = core.AssetsV0(args.assets)
     prototypes = core.PrototypeIndex(
@@ -729,42 +1060,9 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         if path in models
     }
 
-    combat_mounts: list[dict[str, Any]] = []
-    for sequence, mount in enumerate(gp_mounts):
-        hardpoint = mount["hardpoint"]
-        sources = hp_sources.get(hardpoint, [])
-        if len(sources) != 1 or mount["model_path"] not in models:
-            continue
-        source_path, node = sources[0]
-        correction = corrections[mount["model_path"]]
-        corrected = core.mat_mul(
-            node["world_matrix"]["column_major"],
-            correction["correction_matrix"]["column_major"],
-        )
-        item = dict(mount)
-        item.update(
-            {
-                "sequence": sequence,
-                "render_required": True,
-                "source_hull_model_path": source_path,
-                "source_hull_model_resource_id": models[source_path][
-                    "resource_id"
-                ],
-                "source_hull_prototype_location": models[source_path][
-                    "prototype_location"
-                ],
-                "source_node_index": node["index"],
-                "source_node_parent_index": node["parent_index"],
-                "hp_world_matrix": node["world_matrix"],
-                "model_resource_id": models[mount["model_path"]]["resource_id"],
-                "model_prototype_location": models[mount["model_path"]][
-                    "prototype_location"
-                ],
-                "correction": correction,
-                "corrected_gltf_rh_y_up_matrix": core.matrix_record(corrected),
-            }
-        )
-        combat_mounts.append(item)
+    combat_mounts, mount_resolution_duplicates = resolve_combat_mounts(
+        gp_mounts, hp_sources, models, corrections
+    )
 
     action_overlays: list[dict[str, Any]] = []
     for mount in combat_mounts:
@@ -877,6 +1175,7 @@ def build(args: argparse.Namespace) -> dict[str, Any]:
         for hardpoint, sources in hp_sources.items()
         if hardpoint in expected_hps and len(sources) != 1
     }
+    duplicate_hps.update(mount_resolution_duplicates)
     main_artillery_discovered = any(
         _component_category(str(component)) == ("Artillery", "main_artillery")
         for component in gp_metadata["discovered_mount_components"]
