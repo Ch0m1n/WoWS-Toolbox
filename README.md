@@ -17,8 +17,13 @@ It provides a graphical workflow for users who do not want to work from a comman
 
 - World of Warships: Legends on Steam
 - World of Warships for PC
+- World of Warships Blitz prepared local data
 - Korabli
 
+For WoWS Blitz, select a prepared data root containing `full_bundle` (or
+`bundle`), the account's downloaded `main.*.net.wargaming.wows.blitz.obb`,
+and optionally `DesignData` for localized catalog names. The toolbox never
+modifies the emulator or those source files.
 The selected game directory is treated as read-only. WoWS Toolbox writes caches and exported models outside the game installation.
 
 ## Main features
@@ -62,10 +67,30 @@ The application launcher and installer are currently unsigned. Windows SmartScre
 - A locally installed, supported game client
 - Free disk space for extracted models and textures
 
-The release package includes a private CPython 3.10 runtime and Pillow. Blender and a system Python installation are not required. The installer carries Microsoft's signed WebView2 Evergreen bootstrapper and runs it only when WebView2 is missing.
+The release package includes a private CPython 3.10 runtime, Pillow, UnityPy, and the required open-source texture codecs. Blender and a system Python installation are not required. The installer carries Microsoft's signed WebView2 Evergreen bootstrapper and runs it only when WebView2 is missing.
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.60 WoWS Blitz model extraction
+
+- Adds WoWS Blitz as a fourth GUI source using a prepared local data root with
+  downloaded ship AssetBundles, the user's base OBB, and optional DesignData.
+- Builds a localized 964-record ship catalog; the validated data set exposes
+  756 ships backed by currently downloaded body resources and includes each
+  available default, `paint_01`, and `paint_02` variant.
+- Combines body bundles with shared gun, misc, animation, shader, and ship-model
+  dependencies from the base OBB, then exports editable OBJ groups, MTL
+  materials, and albedo/normal/metallic texture PNGs without Blender.
+- A cold dependency lookup was reduced from about 80.8 seconds to 4.4 seconds
+  by prioritizing the five predictable bundles before a full OBB scan.
+- Live validation exported Iowa as 51 parts / 22,950 vertices / 15,124 faces /
+  18 textures and Mecklenburg `paint_01` as 45 parts / 43,637 vertices /
+  27,449 faces / 22 textures. Both outputs passed invalid-number and missing-map
+  checks; the Mecklenburg OBJ also loaded as 45 independently editable viewer
+  parts without browser errors.
+- Bundles UnityPy and only the open-source mesh/texture codec dependencies
+  required by the extractor. WoWS Blitz game data and the optional FMOD audio
+  converter are not included.
 ## 5.0.59 viewer texture-cache and interaction hotfix
 
 - Fixes duplicate asynchronous image requests used by materials that reference the same PNG as both `map_Kd` and `map_d`.
@@ -281,7 +306,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.59 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.60 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -371,7 +396,7 @@ WoWS Toolbox는 내 PC에 설치된 World of Warships 계열 게임에서 원하
 - 로컬에 설치된 지원 게임 클라이언트
 - 모델과 텍스처를 저장할 여유 공간
 
-배포본에는 전용 CPython 3.10 런타임과 Pillow가 들어 있어요. Blender와 시스템 Python은 필요하지 않아요. WebView2가 없으면 설치기가 Microsoft 서명 부트스트래퍼를 실행해요.
+배포본에는 전용 CPython 3.10 런타임, Pillow, UnityPy와 필요한 오픈소스 텍스처 코덱이 들어 있어요. Blender와 시스템 Python은 필요하지 않아요. WebView2가 없으면 설치기가 Microsoft 서명 부트스트래퍼를 실행해요.
 
 PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 소프트웨어에 포함된 호환 Oodle 런타임이 필요할 수 있어요. WoWS Toolbox는 독점 Oodle 라이브러리를 재배포하지 않아요.
 
@@ -392,7 +417,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.59 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.60 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 

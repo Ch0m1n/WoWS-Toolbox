@@ -1,4 +1,4 @@
-WoWS Toolbox 5.0.59
+WoWS Toolbox 5.0.60
 =======================================
 
 [한국어 빠른 사용법]
@@ -9,8 +9,11 @@ Windows 커뮤니티 도구입니다.
 
 1. 게임 설치 폴더 설정
    프로그램의 설정 탭에서 사용하는 게임의 설치 폴더를 지정합니다.
-   World of Warships Legends, World of Warships PC, Korabli를 지원합니다.
+   World of Warships Legends, World of Warships PC, Korabli, WoWS Blitz를 지원합니다.
    라이브 서버와 테스트 서버처럼 여러 설치본도 직접 선택할 수 있습니다.
+   Blitz는 full_bundle(또는 bundle), 사용자가 직접 확보한
+   main.*.net.wargaming.wows.blitz.obb, 선택적 DesignData가 함께 있는
+   준비된 데이터 폴더를 선택합니다.
 
 2. 함선 목록 불러오기
    함선 추출 화면에서 게임 소스를 선택하고 "목록 새로고침"을 누릅니다.
@@ -44,7 +47,7 @@ Windows 커뮤니티 도구입니다.
 - Windows 10/11 64비트
 - Windows PowerShell 5.1 또는 PowerShell 7
 - Microsoft Edge WebView2 Runtime
-- Python과 Pillow는 프로그램에 포함되어 별도 설치가 필요하지 않습니다.
+- Python, Pillow, UnityPy는 프로그램에 포함되어 별도 설치가 필요하지 않습니다.
 - OBJ 추출과 내장 뷰어에는 Blender가 필요하지 않습니다.
 
 문제가 발생한 경우
@@ -67,8 +70,10 @@ part-based OBJ models, and inspecting models and armor in the built-in viewer.
 
 1. Set game installation folders
    Open Settings and select the installation folder for each game you use.
-   World of Warships Legends, World of Warships PC, and Korabli are supported.
+   World of Warships Legends, World of Warships PC, Korabli, and WoWS Blitz are supported.
    Live, public-test, and other installations can be selected directly.
+   For Blitz, select a prepared data root containing full_bundle (or bundle),
+   the user's main.*.net.wargaming.wows.blitz.obb, and optional DesignData.
 
 2. Load the ship catalog
    On Ship Extraction, select a game source and click Refresh catalog.
@@ -101,7 +106,7 @@ Requirements
 - 64-bit Windows 10 or Windows 11
 - Windows PowerShell 5.1 or PowerShell 7
 - Microsoft Edge WebView2 Runtime
-- Python and Pillow are bundled; no separate installation is required.
+- Python, Pillow, and UnityPy are bundled; no separate installation is required.
 - Blender is not required for OBJ extraction or the built-in viewer.
 
 If something goes wrong

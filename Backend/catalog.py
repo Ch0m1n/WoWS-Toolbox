@@ -11,6 +11,7 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 
+from blitz_assets import blitz_catalog  # noqa: E402
 from mo_reader import MoCatalog, read_mo  # noqa: E402
 from game_archive import (  # noqa: E402
     decode_game_params,
@@ -577,7 +578,7 @@ def legends_catalog(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="WoWS Toolbox unified ship catalog")
-    parser.add_argument("--source", choices=("legends", "pc", "korabli"), required=True)
+    parser.add_argument("--source", choices=("legends", "pc", "korabli", "blitz"), required=True)
     parser.add_argument("--game-dir", type=Path, required=True)
     parser.add_argument("--toolbox-root", type=Path, required=True)
     parser.add_argument("--language", default="ko")
@@ -586,6 +587,8 @@ def main() -> int:
 
     if args.source == "legends":
         rows = legends_catalog(args.toolbox_root, args.game_dir, args.language)
+    elif args.source == "blitz":
+        rows = blitz_catalog(args.game_dir, args.language)
     else:
         rows = pc_catalog(args.game_dir, args.language, args.source)
 

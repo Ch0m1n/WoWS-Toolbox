@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
+from blitz_extract import extract_blitz  # noqa: E402
 from compat_cache import prepare_game_params_cache  # noqa: E402
 from game_archive import (  # noqa: E402
     latest_build,
@@ -1061,7 +1062,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="WoWS Toolbox selected ship extractor")
-    parser.add_argument("--source", choices=("legends", "pc", "korabli"), required=True)
+    parser.add_argument("--source", choices=("legends", "pc", "korabli", "blitz"), required=True)
     parser.add_argument("--game-dir", type=Path, required=True)
     parser.add_argument("--toolbox-root", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
@@ -1124,6 +1125,8 @@ def main() -> int:
 
     if args.source == "legends":
         result = extract_legends(args, output_dir)
+    elif args.source == "blitz":
+        result = extract_blitz(args, output_dir)
     else:
         result = extract_pc_family(args, output_dir)
     print("[RESULT] " + json.dumps(result, ensure_ascii=False), flush=True)

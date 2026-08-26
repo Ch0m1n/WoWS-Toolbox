@@ -5,7 +5,7 @@ param(
     [switch] $SelfTest,
     [switch] $SmokeTest,
     [switch] $QueueSelfTest,
-    [ValidateSet('', 'legends', 'pc', 'korabli')]
+    [ValidateSet('', 'legends', 'pc', 'korabli', 'blitz')]
     [string] $CatalogTestSource = '',
     [string] $ViewerTestModel = ''
 )
@@ -324,7 +324,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.59'
+$script:AppVersion = '5.0.60'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -512,6 +512,7 @@ $defaultSettings = [ordered] @{
     LegendsPath = 'D:\SteamLibrary\steamapps\common\World of Warships Legends'
     PcPath = 'D:\Games\World_of_Warships'
     KorabliPath = 'D:\Games\Korabli'
+    BlitzPath = ''
     OutputPath = $programDefaultOutputPath
     OodlePath = ''
     Language = 'en'
@@ -882,7 +883,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.59"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.60"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -949,6 +950,7 @@ $xaml = @'
                                 <ComboBoxItem Content="World of Warships Legends"/>
                                 <ComboBoxItem Content="World of Warships (PC)"/>
                                 <ComboBoxItem Content="Korabli"/>
+                                <ComboBoxItem Content="World of Warships Blitz"/>
                             </ComboBox>
                             <Grid Margin="0,8,0,0">
                                 <Grid.ColumnDefinitions>
@@ -1055,7 +1057,7 @@ $xaml = @'
                                 <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
                                     <ComboBox x:Name="FormatCombo" Width="155" SelectedIndex="0"
                                               ToolTip="출력 형식">
-                                        <ComboBoxItem Content="OBJ만 · 세 게임 공통 · Blender 불필요" Tag="obj"/>
+                                        <ComboBoxItem Content="OBJ만 · 네 게임 공통 · Blender 불필요" Tag="obj"/>
                                     </ComboBox>
                                     <ComboBox x:Name="TextureCombo" Width="120" Margin="8,0,0,0"
                                               SelectedIndex="0" ToolTip="텍스처 크기">
@@ -1182,7 +1184,7 @@ $xaml = @'
                               VerticalScrollBarVisibility="Auto">
                     <StackPanel>
                         <TextBlock Text="설정" FontSize="28" FontWeight="SemiBold"/>
-                        <TextBlock Text="세 게임 설치 경로와 출력 위치를 지정해요. Blender는 사용하지 않아요."
+                        <TextBlock Text="네 게임 설치 경로와 출력 위치를 지정해요. Blender는 사용하지 않아요."
                                    Foreground="#8FA2BC" Margin="0,7,0,20"/>
                         <Border Style="{StaticResource CardBorder}" Margin="0,0,0,14">
                             <Grid>
@@ -1246,13 +1248,23 @@ $xaml = @'
                                             Content="찾기" Margin="8,0,0,0"/>
                                 </Grid>
                                 <TextBlock Text="Korabli" Foreground="#8FA2BC"/>
-                                <Grid Margin="0,5,0,0">
+                                <Grid Margin="0,5,0,12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <TextBox x:Name="KorabliPathBox"/>
                                     <Button Grid.Column="1" x:Name="BrowseKorabliButton"
+                                            Content="찾기" Margin="8,0,0,0"/>
+                                </Grid>
+                                <TextBlock Text="World of Warships Blitz" Foreground="#8FA2BC"/>
+                                <Grid Margin="0,5,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="BlitzPathBox"/>
+                                    <Button Grid.Column="1" x:Name="BrowseBlitzButton"
                                             Content="찾기" Margin="8,0,0,0"/>
                                 </Grid>
                             </StackPanel>
@@ -1328,7 +1340,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.59 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.60 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -1395,9 +1407,9 @@ $controlNames = @(
     'AutoUpdateCheck', 'CheckUpdateButton',
     'LogBox', 'ModelWebView', 'ViewerPathLabel', 'ViewerStatus',
     'OpenModelButton', 'OpenRecentModelButton', 'OpenCompareModelButton', 'OpenViewerFolderButton',
-    'LegendsPathBox', 'PcPathBox', 'KorabliPathBox',
+    'LegendsPathBox', 'PcPathBox', 'KorabliPathBox', 'BlitzPathBox',
     'SettingsOutputBox', 'BlenderPathBox', 'OodlePathBox',
-    'BrowseLegendsButton', 'BrowsePcButton', 'BrowseKorabliButton',
+    'BrowseLegendsButton', 'BrowsePcButton', 'BrowseKorabliButton', 'BrowseBlitzButton',
     'BrowseSettingsOutputButton', 'BrowseBlenderButton',
     'FindOodleButton', 'BrowseOodleButton', 'ValidateSettingsButton',
     'SaveSettingsButton', 'SettingsStatus',
@@ -1419,6 +1431,9 @@ if ($SelfTest) {
         language = $script:WoWSToolboxLanguage
         window = $window.Name
         controls = $controls.Count
+        source_count = $sourceCombo.Items.Count
+        blitz_control_present = $null -ne $window.FindName('BlitzPathBox') -and
+            $null -ne $window.FindName('BrowseBlitzButton')
         backend_catalog = (Test-Path -LiteralPath $script:CatalogScript)
         backend_extract = (Test-Path -LiteralPath $script:ExtractScript)
         hull_only_control_present = $null -ne $window.FindName('HullOnly')
@@ -1519,7 +1534,7 @@ $script:RecentShipsPath = Join-Path $script:StateRoot 'recent-ships.json'
 
 function Get-SourceKey {
     param([int] $Index = $controls.SourceCombo.SelectedIndex)
-    return @('legends', 'pc', 'korabli')[$Index]
+    return @('legends', 'pc', 'korabli', 'blitz')[$Index]
 }
 
 function Get-SourceDisplay {
@@ -1528,6 +1543,7 @@ function Get-SourceDisplay {
         'legends' { 'World of Warships Legends' }
         'pc' { 'World of Warships (PC)' }
         'korabli' { 'Korabli' }
+        'blitz' { 'World of Warships Blitz' }
         default { $Source }
     }
 }
@@ -1538,6 +1554,7 @@ function Get-GamePath {
         'legends' { [string] $script:Settings.LegendsPath }
         'pc' { [string] $script:Settings.PcPath }
         'korabli' { [string] $script:Settings.KorabliPath }
+        'blitz' { [string] $script:Settings.BlitzPath }
         default { '' }
     }
 }
@@ -1559,6 +1576,10 @@ function Set-GamePath {
         'korabli' {
             $script:Settings.KorabliPath = $Path
             $controls.KorabliPathBox.Text = $Path
+        }
+        'blitz' {
+            $script:Settings.BlitzPath = $Path
+            $controls.BlitzPathBox.Text = $Path
         }
         default { throw "알 수 없는 게임 소스예요: $Source" }
     }
@@ -1597,8 +1618,53 @@ function Get-GameInstallLabel {
     return $label
 }
 
+function Get-BlitzBundleRoot {
+    param([Parameter(Mandatory)] [string] $Path)
+    foreach ($candidate in @(
+        $Path,
+        (Join-Path $Path 'full_bundle'),
+        (Join-Path $Path 'bundle'),
+        (Join-Path $Path 'files\bundle')
+    )) {
+        if ([string]::IsNullOrWhiteSpace([string] $candidate)) { continue }
+        if (Test-Path -LiteralPath (Join-Path $candidate 'prefab\ship\body') -PathType Container) {
+            try { return [IO.Path]::GetFullPath($candidate) }
+            catch { return [string] $candidate }
+        }
+    }
+    return ''
+}
+
+function Find-BlitzObbPath {
+    param(
+        [Parameter(Mandatory)] [string] $Path,
+        [Parameter(Mandatory)] [string] $BundleRoot
+    )
+    $roots = @($Path, (Split-Path -Parent $BundleRoot)) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([string] $_) } |
+        Select-Object -Unique
+    foreach ($root in $roots) {
+        foreach ($candidate in @(
+            (Join-Path $root 'main.obb'),
+            (Join-Path $root 'downloads\main.obb')
+        )) {
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) { return $candidate }
+        }
+        foreach ($container in @($root, (Join-Path $root 'downloads'))) {
+            if (-not (Test-Path -LiteralPath $container -PathType Container)) { continue }
+            $found = Get-ChildItem -LiteralPath $container -Filter 'main.*.obb' -File -ErrorAction SilentlyContinue |
+                Sort-Object Name | Select-Object -First 1
+            if ($null -ne $found) { return $found.FullName }
+        }
+    }
+    return ''
+}
+
 function Get-GameFolderSource {
     param([Parameter(Mandatory)] [string] $Path)
+    if (-not [string]::IsNullOrWhiteSpace((Get-BlitzBundleRoot $Path))) {
+        return 'blitz'
+    }
     if (Test-Path -LiteralPath (Join-Path $Path 'WorldOfWarshipsLegends.exe') -PathType Leaf) {
         return 'legends'
     }
@@ -1630,6 +1696,16 @@ function Get-GameFolderProblem {
         [Parameter(Mandatory)] [string] $Path
     )
     $packageRoot = Join-Path $Path 'res_packages'
+    if ($Source -eq 'blitz') {
+        $bundleRoot = Get-BlitzBundleRoot $Path
+        if ([string]::IsNullOrWhiteSpace($bundleRoot)) {
+            return 'prefab/ship/body가 들어 있는 Blitz 번들 폴더가 없어요'
+        }
+        if ([string]::IsNullOrWhiteSpace((Find-BlitzObbPath -Path $Path -BundleRoot $bundleRoot))) {
+            return 'main.*.net.wargaming.wows.blitz.obb 기본 OBB가 없어요'
+        }
+        return ''
+    }
     if (-not (Test-Path -LiteralPath $packageRoot -PathType Container)) {
         return 'res_packages 폴더가 없어요'
     }
@@ -1674,7 +1750,7 @@ function Select-CurrentGameFolder {
     if ([string]::IsNullOrWhiteSpace([string] $root)) {
         [Windows.MessageBox]::Show(
             $window,
-            (Get-UiText '선택한 위치에서 WoWS, Korabli 또는 Legends 실행 파일을 찾지 못했어요.' 'No WoWS, Korabli, or Legends executable was found at the selected location.'),
+            (Get-UiText '선택한 위치에서 WoWS 실행 파일이나 Blitz 데이터 번들을 찾지 못했어요.' 'No WoWS executable or Blitz data bundle was found at the selected location.'),
             (Get-UiText '게임 폴더를 인식하지 못했어요' 'Game folder not recognized'),
             [Windows.MessageBoxButton]::OK,
             [Windows.MessageBoxImage]::Warning
@@ -1695,7 +1771,7 @@ function Select-CurrentGameFolder {
     }
     Set-GamePath -Source $source -Path $root
     [void] $script:Catalogs.Remove($source)
-    $controls.SourceCombo.SelectedIndex = @{ legends = 0; pc = 1; korabli = 2 }[$source]
+    $controls.SourceCombo.SelectedIndex = @{ legends = 0; pc = 1; korabli = 2; blitz = 3 }[$source]
     Save-Settings
     Update-CurrentGamePathUi
     Add-Log "게임 설치본 선택: $(Get-SourceDisplay $source) · $root"
@@ -2201,7 +2277,8 @@ function Test-SettingsPaths {
     foreach ($pair in @(
         @('legends', 'Legends', $script:Settings.LegendsPath),
         @('pc', 'PC', $script:Settings.PcPath),
-        @('korabli', 'Korabli', $script:Settings.KorabliPath)
+        @('korabli', 'Korabli', $script:Settings.KorabliPath),
+        @('blitz', 'Blitz', $script:Settings.BlitzPath)
     )) {
         if ($requiredSources -contains $pair[0] -and
             -not (Test-Path -LiteralPath $pair[2] -PathType Container)) {
@@ -3084,7 +3161,7 @@ function Test-ExtractionReady {
     $requestedSources = @($script:ExtractionQueue | ForEach-Object Source | Sort-Object -Unique)
     $requestedFormats = Get-ComboTag $controls.FormatCombo
     if ($requestedFormats -ne 'obj') {
-        $problems.Add((Get-UiText 'WoWS Toolbox는 세 게임 모두 Blender 없이 OBJ만 지원해요' 'WoWS Toolbox supports OBJ only without Blender for all three games'))
+        $problems.Add((Get-UiText 'WoWS Toolbox는 네 게임 모두 Blender 없이 OBJ만 지원해요' 'WoWS Toolbox supports OBJ only without Blender for all four games'))
     }
     $outputProblem = Get-OutputPathProblem -OutputPath ([string] $script:Settings.OutputPath) -GamePaths @(
         @($script:ExtractionQueue | ForEach-Object {
@@ -3291,6 +3368,12 @@ function Start-NextBatchExtraction {
     if ($source -eq 'legends') {
         $arguments.Add('--ship-key')
         $arguments.Add([string] $ship.GameParamsKey)
+    }
+    else {
+        $arguments.Add('--ship-index')
+        $arguments.Add([string] $ship.GameParamsIndex)
+    }
+    if ($source -in @('legends', 'blitz')) {
         $selectedModelPath = Get-OptionalShipValue -Ship $ship -Name 'ModelPath'
         $shipResource = Get-OptionalShipValue -Ship $ship -Name 'ShipResource'
         if (-not [string]::IsNullOrWhiteSpace($selectedModelPath)) {
@@ -3301,10 +3384,6 @@ function Start-NextBatchExtraction {
             $arguments.Add('--ship-resource')
             $arguments.Add($shipResource)
         }
-    }
-    else {
-        $arguments.Add('--ship-index')
-        $arguments.Add([string] $ship.GameParamsIndex)
     }
     if ($source -eq 'korabli' -and
         -not [string]::IsNullOrWhiteSpace([string] $script:Settings.OodlePath)) {
@@ -3358,7 +3437,7 @@ function Switch-Page {
             $controls.SettingsPage.Visibility = 'Visible'
             $controls.TopTitle.Text = '설정'
             $controls.TopSubtitle.Text =
-                '세 게임 설치 경로, 출력과 코라블리 압축 런타임을 관리해요.'
+                '네 게임 설치 경로와 출력을 관리해요.'
         }
     }
 }
@@ -3446,7 +3525,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.59&lang=' +
+            'https://viewer.local/index.html?app=5.0.60&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -3700,7 +3779,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.59&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.60&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }
@@ -3837,6 +3916,7 @@ function Sync-SettingsToUi {
     $controls.LegendsPathBox.Text = [string] $script:Settings.LegendsPath
     $controls.PcPathBox.Text = [string] $script:Settings.PcPath
     $controls.KorabliPathBox.Text = [string] $script:Settings.KorabliPath
+    $controls.BlitzPathBox.Text = [string] $script:Settings.BlitzPath
     $controls.SettingsOutputBox.Text = [string] $script:Settings.OutputPath
     $controls.OodlePathBox.Text = [string] $script:Settings.OodlePath
     Select-ComboTag $controls.LanguageCombo ([string] $script:Settings.Language)
@@ -3855,6 +3935,7 @@ function Sync-UiToSettings {
     $script:Settings.LegendsPath = $controls.LegendsPathBox.Text.Trim()
     $script:Settings.PcPath = $controls.PcPathBox.Text.Trim()
     $script:Settings.KorabliPath = $controls.KorabliPathBox.Text.Trim()
+    $script:Settings.BlitzPath = $controls.BlitzPathBox.Text.Trim()
     $script:Settings.OutputPath = $controls.SettingsOutputBox.Text.Trim()
     $script:Settings.OodlePath = $controls.OodlePathBox.Text.Trim()
     $script:Settings.Language = Get-ComboTag $controls.LanguageCombo
@@ -4069,7 +4150,7 @@ function Start-ShipExtraction {
     $profiles = "$(Get-ComboTag $controls.FormatCombo) · 텍스처 $(Get-ComboTag $controls.TextureCombo) · LOD $(Get-ComboTag $controls.LodCombo) · 도색 $(Get-ComboTag $controls.CamouflageCombo)"
     $answer = [Windows.MessageBox]::Show(
         $window,
-        (Get-UiText "${count}척을 단일 대기열 엔진으로 추출할까요?`n`n$preview`n`n$profiles`n세 게임 모두 Blender 없이 OBJ로 조립해요." "Extract $count ships with the queue engine?`n`n$preview`n`n$profiles`nAll three game sources are assembled without Blender."),
+        (Get-UiText "${count}척을 단일 대기열 엔진으로 추출할까요?`n`n$preview`n`n$profiles`n네 게임 모두 Blender 없이 OBJ로 조립해요." "Extract $count ships with the queue engine?`n`n$preview`n`n$profiles`nAll four game sources are assembled without Blender."),
         (Get-UiText '대기열 모델 추출' 'Extract queued models'),
         [Windows.MessageBoxButton]::YesNo,
         [Windows.MessageBoxImage]::Question
@@ -4255,7 +4336,7 @@ function ConvertTo-ValidatedQueueEntries {
     if ($Rows.Count -gt 2000) { throw '대기열은 최대 2,000척까지 불러올 수 있어요.' }
     $loaded = [Collections.Generic.List[object]]::new()
     $keys = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    $supportedSources = @('legends', 'pc', 'korabli')
+    $supportedSources = @('legends', 'pc', 'korabli', 'blitz')
     for ($index = 0; $index -lt $Rows.Count; $index++) {
         $row = $Rows[$index]
         if ($null -eq $row -or $null -eq $row.PSObject.Properties['source'] -or
@@ -4418,6 +4499,11 @@ function Auto-DetectPaths {
     $controls.KorabliPathBox.Text = Find-FirstExisting @(
         $controls.KorabliPathBox.Text, 'D:\Games\Korabli', 'C:\Games\Korabli'
     )
+    $controls.BlitzPathBox.Text = Find-FirstExisting @(
+        $controls.BlitzPathBox.Text,
+        'I:\codex_making\wows-blitz-extraction',
+        (Join-Path $documents 'WoWS-Blitz-Extraction')
+    )
     $oodle = Find-OodleRuntime
     if (-not [string]::IsNullOrWhiteSpace($oodle)) { $controls.OodlePathBox.Text = $oodle }
     $controls.SettingsStatus.Text = Convert-ToUiText '자동 탐색 결과를 채웠어요. 경로 검사 후 저장해 주세요.'
@@ -4439,6 +4525,7 @@ function New-DiagnosticsZip {
             legends_path_valid = Test-Path -LiteralPath $script:Settings.LegendsPath -PathType Container
             pc_path_valid = Test-Path -LiteralPath $script:Settings.PcPath -PathType Container
             korabli_path_valid = Test-Path -LiteralPath $script:Settings.KorabliPath -PathType Container
+            blitz_path_valid = Test-Path -LiteralPath $script:Settings.BlitzPath -PathType Container
         }
         native_obj_pipeline = $true
         cache_bytes = Get-FolderBytes (Get-CacheRoot)
@@ -4457,6 +4544,7 @@ function New-DiagnosticsZip {
             @([string] $script:Settings.LegendsPath, '%LEGENDS%'),
             @([string] $script:Settings.PcPath, '%WOWS_PC%'),
             @([string] $script:Settings.KorabliPath, '%KORABLI%'),
+            @([string] $script:Settings.BlitzPath, '%WOWS_BLITZ%'),
             @([string] $script:Settings.OutputPath, '%OUTPUT%')
         )) {
             if (-not [string]::IsNullOrWhiteSpace($pair[0])) { $text = $text.Replace($pair[0], $pair[1]) }
@@ -4760,6 +4848,7 @@ foreach ($binding in @(
     @('BrowseLegendsButton', 'LegendsPathBox'),
     @('BrowsePcButton', 'PcPathBox'),
     @('BrowseKorabliButton', 'KorabliPathBox'),
+    @('BrowseBlitzButton', 'BlitzPathBox'),
     @('BrowseSettingsOutputButton', 'SettingsOutputBox')
 )) {
     $buttonName = $binding[0]
@@ -4792,9 +4881,10 @@ $controls.SaveSettingsButton.Add_Click({
         legends = [string] $script:Settings.LegendsPath
         pc = [string] $script:Settings.PcPath
         korabli = [string] $script:Settings.KorabliPath
+        blitz = [string] $script:Settings.BlitzPath
     }
     Sync-UiToSettings
-    foreach ($source in @('legends', 'pc', 'korabli')) {
+    foreach ($source in @('legends', 'pc', 'korabli', 'blitz')) {
         if ((Get-NormalizedGamePath $oldPaths[$source]) -ne
             (Get-NormalizedGamePath (Get-GamePath $source))) {
             [void] $script:Catalogs.Remove($source)
@@ -5014,10 +5104,15 @@ if ($QueueSelfTest) {
     return
 }
 if (-not [string]::IsNullOrWhiteSpace($CatalogTestSource)) {
+    if ($CatalogTestSource -eq 'blitz') {
+        Auto-DetectPaths
+        Sync-UiToSettings
+    }
     $sourceIndex = @{
         legends = 0
         pc = 1
         korabli = 2
+        blitz = 3
     }[$CatalogTestSource]
     $controls.SourceCombo.SelectedIndex = $sourceIndex
     $window.Opacity = 0

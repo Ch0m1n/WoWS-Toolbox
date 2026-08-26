@@ -11,7 +11,7 @@ redistribute or sell extracted assets without permission from the rights
 holder.
 
 This package is distributed under the root `LICENSE`. It does not bundle World
-of Warships Legends, World of Warships PC, or Korabli assets; generated models;
+of Warships Legends, World of Warships PC, Korabli, or WoWS Blitz assets; generated models;
 textures; replays; GLBs; Blender files; animation samples; or Oodle DLLs.
 
 ## CPython embedded runtime
@@ -33,6 +33,36 @@ textures; replays; GLBs; Blender files; animation samples; or Oodle DLLs.
 - Upstream wheel SHA-256:
   `300557495eb45ebb8aec96c2da9c4be642fbf7cd937278b4013ba894ea8eb0eb`
 - Use: local DDS-derived texture image processing for portable OBJ/MTL output.
+
+## UnityPy and WoWS Blitz codec dependencies
+
+- Project: <https://github.com/K0lb3/UnityPy>
+- Bundled version: UnityPy 1.25.3
+- License: MIT, reproduced in
+  `Runtime/Python/Lib/site-packages/unitypy-1.25.3.dist-info/licenses/LICENSE`
+- Use: local parsing of user-supplied WoWS Blitz Unity AssetBundles,
+  SerializedFiles, meshes, materials, and textures.
+
+UnityPy's bundled runtime dependencies are:
+
+- astc-encoder-py 0.1.12
+- archspec 0.2.6
+- attrs 26.1.0
+- Brotli 1.2.0
+- etcpak 0.9.15
+- fsspec 2026.7.0
+- lz4 4.4.5
+- texture2ddecoder 1.0.6
+- tpk_ar 0.2.4
+- typing_extensions 4.16.0
+
+UnityPy's optional FMOD audio converter and the proprietary FMOD runtime are
+not bundled. WoWS Toolbox does not export game audio.
+Their upstream license and notice files are preserved in the corresponding
+`Runtime/Python/Lib/site-packages/*-dist-info` directories. These libraries
+are executable format/codec support only; no WoWS Blitz OBB, AssetBundle,
+DesignData, model, texture, or other game asset is included.
+
 ## Microsoft Edge WebView2 SDK
 
 - Package: <https://www.nuget.org/packages/Microsoft.Web.WebView2>
@@ -156,9 +186,9 @@ that streamed bit-packed keys and standalone `.anim` remain unsupported. See
 
 ## Game assets
 
-World of Warships Legends, World of Warships PC and Korabli models, textures,
-replays, animation data, names, and other game content remain assets of their
+World of Warships Legends, World of Warships PC, Korabli, and World of Warships
+Blitz models, textures, replays, animation data, names, and other game content remain assets of their
 respective rights holders. Users must supply files from their own installation
 and follow the game's terms and applicable law. This notice is not legal advice.
 
-CPython and Pillow are bundled under their licenses. PowerShell 5.1/7 is provided by Windows or the user. Blender is not required or invoked by WoWS Toolbox 5.0.59. The WebView2 bootstrapper is redistributed as described above; the WebView2 Runtime is supplied by Microsoft. Oodle runtimes are never redistributed and must come from the user's legally installed software.
+CPython, Pillow, UnityPy, and the listed codec dependencies are bundled under their licenses. PowerShell 5.1/7 is provided by Windows or the user. Blender is not required or invoked by WoWS Toolbox 5.0.60. The WebView2 bootstrapper is redistributed as described above; the WebView2 Runtime is supplied by Microsoft. Oodle runtimes are never redistributed and must come from the user's legally installed software.

@@ -17,6 +17,8 @@ from types import SimpleNamespace
 
 sys.dont_write_bytecode = True
 
+from blitz_assets import resolve_blitz_layout  # noqa: E402
+from blitz_extract import extract_blitz  # noqa: E402
 from extract_ship import (  # noqa: E402
     extract_legends,
     extract_pc_family,
@@ -136,8 +138,8 @@ def history_estimate(history: dict, source: str) -> tuple[float, int]:
             size = 0
         if size > 0:
             sizes.append(size)
-    default_seconds = {"legends": 480.0, "pc": 75.0, "korabli": 80.0}.get(source, 90.0)
-    default_bytes = {"legends": 1_200_000_000, "pc": 800_000_000, "korabli": 800_000_000}.get(source, 800_000_000)
+    default_seconds = {"legends": 480.0, "pc": 75.0, "korabli": 80.0, "blitz": 90.0}.get(source, 90.0)
+    default_bytes = {"legends": 1_200_000_000, "pc": 800_000_000, "korabli": 800_000_000, "blitz": 250_000_000}.get(source, 800_000_000)
     return (
         statistics.median(seconds[-12:]) if seconds else default_seconds,
         int(statistics.median(sizes[-12:])) if sizes else default_bytes,
@@ -265,6 +267,22 @@ def compatibility(args: SimpleNamespace, previous: dict | None = None) -> dict:
                 if result["ok"]
                 else "IDX 또는 패키지 파일을 찾지 못했어요"
             )
+        elif args.source == "blitz":
+            layout = resolve_blitz_layout(args.game_dir)
+            body_files = list(layout.body_root.glob("*.ab"))
+            marker = layout.bundle_root / "BundlePackInfo.bytes"
+            result["build"] = (
+                int(marker.stat().st_mtime)
+                if marker.is_file()
+                else int(layout.body_root.stat().st_mtime)
+            )
+            result["package_count"] = len(body_files)
+            result["ok"] = bool(body_files) and layout.obb_path is not None
+            result["message"] = (
+                f"Blitz body {len(body_files)}개·기본 OBB 구조 확인 완료"
+                if result["ok"]
+                else "Blitz body 또는 기본 OBB를 찾지 못했어요"
+            )
         else:
             executable = args.game_dir / "WorldOfWarshipsLegends.exe"
             package_root = args.game_dir / "res_packages"
@@ -313,6 +331,17 @@ def item_contract(args: SimpleNamespace, index: int) -> dict:
         )
         if not pipeline.is_file():
             errors.append("Legends 추출 파이프라인이 없어요")
+    elif args.source == "blitz":
+        if not args.ship_index:
+            errors.append("Blitz 함선 식별자가 비어 있어요")
+        model_path = args.selected_model_path.replace("\\", "/").strip("/")
+        segments = [segment for segment in model_path.split("/") if segment]
+        if ".." in segments or not model_path.casefold().startswith("prefab/ship/body/"):
+            errors.append("Blitz 선택 body 경로가 안전하지 않아요")
+        if getattr(args, "camouflage_color_scheme", ""):
+            errors.append("Blitz 도색 색상표 선택은 지원하지 않아요")
+        if not (args.toolbox_root / "Backend" / "blitz_extract.py").is_file():
+            errors.append("Blitz 추출 엔진이 없어요")
     else:
         if not args.ship_index:
             errors.append("함선 IDX 식별자가 비어 있어요")
@@ -335,9 +364,12 @@ def item_contract(args: SimpleNamespace, index: int) -> dict:
 
 def run_one(args: SimpleNamespace, output_dir: Path) -> dict:
     output_dir.parent.mkdir(parents=True, exist_ok=True)
-    if args.source == "legends":
+    if args.source in {"legends", "blitz"}:
         args.prefetch_event.set()
+    if args.source == "legends":
         return extract_legends(args, output_dir)
+    if args.source == "blitz":
+        return extract_blitz(args, output_dir)
     return extract_pc_family(args, output_dir)
 
 
@@ -484,8 +516,8 @@ def main() -> int:
             next_index = current_index + 1
             if (
                 next_index < len(items)
-                and current_args.source != "legends"
-                and namespaces[next_index].source != "legends"
+                and current_args.source not in {"legends", "blitz"}
+                and namespaces[next_index].source not in {"legends", "blitz"}
                 and not control_state(control_file)["cancel"]
             ):
                 emit("BATCH", {

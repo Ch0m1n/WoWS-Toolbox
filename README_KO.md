@@ -1,4 +1,4 @@
-# WoWS Toolbox 5.0.59
+# WoWS Toolbox 5.0.60
 
 내 PC에 설치된 World of Warships 계열 게임에서 원하는 함선을 골라 파트별 모델로 내보내고, 프로그램 안에서 모델과 장갑을 바로 확인하는 Windows GUI 도구예요.
 
@@ -7,9 +7,31 @@
 - World of Warships: Legends Steam판
 - World of Warships PC판
 - Korabli
+- World of Warships Blitz 준비 데이터
 
 게임 설치 폴더는 읽기 전용으로 사용해요. 게임 자산과 Oodle DLL은 배포본에 넣지 않아요.
+WoWS Blitz는 에뮬레이터를 직접 수정하지 않고, `full_bundle`(또는
+`bundle`)·직접 확보한 `main.*.net.wargaming.wows.blitz.obb`·선택적
+`DesignData`가 들어 있는 준비된 데이터 폴더를 읽기 전용으로 사용해요.
 
+## 5.0.60 WoWS Blitz 모델 추출
+
+- 준비된 로컬 데이터 폴더의 다운로드 함선 AssetBundle, 사용자가 직접 확보한
+  기본 OBB, 선택적 DesignData를 읽는 WoWS Blitz를 네 번째 GUI 소스로 추가했어요.
+- 현 데이터에서 964개 함선 레코드를 번역 이름으로 구성하고, 실제 body 리소스가
+  있는 756개를 선택할 수 있어요. 함선별 기본·`paint_01`·`paint_02` 도색도
+  존재하는 것만 표시해요.
+- body 번들과 OBB의 국가별 주포·부포·공통 장식·애니메이션·셰이더·함선 모델
+  의존성을 결합해, Blender 없이 개별 파트 OBJ·MTL과 알베도·법선·금속성 PNG를
+  내보내요.
+- 필요한 다섯 공통 번들을 먼저 확인해 빈 캐시 의존성 탐색을 약 80.8초에서
+  4.4초로 줄였어요.
+- 실제 Iowa는 51파트·22,950정점·15,124면·텍스처 18개, Mecklenburg
+  `paint_01`은 45파트·43,637정점·27,449면·텍스처 22개로 추출했어요.
+  잘못된 수치와 누락 맵은 0개였고, Mecklenburg는 뷰어에서 45개 파트로
+  브라우저 오류 없이 열렸어요.
+- 설치본에 UnityPy와 필요한 오픈소스 메시·텍스처 코덱만 포함해요. WoWS Blitz
+  게임 데이터와 사용하지 않는 FMOD 음원 변환기는 포함하지 않아요.
 ## 5.0.59 모델 뷰어 텍스처·조작 멈춤 수정
 
 - 같은 PNG를 기본 색상(`map_Kd`)과 투명도(`map_d`)로 동시에 읽는 재질에서 비동기 이미지 캐시가 빈 값을 돌려주던 문제를 고쳤어요.
@@ -575,7 +597,7 @@ OBJ, MTL, `textures` 폴더는 함께 옮겨야 상대 텍스처 경로가 유�
 
 - Windows 10/11
 - Windows PowerShell 5.1 또는 PowerShell 7 (둘 다 있으면 7 우선)
-- Python 3.10.11 + Pillow 12.3.0 내장 (별도 설치 불필요)
+- Python 3.10.11 + Pillow 12.3.0 + UnityPy 1.25.3 내장 (별도 설치 불필요)
 - Blender 불필요 (세 게임 OBJ 추출과 내장 뷰어에 사용하지 않음)
 - Microsoft Edge WebView2 Runtime (설치기가 확인하고 없으면 자동 설치)
 

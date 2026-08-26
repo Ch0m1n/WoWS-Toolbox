@@ -33,7 +33,7 @@ The suite checks both PowerShell 5.1 and PowerShell 7 GUI startup, Python regres
 A pull request should include:
 
 - a concise description of the problem and the chosen solution;
-- the affected game source: Legends, World of Warships PC, Korabli, or all;
+- the affected game source: Legends, World of Warships PC, Korabli, WoWS Blitz, or all;
 - test results;
 - screenshots for visible UI changes;
 - sanitized logs for extraction fixes;

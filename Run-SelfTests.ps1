@@ -22,6 +22,7 @@ $mainSelf = & $pwshCommand -STA -NoLogo -NoProfile -File $mainGui -SelfTest |
     Select-Object -Last 1 | ConvertFrom-Json
 Assert-ExitCode 'Main GUI self-test'
 if (-not $mainSelf.ok -or $mainSelf.language -ne 'en' -or $mainSelf.controls -lt 60 -or
+    $mainSelf.source_count -ne 4 -or -not $mainSelf.blitz_control_present -or
     $mainSelf.hull_only_control_present -or $mainSelf.thumbnail_control_present -or
     -not $mainSelf.viewer_control_present -or
     -not $mainSelf.update_controls_present -or
@@ -136,7 +137,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.59',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.60',
     'ConvertTo-ValidatedQueueEntries', '[PIPELINE] ', 'child_heartbeat',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -335,7 +336,7 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerI18n -notmatch 'formalKoreanReplacements' -or
     $viewerI18n -notmatch 'language === ''ko''.*formalizeKorean' -or
     $viewerIndex -match 'v=5\.0\.30' -or
-    $viewerScript -notmatch "version: '5\.0\.59'" -or
+    $viewerScript -notmatch "version: '5\.0\.60'" -or
     $advanced -match 'v=5\.0\.30' -or
     $viewerCss -notmatch '#app \{[^}]*grid-template-rows: minmax\(0, 1fr\);[^}]*overflow: hidden' -or
     $viewerCss -notmatch '\.inspector \{[^}]*min-height: 0;[^}]*overflow: hidden;' -or
@@ -443,8 +444,8 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerVendor -match 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
     $viewerIndex -notmatch '조명과 표면' -or
     $viewerLightingCss -notmatch '\.lighting-desk' -or
-    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.59\.1' -or
-    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.59\.1' -or
+    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.60\.0' -or
+    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.60\.0' -or
     $viewerScript -notmatch 'loadAssemblyMetadata' -or
     $viewerScript -notmatch 'matrixRowsDeterminant' -or
     $viewerScript -notmatch 'assembly-mirrored-standard-double-sided-v4' -or
@@ -508,6 +509,10 @@ $required = @(
     'Launcher\WoWSToolboxLauncher.cs', 'Launcher\Build-Launcher.ps1',
     'GUI\Launch-Gui.ps1', 'GUI\WoWSToolboxGUI.ps1',
     'Backend\catalog.py', 'Backend\extract_ship.py', 'Backend\batch_extract.py',
+    'Backend\blitz_assets.py', 'Backend\blitz_extract.py',
+    'Runtime\Python\python.exe',
+    'Runtime\Python\Lib\site-packages\UnityPy\__init__.py',
+    'Runtime\Python\Lib\site-packages\texture2ddecoder\_texture2ddecoder.cp310-win_amd64.pyd',
     'Backend\armor_sidecar.py',
     'Backend\blender_export_v5.py', 'Backend\blender_repack_obj_v5.py',
     'Backend\wowsunpack.exe', 'Backend\wowsunpack_armor.exe',
@@ -531,6 +536,11 @@ foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $PSScriptRoot $relative) -PathType Leaf)) {
         throw "Required file is missing: $relative"
     }
+}
+$embeddedPython = Join-Path $PSScriptRoot 'Runtime\Python\python.exe'
+$embeddedProbe = & $embeddedPython -B -c 'import UnityPy, lz4, texture2ddecoder; print(UnityPy.__version__)'
+if ($LASTEXITCODE -ne 0 -or [string] $embeddedProbe -ne '1.25.3') {
+    throw "Bundled UnityPy runtime probe failed: $embeddedProbe"
 }
 if ((Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'WoWS-Toolbox-GUI.cmd')) `
         -notmatch 'GUI\\Launch-Gui\.ps1') {
@@ -566,8 +576,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.59.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.59') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.60.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.60') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -715,9 +725,9 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.59 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.60 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.59 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.60 self-tests passed.'
 }
 
