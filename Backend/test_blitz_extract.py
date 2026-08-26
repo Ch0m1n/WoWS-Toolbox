@@ -5,11 +5,17 @@ import unittest
 from pathlib import Path
 
 from blitz_extract import (
+    _external_cab_for_pointer,
     _include_mesh,
     _priority_obb_names,
     _safe_archive_target,
     _world_matrices,
 )
+
+
+class _Value:
+    def __init__(self, **values):
+        self.__dict__.update(values)
 
 
 class BlitzExtractionPureTests(unittest.TestCase):
@@ -77,6 +83,29 @@ class BlitzExtractionPureTests(unittest.TestCase):
             root = Path(temporary).resolve()
             target = _safe_archive_target(root, "assets/bundle/shaders.ab")
             self.assertEqual(target, root / "assets" / "bundle" / "shaders.ab")
+
+    def test_external_cab_uses_one_based_unity_file_id(self) -> None:
+        owner = _Value(
+            assets_file=_Value(
+                externals=[
+                    _Value(path="archive:/CAB-11111111111111111111111111111111/CAB-first"),
+                    _Value(path="archive:/CAB-22222222222222222222222222222222/CAB-second"),
+                ]
+            )
+        )
+        pointer = _Value(m_FileID=2, m_PathID=42)
+
+        self.assertEqual(
+            _external_cab_for_pointer(owner, pointer),
+            "CAB-22222222222222222222222222222222",
+        )
+
+    def test_external_cab_ignores_null_pointer(self) -> None:
+        owner = _Value(assets_file=_Value(externals=[]))
+
+        self.assertIsNone(
+            _external_cab_for_pointer(owner, _Value(m_FileID=0, m_PathID=0))
+        )
 
 
 if __name__ == "__main__":

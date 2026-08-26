@@ -277,6 +277,38 @@ def _materialize_dependencies(
     return list(dict.fromkeys(paths))
 
 
+def _resolve_dependency_cabs(
+    layout: BlitzLayout,
+    ship_id: str,
+    dependencies: list[str],
+    index_path: Path,
+    bundle_cache: Path,
+) -> list[Path]:
+    signature = layout_signature(layout)
+    entries = _read_index(index_path, signature)
+    for candidate in _model_candidates(layout, ship_id):
+        _index_local_bundle(candidate, layout, entries)
+
+    missing = {cab for cab in dependencies if cab not in entries}
+    if missing:
+        progress(
+            "blitz_dependencies",
+            10,
+            f"Blitz CAB 의존성 {len(missing)}개를 찾는 중이에요.",
+        )
+        _scan_obb(layout, ship_id, missing, entries)
+        _scan_downloaded_bundles(layout, missing, entries)
+    if missing:
+        raise RuntimeError("Blitz CAB 의존 번들을 찾지 못했어요: " + ", ".join(sorted(missing)))
+    _write_index(index_path, signature, entries)
+    return _materialize_dependencies(
+        layout,
+        dependencies,
+        entries,
+        bundle_cache,
+    )
+
+
 def _dependency_paths(
     layout: BlitzLayout,
     body_path: Path,
@@ -298,29 +330,53 @@ def _dependency_paths(
     key = hashlib.sha256(signature.encode("utf-8")).hexdigest()[:16]
     index_path = cache_root / "Blitz" / key / "cab-index.json"
     bundle_cache = cache_root / "Blitz" / key / "obb-bundles"
-    entries = _read_index(index_path, signature)
-    for candidate in _model_candidates(layout, ship_id):
-        _index_local_bundle(candidate, layout, entries)
-
-    missing = {cab for cab in dependencies if cab not in entries}
-    if missing:
-        progress(
-            "blitz_dependencies",
-            10,
-            f"처음 보는 Blitz 빌드라 CAB 의존성 {len(missing)}개를 찾는 중이에요.",
-        )
-        _scan_obb(layout, ship_id, missing, entries)
-        _scan_downloaded_bundles(layout, missing, entries)
-    if missing:
-        raise RuntimeError("Blitz CAB 의존 번들을 찾지 못했어요: " + ", ".join(sorted(missing)))
-    _write_index(index_path, signature, entries)
-    paths = _materialize_dependencies(
+    paths = _resolve_dependency_cabs(
         layout,
+        ship_id,
         dependencies,
-        entries,
+        index_path,
         bundle_cache,
     )
     return body_cab, dependencies, paths, index_path
+
+
+def _external_cab_for_pointer(owner_reader: Any, pointer: Any) -> str | None:
+    file_id = int(getattr(pointer, "m_FileID", 0) or 0)
+    path_id = int(getattr(pointer, "m_PathID", 0) or 0)
+    if file_id <= 0 or path_id == 0:
+        return None
+    externals = getattr(getattr(owner_reader, "assets_file", None), "externals", [])
+    if file_id > len(externals):
+        return None
+    match = CAB_RE.search(str(getattr(externals[file_id - 1], "path", "")))
+    return match.group(0) if match else None
+
+
+def _unresolved_render_cabs(serialized: Any) -> set[str]:
+    missing: set[str] = set()
+    for reader in serialized.objects.values():
+        if reader.type.name != "MeshRenderer":
+            continue
+        renderer = reader.parse_as_object()
+        for material_pointer in renderer.m_Materials:
+            material_reader = dereference(material_pointer)
+            if material_reader is None:
+                cab = _external_cab_for_pointer(reader, material_pointer)
+                if cab:
+                    missing.add(cab)
+                continue
+            material = material_reader.parse_as_object()
+            saved = getattr(material, "m_SavedProperties", None)
+            for key, texture_env in getattr(saved, "m_TexEnvs", []) if saved is not None else []:
+                if str(key) not in TEXTURE_ROLES:
+                    continue
+                texture_pointer = texture_env.m_Texture
+                if dereference(texture_pointer) is not None:
+                    continue
+                cab = _external_cab_for_pointer(material_reader, texture_pointer)
+                if cab:
+                    missing.add(cab)
+    return missing
 
 
 def _local_matrix(transform: Any) -> Matrix4:
@@ -686,8 +742,33 @@ def extract_blitz(args: Any, output_dir: Path) -> dict[str, Any]:
         48,
         f"Blitz Unity 번들 {len(dependency_paths) + 1}개를 함께 읽는 중이에요.",
     )
-    environment = _unitypy().load(str(body_path), *(str(path) for path in dependency_paths))
-    serialized = _body_serialized(environment, body_cab)
+    resolved_cabs = list(dependencies)
+    for _ in range(6):
+        environment = _unitypy().load(str(body_path), *(str(path) for path in dependency_paths))
+        serialized = _body_serialized(environment, body_cab)
+        unresolved_render_cabs = _unresolved_render_cabs(serialized)
+        if not unresolved_render_cabs:
+            break
+        missing_render_cabs = unresolved_render_cabs.difference(resolved_cabs)
+        if not missing_render_cabs:
+            raise RuntimeError("Blitz 렌더 CAB를 추가로 읽었지만 외부 참조가 해소되지 않았어요.")
+        progress(
+            "blitz_dependencies",
+            52,
+            f"사용 중인 재질 텍스처 CAB {len(missing_render_cabs)}개를 추가로 읽는 중이에요.",
+        )
+        supplemental = sorted(missing_render_cabs)
+        supplemental_paths = _resolve_dependency_cabs(
+            layout,
+            ship_id,
+            supplemental,
+            index_path,
+            index_path.parent / "obb-bundles",
+        )
+        resolved_cabs.extend(supplemental)
+        dependency_paths = list(dict.fromkeys([*dependency_paths, *supplemental_paths]))
+    else:
+        raise RuntimeError("Blitz 렌더 CAB 재귀 의존성이 너무 깊어요.")
     stem = safe_name(
         f"{args.ship_index}_{args.display_name or ship_id}_{camouflage}_Editable"
     )
@@ -710,7 +791,7 @@ def extract_blitz(args: Any, output_dir: Path) -> dict[str, Any]:
         "camouflage": camouflage,
         "body_bundle": str(body_path.relative_to(layout.bundle_root).as_posix()),
         "body_cab": body_cab,
-        "dependency_cabs": dependencies,
+        "dependency_cabs": resolved_cabs,
         "dependency_bundle_count": len(dependency_paths),
         "cab_index": str(index_path),
         "lod": int(args.lod),

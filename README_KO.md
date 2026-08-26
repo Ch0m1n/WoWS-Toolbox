@@ -1,4 +1,4 @@
-# WoWS Toolbox 5.0.60
+# WoWS Toolbox 5.0.61
 
 내 PC에 설치된 World of Warships 계열 게임에서 원하는 함선을 골라 파트별 모델로 내보내고, 프로그램 안에서 모델과 장갑을 바로 확인하는 Windows GUI 도구예요.
 
@@ -13,6 +13,15 @@
 WoWS Blitz는 에뮬레이터를 직접 수정하지 않고, `full_bundle`(또는
 `bundle`)·직접 확보한 `main.*.net.wargaming.wows.blitz.obb`·선택적
 `DesignData`가 들어 있는 준비된 데이터 폴더를 읽기 전용으로 사용해요.
+
+## 5.0.61 WoWS Blitz 무장 텍스처 핫픽스
+
+- 선체가 직접 참조하는 번들만 읽고, 무장 재질이 다시 참조하는 2단계 텍스처
+  CAB를 놓쳐 일부 주포·부포·대공포가 흰색으로 추출되던 문제를 고쳤어요.
+- 현재 함선의 렌더러가 실제로 사용하는 재질 슬롯만 따라가며 필요한 CAB를
+  추가로 읽고, 찾은 위치는 기존 Blitz CAB 캐시에 저장해 이후 추출에 재사용해요.
+- 실제 Yellowstone, Yosemite, Schwertleite를 재추출해 모든 사용 재질에 알베도
+  PNG와 MTL `map_Kd`가 연결되고, 누락된 알베도 재질이 0개인지 확인했어요.
 
 ## 5.0.60 WoWS Blitz 모델 추출
 

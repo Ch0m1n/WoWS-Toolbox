@@ -71,6 +71,16 @@ The release package includes a private CPython 3.10 runtime, Pillow, UnityPy, an
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.61 WoWS Blitz weapon-texture hotfix
+
+- Recursively resolves texture CABs referenced by loaded weapon materials,
+  instead of stopping at the body bundle's direct dependencies. This prevents
+  affected main, secondary, and anti-aircraft mounts from exporting white.
+- Follows only material slots used by the selected ship and stores discovered
+  CAB locations in the existing Blitz cache for later extractions.
+- Live re-extraction of Yellowstone, Yosemite, and Schwertleite produced an
+  albedo PNG and MTL `map_Kd` for every material used by their OBJ files.
+
 ## 5.0.60 WoWS Blitz model extraction
 
 - Adds WoWS Blitz as a fourth GUI source using a prepared local data root with
@@ -306,7 +316,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.60 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.61 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -417,7 +427,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.60 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.61 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 

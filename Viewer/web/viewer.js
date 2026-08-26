@@ -2198,4 +2198,4 @@ window.WoWSViewerCore = {
   setStatus,
   hostMessage,
 };
-hostMessage({ type: 'ready', version: '5.0.60' });
+hostMessage({ type: 'ready', version: '5.0.61' });

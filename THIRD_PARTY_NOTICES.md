@@ -191,4 +191,4 @@ Blitz models, textures, replays, animation data, names, and other game content r
 respective rights holders. Users must supply files from their own installation
 and follow the game's terms and applicable law. This notice is not legal advice.
 
-CPython, Pillow, UnityPy, and the listed codec dependencies are bundled under their licenses. PowerShell 5.1/7 is provided by Windows or the user. Blender is not required or invoked by WoWS Toolbox 5.0.60. The WebView2 bootstrapper is redistributed as described above; the WebView2 Runtime is supplied by Microsoft. Oodle runtimes are never redistributed and must come from the user's legally installed software.
+CPython, Pillow, UnityPy, and the listed codec dependencies are bundled under their licenses. PowerShell 5.1/7 is provided by Windows or the user. Blender is not required or invoked by WoWS Toolbox 5.0.61. The WebView2 bootstrapper is redistributed as described above; the WebView2 Runtime is supplied by Microsoft. Oodle runtimes are never redistributed and must come from the user's legally installed software.
