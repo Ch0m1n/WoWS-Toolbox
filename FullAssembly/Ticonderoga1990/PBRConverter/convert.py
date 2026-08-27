@@ -41,11 +41,123 @@ class RenderSet:
     texture_maps: dict[str, str] | None
     material_fx_path: str | None
     material_properties: list[dict]
+    rigid_node_world_matrix: tuple[float, ...] | None = None
+    rigid_node_name: str | None = None
 
 
 MAP_SUFFIXES = {"a": "_a.dds", "n": "_n.dds", "mg": "_mg.dds", "ao": "_ao.dds"}
 LOD_RE = re.compile(r"_lod(\d+)", re.IGNORECASE)
 DAMAGE_RE = re.compile(r"(?:crack|patch|dead)", re.IGNORECASE)
+IDENTITY_COLUMN_MAJOR = (
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+)
+MODEL_TO_COMPONENT_BASIS = (
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+)
+
+
+def multiply_column_major(
+    left: tuple[float, ...], right: tuple[float, ...]
+) -> tuple[float, ...]:
+    result = [0.0] * 16
+    for column in range(4):
+        for row in range(4):
+            result[column * 4 + row] = sum(
+                left[k * 4 + row] * right[column * 4 + k]
+                for k in range(4)
+            )
+    return tuple(result)
+
+
+def component_space_matrix(matrix: tuple[float, ...] | None) -> tuple[float, ...]:
+    if matrix is None:
+        return IDENTITY_COLUMN_MAJOR
+    return multiply_column_major(
+        multiply_column_major(MODEL_TO_COMPONENT_BASIS, matrix),
+        MODEL_TO_COMPONENT_BASIS,
+    )
+
+
+def transform_point(
+    matrix: tuple[float, ...], value: tuple[float, ...]
+) -> tuple[float, float, float]:
+    x, y, z = float(value[0]), float(value[1]), float(value[2])
+    return (
+        matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12],
+        matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13],
+        matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14],
+    )
+
+
+def determinant3(matrix: tuple[float, ...]) -> float:
+    a, b, c = matrix[0], matrix[4], matrix[8]
+    d, e, f = matrix[1], matrix[5], matrix[9]
+    g, h, i = matrix[2], matrix[6], matrix[10]
+    return a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g)
+
+
+def transform_normal(
+    matrix: tuple[float, ...], value: tuple[float, ...]
+) -> tuple[float, float, float]:
+    a, b, c = matrix[0], matrix[4], matrix[8]
+    d, e, f = matrix[1], matrix[5], matrix[9]
+    g, h, i = matrix[2], matrix[6], matrix[10]
+    det = determinant3(matrix)
+    x, y, z = float(value[0]), float(value[1]), float(value[2])
+    if abs(det) < 1e-12:
+        nx, ny, nz = (
+            a * x + b * y + c * z,
+            d * x + e * y + f * z,
+            g * x + h * y + i * z,
+        )
+    else:
+        nx = (
+            (e * i - f * h) * x
+            + (f * g - d * i) * y
+            + (d * h - e * g) * z
+        ) / det
+        ny = (
+            (c * h - b * i) * x
+            + (a * i - c * g) * y
+            + (b * g - a * h) * z
+        ) / det
+        nz = (
+            (b * f - c * e) * x
+            + (c * d - a * f) * y
+            + (a * e - b * d) * z
+        ) / det
+    length = math.sqrt(nx * nx + ny * ny + nz * nz) or 1.0
+    return nx / length, ny / length, nz / length
 
 
 @functools.lru_cache(maxsize=1)
@@ -253,6 +365,31 @@ def parse_render_sets(payload: dict, manifest_path: Path) -> list[RenderSet]:
             ):
                 raise ConversionError("material_properties must be an array of objects")
 
+            rigid_matrix_value = render_set.get("rigid_node_world_matrix")
+            rigid_matrix: tuple[float, ...] | None = None
+            if rigid_matrix_value is not None:
+                if (
+                    not isinstance(rigid_matrix_value, (list, tuple))
+                    or len(rigid_matrix_value) != 16
+                ):
+                    raise ConversionError(
+                        "rigid_node_world_matrix must contain 16 column-major values"
+                    )
+                try:
+                    rigid_matrix = tuple(
+                        float(value) for value in rigid_matrix_value
+                    )
+                except (TypeError, ValueError) as error:
+                    raise ConversionError(
+                        "rigid_node_world_matrix values must be numeric"
+                    ) from error
+                if not all(math.isfinite(value) for value in rigid_matrix):
+                    raise ConversionError("rigid_node_world_matrix must be finite")
+            rigid_node_name_value = render_set.get("rigid_node_name")
+            rigid_node_name = (
+                str(rigid_node_name_value) if rigid_node_name_value else None
+            )
+
             object_name = blender_id_name(f"{geometry_label}__{part_name}")
             if object_name in used_objects:
                 raise ConversionError(f"duplicate render-set object: {object_name}")
@@ -274,6 +411,8 @@ def parse_render_sets(payload: dict, manifest_path: Path) -> list[RenderSet]:
                     texture_maps=texture_maps,
                     material_fx_path=material_fx_path,
                     material_properties=material_properties_value,
+                    rigid_node_world_matrix=rigid_matrix,
+                    rigid_node_name=rigid_node_name,
                 )
             )
     return output
@@ -521,6 +660,10 @@ def write_obj(
         output.write(b"# WoWS: Legends exact render-set LOD0 export\n")
         output.write(f"mtllib {mtl_path.name}\n".encode("utf-8"))
         for render_set, part in mapped_parts:
+            rigid_matrix = component_space_matrix(
+                render_set.rigid_node_world_matrix
+            )
+            mirrored = determinant3(rigid_matrix) < 0.0
             output.write(f"o {render_set.object_name}\n".encode("utf-8"))
             output.write(
                 f"# vertices_section {render_set.vertices_section}\n".encode("utf-8")
@@ -532,9 +675,9 @@ def write_obj(
             output.write(f"usemtl {safe_name(render_set.material_name)}\n".encode("utf-8"))
             for vertex in part.vertices:
                 output.write(
-                    ("v {:.9g} {:.9g} {:.9g}\n".format(*vertex.position)).encode(
-                        "ascii"
-                    )
+                    ("v {:.9g} {:.9g} {:.9g}\n".format(
+                        *transform_point(rigid_matrix, vertex.position)
+                    )).encode("ascii")
                 )
             for vertex in part.vertices:
                 output.write(
@@ -542,11 +685,13 @@ def write_obj(
                 )
             for vertex in part.vertices:
                 output.write(
-                    ("vn {:.9g} {:.9g} {:.9g}\n".format(*vertex.normal)).encode(
-                        "ascii"
-                    )
+                    ("vn {:.9g} {:.9g} {:.9g}\n".format(
+                        *transform_normal(rigid_matrix, vertex.normal)
+                    )).encode("ascii")
                 )
             for triangle in part.triangles:
+                if mirrored:
+                    triangle = (triangle[0], triangle[2], triangle[1])
                 indices = [vertex_base + index for index in triangle]
                 output.write(
                     (

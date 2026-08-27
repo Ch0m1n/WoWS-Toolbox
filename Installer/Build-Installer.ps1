@@ -2,7 +2,7 @@
 
 [CmdletBinding()]
 param(
-    [string] $ReleaseRoot = (Join-Path (Split-Path -Parent $PSScriptRoot) '..\..\outputs\WoWS-Toolbox-v5.0.64'),
+    [string] $ReleaseRoot = (Join-Path (Split-Path -Parent $PSScriptRoot) '..\..\outputs\WoWS-Toolbox-v5.0.65'),
     [string] $OutputRoot = (Join-Path (Split-Path -Parent $PSScriptRoot) '..\..\outputs')
 )
 
@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 $release = (Resolve-Path -LiteralPath $ReleaseRoot).Path
 [void] (New-Item -ItemType Directory -Path $OutputRoot -Force)
 $output = (Resolve-Path -LiteralPath $OutputRoot).Path
-$setupPath = Join-Path $output 'WoWS-Toolbox-Setup-5.0.64.exe'
+$setupPath = Join-Path $output 'WoWS-Toolbox-Setup-5.0.65.exe'
 $webViewBootstrapper = Join-Path $PSScriptRoot 'dependencies\MicrosoftEdgeWebview2Setup.exe'
 $expectedWebViewSha256 = '8C4A80540B6BBCBEF30A4E8C7D1AC504B6FC09DB922B4ACDFD85C9D5F6F1050E'
 if (-not (Test-Path -LiteralPath $webViewBootstrapper -PathType Leaf)) {
@@ -49,8 +49,8 @@ foreach ($relative in @(
 
 $launcherPath = Join-Path $release 'WoWS Toolbox.exe'
 $launcherVersion = (Get-Item -LiteralPath $launcherPath).VersionInfo
-if ($launcherVersion.FileVersion.Trim() -ne '5.0.64.0' -or
-    $launcherVersion.ProductVersion.Trim() -ne '5.0.64') {
+if ($launcherVersion.FileVersion.Trim() -ne '5.0.65.0' -or
+    $launcherVersion.ProductVersion.Trim() -ne '5.0.65') {
     throw "Launcher version metadata is wrong: $($launcherVersion.FileVersion) / $($launcherVersion.ProductVersion)"
 }
 $launcherProbe = Start-Process -FilePath $launcherPath -ArgumentList '--check' -Wait -PassThru -WindowStyle Hidden

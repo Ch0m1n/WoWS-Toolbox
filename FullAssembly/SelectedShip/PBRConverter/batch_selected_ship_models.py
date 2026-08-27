@@ -12,6 +12,7 @@ import argparse
 import concurrent.futures
 import hashlib
 import json
+import math
 import os
 import shutil
 import struct
@@ -34,6 +35,24 @@ TEXTURE_PROPERTY_CHANNELS = {
     "detailMap": "detail",
 }
 CATEGORY_ORDER = ("hull", "combat", "misc", "runtime_overlay")
+IDENTITY_COLUMN_MAJOR = (
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+)
 
 
 def emit_progress(percent: int, message: str) -> None:
@@ -226,6 +245,59 @@ def _lod0_visual(model_path: str, model_record: Mapping[str, Any]) -> dict[str, 
     return lod0[0]
 
 
+def _rigid_render_set_transform(
+    model_record: Mapping[str, Any], render_set: Mapping[str, Any]
+) -> dict[str, Any] | None:
+    """Return the visual-node transform for a single-palette rigid render set."""
+
+    if render_set.get("skinned") is not False:
+        return None
+    palette = render_set.get("skin_node_palette")
+    if not isinstance(palette, list) or len(palette) != 1:
+        return None
+    palette_entry = palette[0]
+    if not isinstance(palette_entry, dict):
+        return None
+    node_name = palette_entry.get("name")
+    if not isinstance(node_name, str) or not node_name:
+        return None
+
+    model_uber = model_record.get("model_uber")
+    visual_nodes = (
+        model_uber.get("visual_nodes") if isinstance(model_uber, dict) else None
+    )
+    nodes = visual_nodes.get("nodes") if isinstance(visual_nodes, dict) else None
+    if not isinstance(nodes, list):
+        return None
+    matches = [
+        node
+        for node in nodes
+        if isinstance(node, dict) and node.get("name") == node_name
+    ]
+    if len(matches) != 1:
+        return None
+    world = matches[0].get("world_matrix")
+    matrix = world.get("column_major") if isinstance(world, dict) else None
+    if not isinstance(matrix, list) or len(matrix) != 16:
+        return None
+    try:
+        values = tuple(float(value) for value in matrix)
+    except (TypeError, ValueError):
+        return None
+    if not all(math.isfinite(value) for value in values):
+        return None
+    if all(
+        abs(value - identity) <= 1e-7
+        for value, identity in zip(values, IDENTITY_COLUMN_MAJOR)
+    ):
+        return None
+    return {
+        "rigid_node_name": node_name,
+        "rigid_node_world_matrix": list(values),
+        "rigid_node_transform_basis": "ModelUber XYZ, column-major world matrix",
+    }
+
+
 def make_manifest(
     use: Mapping[str, Any],
     model_record: Mapping[str, Any],
@@ -330,6 +402,9 @@ def make_manifest(
                 "semantic_rule": rule,
             }
         )
+        rigid_transform = _rigid_render_set_transform(model_record, raw_render_set)
+        if rigid_transform is not None:
+            item.update(rigid_transform)
         selected.append(item)
 
     if not selected:

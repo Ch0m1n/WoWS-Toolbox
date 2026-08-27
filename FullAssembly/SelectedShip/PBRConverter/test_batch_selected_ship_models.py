@@ -35,7 +35,7 @@ def render_set(
     }
 
 
-def model_record(render_sets: list[dict]) -> dict:
+def model_record(render_sets: list[dict], nodes: list[dict] | None = None) -> dict:
     return {
         "model_uber": {
             "visual_prototypes": [
@@ -58,6 +58,7 @@ def model_record(render_sets: list[dict]) -> dict:
                     ],
                 }
             ],
+            "visual_nodes": {"nodes": nodes or []},
         }
     }
 
@@ -134,7 +135,9 @@ class CollectUsedModelsTests(unittest.TestCase):
 
 
 class SemanticManifestTests(unittest.TestCase):
-    def _manifest(self, render_sets: list[dict]) -> dict:
+    def _manifest(
+        self, render_sets: list[dict], nodes: list[dict] | None = None
+    ) -> dict:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             geometry = root / "content" / "geometry" / "shared.geometry"
@@ -145,7 +148,7 @@ class SemanticManifestTests(unittest.TestCase):
                 "categories": ["hull"],
                 "primary_category": "hull",
             }
-            return BATCH.make_manifest(use, model_record(render_sets), root)
+            return BATCH.make_manifest(use, model_record(render_sets, nodes), root)
 
     def test_explicit_intact_patch_is_kept_and_damage_crack_is_excluded(self) -> None:
         manifest = self._manifest(
@@ -178,6 +181,70 @@ class SemanticManifestTests(unittest.TestCase):
     def test_conflicting_semantic_is_rejected(self) -> None:
         with self.assertRaisesRegex(BATCH.BatchError, "both included and damage"):
             self._manifest([render_set("Hull", semantic="damage", include=True)])
+
+
+    def test_non_skinned_single_palette_node_world_transform_is_preserved(self) -> None:
+        item = render_set("Radar_GridShape")
+        item.update(
+            {
+                "skinned": False,
+                "skin_node_palette": [{"name": "Radar_Grid"}],
+            }
+        )
+        matrix = [
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0,
+            0.0,
+            0.0,
+            0.03335,
+            0.0,
+            1.0,
+        ]
+        manifest = self._manifest(
+            [item],
+            [
+                {
+                    "name": "Radar_Grid",
+                    "world_matrix": {"column_major": matrix},
+                }
+            ],
+        )
+
+        selected = manifest["models"][0]["render_sets"][0]
+        self.assertEqual(selected["rigid_node_name"], "Radar_Grid")
+        self.assertEqual(selected["rigid_node_world_matrix"], matrix)
+
+    def test_identity_rigid_node_transform_is_not_emitted(self) -> None:
+        item = render_set("Radar_RootShape")
+        item.update(
+            {
+                "skinned": False,
+                "skin_node_palette": [{"name": "Radar_Root"}],
+            }
+        )
+        manifest = self._manifest(
+            [item],
+            [
+                {
+                    "name": "Radar_Root",
+                    "world_matrix": {
+                        "column_major": list(BATCH.IDENTITY_COLUMN_MAJOR)
+                    },
+                }
+            ],
+        )
+
+        selected = manifest["models"][0]["render_sets"][0]
+        self.assertNotIn("rigid_node_world_matrix", selected)
 
 
 class ReuseIntegrityTests(unittest.TestCase):

@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from unittest import mock
 from pathlib import Path
+from types import SimpleNamespace
 
 import convert
 
@@ -161,6 +162,73 @@ class ConverterTests(unittest.TestCase):
         }
         with self.assertRaises(convert.ConversionError):
             convert.parse_render_sets(payload, root / "dummy.json")
+
+
+    def test_rigid_node_transform_is_baked_in_component_coordinates(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            render_set = convert.RenderSet(
+                geometry=root / "unused.geometry",
+                geometry_label="Radar",
+                vertices_section="Radar_GridShape.vertices",
+                indices_section="Radar_GridShape.indices",
+                part_name="Radar_GridShape",
+                object_name="Radar__Grid",
+                group_name="Radar__Grid__render_set_000",
+                material_mfm_path="content/Radar.mfm",
+                material_name="Radar",
+                texture_root=root,
+                texture_maps=None,
+                material_fx_path=None,
+                material_properties=[],
+                rigid_node_world_matrix=(
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    0.0,
+                    2.0,
+                    0.0,
+                    1.0,
+                ),
+                rigid_node_name="Radar_Grid",
+            )
+            part = SimpleNamespace(
+                vertices=[
+                    SimpleNamespace(
+                        position=(1.0, 2.0, 3.0),
+                        uv=(0.25, 0.75),
+                        normal=(0.0, 0.0, 1.0),
+                    ),
+                    SimpleNamespace(
+                        position=(2.0, 2.0, 3.0),
+                        uv=(0.5, 0.75),
+                        normal=(0.0, 0.0, 1.0),
+                    ),
+                    SimpleNamespace(
+                        position=(1.0, 3.0, 3.0),
+                        uv=(0.25, 1.0),
+                        normal=(0.0, 0.0, 1.0),
+                    ),
+                ],
+                triangles=[(0, 1, 2)],
+            )
+            obj_path = root / "radar.obj"
+            convert.write_obj(
+                [(render_set, part)], obj_path, root / "radar.mtl"
+            )
+            lines = obj_path.read_text(encoding="utf-8").splitlines()
+
+        self.assertIn("v 1 2 5", lines)
+        self.assertIn("vn 0 0 1", lines)
 
 
 if __name__ == "__main__":

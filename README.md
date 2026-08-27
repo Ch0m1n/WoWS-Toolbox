@@ -73,6 +73,18 @@ The release package includes a private CPython 3.10 runtime, Pillow, UnityPy, an
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.65 Legends rigid-part placement hotfix
+
+- Preserves each non-skinned, single-palette ModelUber render set's authored
+  visual-node world transform instead of flattening it at the model root.
+- Bakes positions, inverse-transpose normals, and mirrored winding in component
+  coordinates, fixing the same rigid-node class without ship-specific offsets.
+- Fixes both forward and aft Nanuchka Nihrom radar grids and rotating
+  assemblies, which were 0.03335 m too low, while leaving correct radar roots
+  and mount points unchanged.
+- Live re-extraction passed all 24 models, 38 render sets, and 52 editable
+  objects with no missing geometry or material maps.
+
 ## 5.0.64 Legends modern-era catalog hotfix
 
 - Adds the six installed `modernEra` ships: A. Burke, Nanuchka, Neustrashimy,
@@ -357,7 +369,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.64 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.65 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -468,7 +480,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.64 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.65 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
