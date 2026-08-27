@@ -73,6 +73,17 @@ The release package includes a private CPython 3.10 runtime, Pillow, UnityPy, an
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.63 PC/Korabli Blender solid-shading hotfix
+
+- Decodes current PC/Korabli packed vertex normals as offset-binary bytes
+  (`0..254`, with `127` as zero) instead of signed bytes. This prevents large
+  hull sections from receiving unrelated lighting in Blender's ordinary Solid/Combined view.
+- Reverses triangle winding after the BigWorld-to-glTF handedness conversion,
+  keeping front faces and vertex normals consistent in both GLB and OBJ output.
+- Live re-extraction and Blender 3.5 validation of Aragón, Andalucía, and
+  Almte. Oquendo raised mean face/normal agreement from about 0.28–0.34 to
+  0.93–0.95 without requiring the Diffuse Color render pass.
+
 ## 5.0.62 WoWS Blitz placement and Legends watchdog hotfix
 
 - Converts every WoWS Blitz part placement through the same X-reflected basis
@@ -335,7 +346,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.62 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.63 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -446,7 +457,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.62 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.63 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 

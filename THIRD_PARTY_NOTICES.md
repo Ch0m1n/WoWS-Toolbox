@@ -113,14 +113,15 @@ viewer sidecar and is not merged into the editable OBJ.
 Local modifications add current Korabli executable recognition, split
 visual/node layouts, `_ports.visual` hardpoint merging, GameParams/assets-bin
 overrides, package codec dispatch, dynamically loaded Oodle decoding, RPC
-`FLOAT64` support for current PC builds and ship-specific export fixes. The MIT
-license text is reproduced by the package's root `LICENSE`.
+`FLOAT64` support for current PC builds, ship-specific export fixes, current
+offset-binary packed-normal decoding, and correct right-handed triangle winding.
+The MIT license text is reproduced by the package's root `LICENSE`.
 
 Packaged SHA-256 values:
 
 ```text
-DD1DBD6EF4B9A709BAD09B85F92460494DB453874219305D82AB67897D1B3509  Backend/wowsunpack.exe
-DD1DBD6EF4B9A709BAD09B85F92460494DB453874219305D82AB67897D1B3509  Backend/wowsunpack_armor.exe
+8BB74A2AAECC1997FE7E4D2A26156E596FE1C25D228401AC968ECF0009DAE3F3  Backend/wowsunpack.exe
+8BB74A2AAECC1997FE7E4D2A26156E596FE1C25D228401AC968ECF0009DAE3F3  Backend/wowsunpack_armor.exe
 ```
 
 The Oodle runtime itself is proprietary external software. It is not copied,

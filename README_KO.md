@@ -1,4 +1,4 @@
-# WoWS Toolbox 5.0.62
+# WoWS Toolbox 5.0.63
 
 내 PC에 설치된 World of Warships 계열 게임에서 원하는 함선을 골라 파트별 모델로 내보내고, 프로그램 안에서 모델과 장갑을 바로 확인하는 Windows GUI 도구예요.
 
@@ -16,6 +16,16 @@ WoWS Blitz는 에뮬레이터를 직접 수정하지 않고, `full_bundle`(또�
 
 [WoWS Blitz 상세 준비·추출 가이드](docs/WOWS_BLITZ_GUIDE_KO.md)에서 root/ADB
 확인, bundle·OBB 복사, 폴더 검사, 게임 업데이트와 문제 해결 절차를 볼 수 있어요.
+
+## 5.0.63 PC·코라블리 Blender 기본 음영 핫픽스
+
+- 현 PC·코라블리 모델의 압축 정점 법선을 부호 있는 바이트가 아니라
+  `0~254` 범위·`127=0`인 오프셋 바이너리 값으로 해석해, Blender의 일반
+  Solid/Combined 화면에서 선체 구간별 명암이 크게 뒤틀리던 문제를 고쳤어요.
+- BigWorld 좌표를 glTF 오른손 좌표로 바꿀 때 삼각형 정점 순서도 함께 뒤집어
+  GLB와 OBJ 모두 앞면 방향과 정점 법선이 일치하게 해요.
+- Aragón·Andalucía·Almte. Oquendo를 새 엔진으로 재추출해 Blender 3.5에서
+  Diffuse Color 패스를 고르지 않아도 면·법선 일치도가 약 0.93~0.95인지 확인했어요.
 
 ## 5.0.62 WoWS Blitz 좌표·Legends 멈춤 방지 핫픽스
 
