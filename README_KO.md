@@ -1,4 +1,4 @@
-# WoWS Toolbox 5.0.63
+# WoWS Toolbox 5.0.64
 
 내 PC에 설치된 World of Warships 계열 게임에서 원하는 함선을 골라 파트별 모델로 내보내고, 프로그램 안에서 모델과 장갑을 바로 확인하는 Windows GUI 도구예요.
 
@@ -16,6 +16,16 @@ WoWS Blitz는 에뮬레이터를 직접 수정하지 않고, `full_bundle`(또�
 
 [WoWS Blitz 상세 준비·추출 가이드](docs/WOWS_BLITZ_GUIDE_KO.md)에서 root/ADB
 확인, bundle·OBB 복사, 폴더 검사, 게임 업데이트와 문제 해결 절차를 볼 수 있어요.
+
+## 5.0.64 Legends 현대 함선 목록 핫픽스
+
+- 설치본에 들어 있는 A. Burke·Nanuchka·Neustrashimy·O.H. Perry·Sovremenny·
+  Ticonderoga 등 `modernEra` 현대 함선 6척을 Legends 목록에 추가해요.
+- `modernEra`로 명시된 실제 `PX` GameParams 함선만 포함해, 일반 이벤트 함선이
+  목록에 함께 섞이지 않게 해요.
+- 정확한 선체 모델 경로에서 국가와 함종을 복원해 Ticonderoga를 미국 순양함으로
+  올바르게 분류해요.
+- Legends 캐시를 v4로 올려 기존 714행 v3 캐시 대신 720행 목록을 자동 생성해요.
 
 ## 5.0.63 PC·코라블리 Blender 기본 음영 핫픽스
 

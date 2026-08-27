@@ -75,6 +75,7 @@ MAX_MO_MESSAGES = 1_000_000
 MAX_MO_HASH_ENTRIES = 2_000_000
 MAX_GAME_PARAMS_BYTES = 128 * 1024 * 1024
 GAME_PARAMS_PATHS = ("content/GameParams.data", "content/GameParams_py2.data")
+MODERN_ERA_MARKER = "modernera"
 
 NATIONS = {
     "A": "USA",
@@ -512,9 +513,18 @@ def game_params_hull_models(
     for raw_key in sorted(root, key=lambda value: str(value).casefold()):
         ship_key = str(raw_key)
         match = SHIP_KEY_RE.match(ship_key)
-        if match is None or match.group("nation").upper() not in NATIONS:
+        if match is None:
             continue
         ship = root[raw_key]
+        nation_code = match.group("nation").upper()
+        if nation_code not in NATIONS:
+            if nation_code != "X":
+                continue
+            strings = _flatten_strings(ship)
+            if not any(
+                text.casefold() == MODERN_ERA_MARKER for text in strings
+            ):
+                continue
         state = getattr(ship, "state", None)
         if (
             not isinstance(state, (tuple, list))
@@ -584,6 +594,15 @@ def _game_params_catalog_rows(
         ship_code = match.group("ship_code").upper()
         nation_code = match.group("nation").upper()
         class_code = match.group("class").upper()
+        if nation_code == "X":
+            model_identity = HULL_RESOURCE_RE.match(PurePosixPath(model_path).stem)
+            if model_identity is not None:
+                model_nation = model_identity.group("nation").upper()
+                model_class = model_identity.group("class").upper()
+                if model_nation in NATIONS:
+                    nation_code = model_nation
+                if model_class in SHIP_CLASSES:
+                    class_code = model_class
         package_row = by_model.get(model_path.casefold())
         if package_row is None:
             model = PurePosixPath(model_path)

@@ -324,7 +324,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.63'
+$script:AppVersion = '5.0.64'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -883,7 +883,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.63"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.64"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1340,7 +1340,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.63 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.64 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -2327,9 +2327,9 @@ function Get-CatalogPath {
     param([string] $Source)
     $installToken = Get-GamePathToken (Get-GamePath $Source)
     $catalogLanguage = if ($script:WoWSToolboxLanguage -eq 'ko') { 'ko' } else { 'en' }
-    # Legends v3 binds rows to exact live GameParams Hull model relationships.
+    # Legends v4 includes exact live modernEra PX rows and model-derived identity.
     # Language-specific caches keep ship and camouflage names aligned with the UI.
-    $catalogVersion = if ($Source -eq 'legends') { 3 } else { 1 }
+    $catalogVersion = if ($Source -eq 'legends') { 4 } else { 1 }
     return Join-Path $script:CatalogRoot "$Source-v$catalogVersion-$catalogLanguage-$installToken.json"
 }
 
@@ -3525,7 +3525,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.63&lang=' +
+            'https://viewer.local/index.html?app=5.0.64&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -3779,7 +3779,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.63&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.64&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }

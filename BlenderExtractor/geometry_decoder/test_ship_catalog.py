@@ -89,10 +89,15 @@ def hull_assets(base: str, parent: str | None = None) -> list[AssetEntry]:
     return result
 
 
-def game_params_ship(model_path: str | None) -> NeutralObject:
+def game_params_ship(
+    model_path: str | None,
+    *,
+    modern_era: bool = False,
+) -> NeutralObject:
     ship = NeutralObject()
     components = {"A_Hull": {"model": model_path}} if model_path is not None else {}
-    ship.state = (None, None, components)
+    metadata = {"battle_type": "modernEra"} if modern_era else None
+    ship.state = (metadata, None, components)
     return ship
 
 
@@ -317,6 +322,39 @@ class ShipCatalogTests(unittest.TestCase):
             {row["game_params_key"] for row in rows},
             {"PGSB610_Mecklenburg", "PGSB810_Mecklenburg_GOLDEN"},
         )
+
+    def test_modern_era_x_ship_uses_live_model_nation_and_class(self):
+        base = "ASC307_Ticonderoga_1990"
+        parent = f"content/gameplay/usa/ship/cruiser/{base}"
+        model_path = f"{parent}/{base}.model"
+        entries = hull_assets(base, parent)
+        package_row = _candidate_row(
+            Path("zupd601_PXSD307_Ticonderoga_1990.idx"),
+            parse_index_identity("zupd601_PXSD307_Ticonderoga_1990.idx"),
+            (parent, base, entries[: len(HULL_SUFFIXES)]),
+            entries,
+            False,
+        )
+
+        rows = _game_params_catalog_rows(
+            [package_row],
+            {
+                "PXSD307_Ticonderoga_1990": game_params_ship(
+                    model_path,
+                    modern_era=True,
+                ),
+                "PXSC902_Unrelated_Event": game_params_ship(model_path),
+            },
+        )
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ship_code"], "PXSD307")
+        self.assertEqual(rows[0]["game_params_key"], "PXSD307_Ticonderoga_1990")
+        self.assertEqual(rows[0]["nation_code"], "A")
+        self.assertEqual(rows[0]["nation"], "USA")
+        self.assertEqual(rows[0]["class_code"], "C")
+        self.assertEqual(rows[0]["class"], "Cruiser")
+        self.assertTrue(rows[0]["selectable"])
 
     def test_dedup_prefers_selectable_then_latest_update(self):
         def row(index: str, selectable: bool, update: int) -> dict[str, object]:

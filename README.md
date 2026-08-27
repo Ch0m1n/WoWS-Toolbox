@@ -73,6 +73,17 @@ The release package includes a private CPython 3.10 runtime, Pillow, UnityPy, an
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.64 Legends modern-era catalog hotfix
+
+- Adds the six installed `modernEra` ships: A. Burke, Nanuchka, Neustrashimy,
+  O.H. Perry, Sovremenny, and Ticonderoga.
+- Accepts only live `PX` GameParams ships explicitly marked `modernEra`, keeping
+  unrelated event variants out of the ordinary Legends catalog.
+- Derives nation and class from each exact live Hull model path, so Ticonderoga
+  is classified as a U.S. cruiser instead of the generic `PXSD` key class.
+- Advances the Legends cache schema to v4 so an existing 714-row v3 cache is
+  automatically replaced by the current 720-row catalog after upgrading.
+
 ## 5.0.63 PC/Korabli Blender solid-shading hotfix
 
 - Decodes current PC/Korabli packed vertex normals as offset-binary bytes
@@ -346,7 +357,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.63 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.64 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -457,7 +468,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.63 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.64 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
