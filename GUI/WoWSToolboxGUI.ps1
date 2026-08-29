@@ -324,7 +324,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.67'
+$script:AppVersion = '5.0.68'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -508,10 +508,10 @@ function Test-DeprecatedPackagedOutputPath {
     catch { return $false }
 }
 $defaultSettings = [ordered] @{
-    SettingsSchema = '2'
-    LegendsPath = 'D:\SteamLibrary\steamapps\common\World of Warships Legends'
-    PcPath = 'D:\Games\World_of_Warships'
-    KorabliPath = 'D:\Games\Korabli'
+    SettingsSchema = '3'
+    LegendsPath = ''
+    PcPath = ''
+    KorabliPath = ''
     BlitzPath = ''
     OutputPath = $programDefaultOutputPath
     OodlePath = ''
@@ -525,11 +525,12 @@ $defaultSettings = [ordered] @{
 }
 $script:Settings = [ordered] @{}
 $script:SettingsRecoveryNotice = ''
+$script:SettingsFileExisted = Test-Path -LiteralPath $script:SettingsPath -PathType Leaf
 $savedSettingsSchema = 0
 foreach ($pair in $defaultSettings.GetEnumerator()) {
     $script:Settings[$pair.Key] = $pair.Value
 }
-if (Test-Path -LiteralPath $script:SettingsPath -PathType Leaf) {
+if ($script:SettingsFileExisted) {
     try {
         $saved = Get-Content -Raw -LiteralPath $script:SettingsPath |
             ConvertFrom-Json -ErrorAction Stop
@@ -567,8 +568,9 @@ if ($settingsQualityMigrated) {
     # one-time default to the lossless profile; later choices are preserved.
     $script:Settings.TextureMaxSize = '0'
     $script:Settings.Lod = '0'
-    $script:Settings.SettingsSchema = '2'
 }
+$script:NeedsStartupPathDetection =
+    -not $script:SettingsFileExisted -or $savedSettingsSchema -lt 3
 if ($script:InstallerLanguage -in @('ko', 'en')) {
     $script:Settings.Language = $script:InstallerLanguage
 }
@@ -883,7 +885,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.67"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.68"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1071,10 +1073,9 @@ $xaml = @'
                                         <ComboBoxItem Content="중간 LOD" Tag="1"/>
                                         <ComboBoxItem Content="저용량 LOD" Tag="2"/>
                                     </ComboBox>
-                                    <ComboBox x:Name="CamouflageCombo" Width="210" Margin="8,0,0,0"
-                                              SelectedIndex="0" IsEnabled="False" ToolTip="도색">
-                                        <ComboBoxItem Content="위장 없음 · 함선별 선택" Tag="default"/>
-                                    </ComboBox>
+                                    <ComboBox x:Name="CamouflageCombo" Width="250" Margin="8,0,0,0"
+                                              DisplayMemberPath="Name" IsEnabled="False"
+                                              ToolTip="위장 선택"/>
                                 </StackPanel>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal"
@@ -1340,7 +1341,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.67 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.68 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -1733,18 +1734,20 @@ function Update-CurrentGamePathUi {
     $source = Get-SourceKey
     $path = Get-GamePath $source
     $label = Get-GameInstallLabel $path
-    $controls.CurrentGamePathText.Text = "$label · $path"
-    $controls.CurrentGamePathText.ToolTip = $path
-    $color = if (Test-Path -LiteralPath $path -PathType Container) {
-        '#8FAED0'
+    $controls.CurrentGamePathText.Text = if ([string]::IsNullOrWhiteSpace($path)) {
+        Get-UiText '경로 없음' 'Path not set'
     }
-    else { '#FCA5A5' }
+    else { "$label · $path" }
+    $controls.CurrentGamePathText.ToolTip = $path
+    $pathExists = -not [string]::IsNullOrWhiteSpace($path) -and
+        (Test-Path -LiteralPath $path -PathType Container)
+    $color = if ($pathExists) { '#8FAED0' } else { '#FCA5A5' }
     $controls.CurrentGamePathText.Foreground =
         [Windows.Media.BrushConverter]::new().ConvertFrom($color)
 }
 
 function Select-CurrentGameFolder {
-    $selected = Select-Folder (Get-GamePath (Get-SourceKey))
+    $selected = & $script:SelectFolderDialog (Get-GamePath (Get-SourceKey))
     if ([string]::IsNullOrWhiteSpace($selected)) { return }
     $root = Resolve-GameFolderRoot $selected
     if ([string]::IsNullOrWhiteSpace([string] $root)) {
@@ -2118,6 +2121,132 @@ function Get-QueueEntryGamePath {
     return Get-GamePath ([string] $Entry.Source)
 }
 
+function Get-DefaultShipCamouflageOption {
+    param([Parameter(Mandatory)] [string] $Source)
+    [pscustomobject] @{
+        Id = 'default'
+        Name = if ($Source -eq 'legends') {
+            Get-UiText '함선 고유 외형 · 자동 적용' 'Ship-specific appearance · automatic'
+        }
+        else {
+            Get-UiText '위장 없음 · 기본 상태' 'No camouflage · default appearance'
+        }
+        Scheme = ''
+        ColorScheme = ''
+        Species = 'default'
+        Nation = ''
+    }
+}
+
+function Get-ShipCamouflageOptions {
+    param(
+        [Parameter(Mandatory)] [string] $Source,
+        $Ship = $null
+    )
+    $options = [Collections.Generic.List[object]]::new()
+    [void] $options.Add((Get-DefaultShipCamouflageOption -Source $Source))
+    if ($Source -eq 'legends' -or $null -eq $Ship -or
+        $null -eq $Ship.PSObject.Properties['Camouflages']) {
+        return $options.ToArray()
+    }
+    foreach ($camouflage in @($Ship.Camouflages)) {
+        if ($null -eq $camouflage -or
+            [string]::IsNullOrWhiteSpace([string] $camouflage.Id)) {
+            continue
+        }
+        $colors = @()
+        if ($null -ne $camouflage.PSObject.Properties['ColorSchemes']) {
+            $colors = @($camouflage.ColorSchemes | Where-Object {
+                $null -ne $_ -and
+                -not [string]::IsNullOrWhiteSpace([string] $_.Id)
+            })
+        }
+        if ($colors.Count -eq 0) {
+            [void] $options.Add([pscustomobject] @{
+                Id = [string] $camouflage.Id
+                Name = [string] $camouflage.Name
+                Scheme = [string] $camouflage.Scheme
+                ColorScheme = ''
+                Species = [string] $camouflage.Species
+                Nation = [string] $camouflage.Nation
+            })
+            continue
+        }
+        foreach ($color in $colors) {
+            $order = [int] $color.Order
+            $colorLabel = if ($order -le 1) {
+                Get-UiText '기본 색상' 'Default color'
+            }
+            elseif ($order -eq 2) {
+                Get-UiText '대체 색상' 'Alternate color'
+            }
+            else {
+                Get-UiText "대체 색상 $order" "Alternate color $order"
+            }
+            $optionName = if ($colors.Count -gt 1) {
+                "$($camouflage.Name) · $colorLabel"
+            }
+            else { [string] $camouflage.Name }
+            [void] $options.Add([pscustomobject] @{
+                Id = [string] $camouflage.Id
+                Name = $optionName
+                Scheme = [string] $camouflage.Scheme
+                ColorScheme = [string] $color.Id
+                Species = [string] $camouflage.Species
+                Nation = [string] $camouflage.Nation
+            })
+        }
+    }
+    return $options.ToArray()
+}
+
+function Update-QueueEntryDisplay {
+    param([Parameter(Mandatory)] $Entry)
+    $source = [string] $Entry.Source
+    $ship = $Entry.Ship
+    $gamePath = Get-QueueEntryGamePath $Entry
+    $tier = if ([int] $ship.Tier -gt 0) { "T$($ship.Tier)" } else { 'T?' }
+    $install = Get-GameInstallLabel $gamePath
+    $sourceLabel = Get-SourceDisplay $source
+    $installLabel = if ($install.Equals($sourceLabel, [StringComparison]::OrdinalIgnoreCase)) {
+        $sourceLabel
+    }
+    else { "$sourceLabel · $install" }
+    $camouflageLabel = if ($source -eq 'legends') {
+        Get-UiText '함선 고유 외형' 'Ship-specific appearance'
+    }
+    elseif ([string] $Entry.CamouflageId -eq 'default') {
+        Get-UiText '위장 없음' 'No camouflage'
+    }
+    elseif ([string]::IsNullOrWhiteSpace([string] $Entry.CamouflageName)) {
+        [string] $Entry.CamouflageId
+    }
+    else { [string] $Entry.CamouflageName }
+    $display = "$installLabel  ·  $($ship.LocalizedName)  ·  $tier  ·  $($ship.ShipCode)  ·  $camouflageLabel"
+    if ($null -eq $Entry.PSObject.Properties['Display']) {
+        $Entry | Add-Member -NotePropertyName Display -NotePropertyValue $display
+    }
+    else { $Entry.Display = $display }
+}
+
+function Set-QueueEntryCamouflage {
+    param(
+        [Parameter(Mandatory)] $Entry,
+        [Parameter(Mandatory)] $Option
+    )
+    $Entry.CamouflageId = [string] $Option.Id
+    $Entry.CamouflageName = if ([string] $Option.Id -eq 'default') {
+        if ([string] $Entry.Source -eq 'legends') {
+            Get-UiText '함선 고유 외형' 'Ship-specific appearance'
+        }
+        else { Get-UiText '위장 없음' 'No camouflage' }
+    }
+    else { [string] $Option.Name }
+    $Entry.CamouflageScheme = [string] $Option.Scheme
+    $Entry.CamouflageColorScheme = [string] $Option.ColorScheme
+    Update-QueueEntryDisplay -Entry $Entry
+}
+
 function New-ShipQueueEntry {
     param(
         [Parameter(Mandatory)] [string] $Source,
@@ -2193,6 +2322,43 @@ function Save-Settings {
     [void] (Set-WoWSToolboxLanguageMarker `
         -PackageRoot $script:PackageRoot `
         -Language ([string] $script:Settings.Language))
+}
+
+$script:SelectFolderDialog = {
+    param([string] $InitialPath)
+    $dialog = [Windows.Forms.FolderBrowserDialog]::new()
+    $dialog.Description = '폴더를 선택해 주세요.'
+    $dialog.UseDescriptionForTitle = $true
+    if (Test-Path -LiteralPath $InitialPath -PathType Container) {
+        $dialog.SelectedPath = $InitialPath
+    }
+    try {
+        if ($dialog.ShowDialog() -eq [Windows.Forms.DialogResult]::OK) {
+            return $dialog.SelectedPath
+        }
+    }
+    finally { $dialog.Dispose() }
+    return $null
+}
+
+$script:SelectFileDialog = {
+    param(
+        [string] $InitialPath,
+        [string] $Filter
+    )
+    $dialog = [Microsoft.Win32.OpenFileDialog]::new()
+    $dialog.Filter = $Filter
+    if (Test-Path -LiteralPath $InitialPath -PathType Leaf) {
+        $dialog.FileName = $InitialPath
+        $dialog.InitialDirectory = Split-Path -Parent $InitialPath
+    }
+    elseif (Test-Path -LiteralPath $InitialPath -PathType Container) {
+        $dialog.InitialDirectory = (Resolve-Path -LiteralPath $InitialPath).Path
+    }
+    if ($dialog.ShowDialog($window)) {
+        return $dialog.FileName
+    }
+    return $null
 }
 
 function Select-Folder {
@@ -2505,7 +2671,7 @@ function Show-ShipPicker {
 <Window
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    Title="함선 찾아 선택" Width="1120" Height="720"
+    Title="함선 선택" Width="1120" Height="720"
     MinWidth="900" MinHeight="580"
     WindowStartupLocation="CenterOwner"
     Background="#08111F" Foreground="#E8EEF8"
@@ -2589,14 +2755,19 @@ function Show-ShipPicker {
                 <ColumnDefinition Width="260"/>
             </Grid.ColumnDefinitions>
             <StackPanel>
-                <TextBlock Text="함선 찾아 선택" FontSize="24" FontWeight="SemiBold"/>
+                <TextBlock Text="함선 선택" FontSize="24" FontWeight="SemiBold"/>
                 <TextBlock Text="행을 더블클릭하면 바로 적용하고, 왼쪽 추출 칸을 체크하면 여러 함선을 함께 담을 수 있어요."
                            Foreground="#8FA2BC" Margin="0,5,0,0"/>
             </StackPanel>
             <Border Grid.Column="1" Background="#10213A" BorderBrush="#234166"
                     BorderThickness="1" CornerRadius="9" Padding="12"
                     VerticalAlignment="Center">
-                <TextBlock x:Name="PickerSourceLabel" Text="게임 소스"/>
+                <ComboBox x:Name="PickerSourceCombo" MinWidth="230">
+                    <ComboBoxItem Content="World of Warships Legends" Tag="legends"/>
+                    <ComboBoxItem Content="World of Warships (PC)" Tag="pc"/>
+                    <ComboBoxItem Content="Korabli" Tag="korabli"/>
+                    <ComboBoxItem Content="World of Warships Blitz" Tag="blitz"/>
+                </ComboBox>
             </Border>
         </Grid>
         <Grid Grid.Row="1" Margin="0,18,0,12">
@@ -2683,7 +2854,7 @@ function Show-ShipPicker {
                             BorderThickness="1" CornerRadius="8" Padding="12"
                             Margin="0,12,0,0">
                         <StackPanel>
-                            <TextBlock Text="도색 보관함" Foreground="#7DD3FC"
+                            <TextBlock Text="위장 선택" Foreground="#7DD3FC"
                                        FontSize="10" FontWeight="SemiBold"/>
                             <TextBlock Text="함선별로 적용할 영구 위장을 선택해요."
                                        Foreground="#758AA5" FontSize="10"
@@ -2738,6 +2909,7 @@ function Show-ShipPicker {
     $detailKey = $dialog.FindName('DetailKey')
     $camoCombo = $dialog.FindName('CamoCombo')
     $camoDetail = $dialog.FindName('CamoDetail')
+    $pickerSourceCombo = $dialog.FindName('PickerSourceCombo')
     $choose = $dialog.FindName('ChooseButton')
     $favoriteOnlyButton = $dialog.FindName('FavoriteOnlyButton')
     $recentOnlyButton = $dialog.FindName('RecentOnlyButton')
@@ -2746,19 +2918,21 @@ function Show-ShipPicker {
     $favoriteOnly = $false
     $recentOnly = $false
     $camoUpdating = $false
-    $defaultCamo = [pscustomobject] @{
-        Id = 'default'
-        Name = if ($source -eq 'legends') {
-            Get-UiText '함선 고유 외형 · 자동 적용' 'Ship-specific appearance · automatic'
-        }
-        else {
-            Get-UiText '위장 없음 · 기본 상태' 'No camouflage · default appearance'
-        }
-        Scheme = ''
-        ColorScheme = ''
-        Species = 'default'
+    $defaultCamo = Get-DefaultShipCamouflageOption -Source $source
+    $sourceIndexes = @{
+        legends = 0
+        pc = 1
+        korabli = 2
+        blitz = 3
     }
-    $dialog.FindName('PickerSourceLabel').Text = Get-SourceDisplay $source
+    $script:PickerSwitchSourceIndex = -1
+    $pickerSourceCombo.SelectedIndex = [int] $sourceIndexes[$source]
+    $pickerSourceCombo.Add_SelectionChanged({
+        $nextIndex = $pickerSourceCombo.SelectedIndex
+        if ($nextIndex -lt 0 -or $nextIndex -eq [int] $sourceIndexes[$source]) { return }
+        $script:PickerSwitchSourceIndex = $nextIndex
+        $dialog.Close()
+    })
 
     $allLabel = Get-UiText '전체' 'All'
     foreach ($combo in @($nation, $class, $tier)) {
@@ -2867,58 +3041,7 @@ function Show-ShipPicker {
         $detailMeta.Text = "$($row.Nation) · $($row.ShipClass) · Tier $($row.Tier) · $($row.ShipCode)"
         $detailVariant.Text = [string] $row.VariantLabel
         $detailKey.Text = [string] $row.GameParamsKey
-        $options = [Collections.Generic.List[object]]::new()
-        $options.Add($defaultCamo)
-        if ($source -ne 'legends' -and $null -ne $row.PSObject.Properties['Camouflages']) {
-            foreach ($camouflage in @($row.Camouflages)) {
-                if ($null -eq $camouflage -or [string]::IsNullOrWhiteSpace([string] $camouflage.Id)) {
-                    continue
-                }
-                $colors = @()
-                if ($null -ne $camouflage.PSObject.Properties['ColorSchemes']) {
-                    $colors = @($camouflage.ColorSchemes | Where-Object {
-                        $null -ne $_ -and -not [string]::IsNullOrWhiteSpace([string] $_.Id)
-                    })
-                }
-                if ($colors.Count -eq 0) {
-                    $options.Add([pscustomobject] @{
-                        Id = [string] $camouflage.Id
-                        Name = [string] $camouflage.Name
-                        Scheme = [string] $camouflage.Scheme
-                        ColorScheme = ''
-                        Species = [string] $camouflage.Species
-                        Nation = [string] $camouflage.Nation
-                    })
-                    continue
-                }
-                foreach ($color in $colors) {
-                    $order = [int] $color.Order
-                    $colorLabel = if ($order -le 1) {
-                        Get-UiText '기본 색상' 'Default color'
-                    }
-                    elseif ($order -eq 2) {
-                        Get-UiText '대체 색상' 'Alternate color'
-                    }
-                    else {
-                        Get-UiText "대체 색상 $order" "Alternate color $order"
-                    }
-                    $optionName = if ($colors.Count -gt 1) {
-                        "$($camouflage.Name) · $colorLabel"
-                    }
-                    else {
-                        [string] $camouflage.Name
-                    }
-                    $options.Add([pscustomobject] @{
-                        Id = [string] $camouflage.Id
-                        Name = $optionName
-                        Scheme = [string] $camouflage.Scheme
-                        ColorScheme = [string] $color.Id
-                        Species = [string] $camouflage.Species
-                        Nation = [string] $camouflage.Nation
-                    })
-                }
-            }
-        }
+        $options = @(Get-ShipCamouflageOptions -Source $source -Ship $row)
         $currentId = [string] $row.SelectedCamouflageId
         $currentColor = [string] $row.SelectedCamouflageColorScheme
         $selectedCamo = $options | Where-Object {
@@ -2936,7 +3059,7 @@ function Show-ShipPicker {
         }
         $script:PickerCamoUpdating = $true
         try {
-            $camoCombo.ItemsSource = $options.ToArray()
+            $camoCombo.ItemsSource = $options
             $camoCombo.SelectedItem = $selectedCamo
             $camoCombo.IsEnabled = $source -ne 'legends' -and $options.Count -gt 1
             & $showCamoDetail $selectedCamo
@@ -3065,7 +3188,15 @@ function Show-ShipPicker {
         $grid.SelectedItem = $firstChecked[0]
         $grid.ScrollIntoView($firstChecked[0])
     }
-    if ($dialog.ShowDialog()) {
+    $pickerResult = $dialog.ShowDialog()
+    if ($script:PickerSwitchSourceIndex -ge 0) {
+        $nextSourceIndex = $script:PickerSwitchSourceIndex
+        $script:PickerSwitchSourceIndex = -1
+        $controls.SourceCombo.SelectedIndex = $nextSourceIndex
+        Show-ShipPicker
+        return
+    }
+    if ($pickerResult) {
         for ($index = $script:ExtractionQueue.Count - 1; $index -ge 0; $index--) {
             if ([string] $script:ExtractionQueue[$index].Source -eq $source) {
                 $script:ExtractionQueue.RemoveAt($index)
@@ -3525,7 +3656,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.67&lang=' +
+            'https://viewer.local/index.html?app=5.0.68&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -3779,7 +3910,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.67&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.68&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }
@@ -3874,25 +4005,69 @@ function Select-ComboTag {
     }
 }
 
+function Update-QueueCamouflageControl {
+    $script:QueueCamouflageUpdating = $true
+    try {
+        $entry = $controls.QueueList.SelectedItem
+        if ($null -eq $entry) {
+            $placeholder = [pscustomobject] @{
+                Id = 'none'
+                Name = Get-UiText '대기열 함선을 선택해 주세요' 'Select a queued ship'
+                Scheme = ''
+                ColorScheme = ''
+            }
+            $controls.CamouflageCombo.ItemsSource = @($placeholder)
+            $controls.CamouflageCombo.SelectedItem = $placeholder
+            $controls.CamouflageCombo.IsEnabled = $false
+            $controls.CamouflageCombo.ToolTip = Get-UiText (
+                '대기열에서 함선을 선택하면 위장을 바꿀 수 있어요.'
+            ) (
+                'Select a queued ship to change its camouflage.'
+            )
+            return
+        }
+        $options = @(Get-ShipCamouflageOptions -Source ([string] $entry.Source) -Ship $entry.Ship)
+        $currentId = [string] $entry.CamouflageId
+        $currentColor = [string] $entry.CamouflageColorScheme
+        $selected = $options | Where-Object {
+            [string] $_.Id -eq $currentId -and (
+                [string]::IsNullOrWhiteSpace($currentColor) -or
+                [string] $_.ColorScheme -eq $currentColor
+            )
+        } | Select-Object -First 1
+        if ($null -eq $selected) { $selected = $options[0] }
+        $controls.CamouflageCombo.ItemsSource = $options
+        $controls.CamouflageCombo.SelectedItem = $selected
+        $busy = $null -ne $script:ActiveRunner -or $script:BatchActive
+        $controls.CamouflageCombo.IsEnabled =
+            [string] $entry.Source -ne 'legends' -and $options.Count -gt 1 -and -not $busy
+        $controls.CamouflageCombo.ToolTip = if ([string] $entry.Source -eq 'legends') {
+            Get-UiText (
+                'Legends 함선은 GameParams의 함선 고유 외형을 자동 적용해요.'
+            ) (
+                'Legends ships automatically use their GameParams-linked appearance.'
+            )
+        }
+        elseif ($options.Count -gt 1) {
+            Get-UiText '선택한 함선의 위장을 바꿔요.' 'Change the selected ship camouflage.'
+        }
+        else {
+            Get-UiText '이 함선에 연결된 위장이 없어요.' 'No camouflage is linked to this ship.'
+        }
+    }
+    finally {
+        $script:QueueCamouflageUpdating = $false
+    }
+}
+
 function Update-QualityControls {
     $legendsFixedProfile = (Get-SourceKey) -eq 'legends'
-    $controls.TextureCombo.IsEnabled = -not $legendsFixedProfile
-    $controls.LodCombo.IsEnabled = -not $legendsFixedProfile
-    $controls.CamouflageCombo.IsEnabled = $false
-    Select-ComboTag $controls.CamouflageCombo 'default'
-    $controls.CamouflageCombo.ToolTip = Get-UiText (
-        '영구 위장은 함선 추가·편집 창에서 함선별로 선택합니다.'
-    ) (
-        'Choose permanent camouflage per ship in Add/Edit ships.'
-    )
+    $busy = $null -ne $script:ActiveRunner -or $script:BatchActive
+    $controls.TextureCombo.IsEnabled = -not $legendsFixedProfile -and -not $busy
+    $controls.LodCombo.IsEnabled = -not $legendsFixedProfile -and -not $busy
     if ($legendsFixedProfile) {
         Select-ComboTag $controls.TextureCombo '0'
         Select-ComboTag $controls.LodCombo '0'
-        $controls.CamouflageCombo.ToolTip = Get-UiText (
-            'Legends의 개별 위장 선택은 지원하지 않지만, 특수 함선의 고유 외형과 전용 모델은 자동 적용해요.'
-        ) (
-            'Legends camouflage selection is unavailable, but special-ship appearances and dedicated models are applied automatically.'
-        )
         $controls.TextureCombo.ToolTip = Get-UiText (
             'Legends는 선언된 원본 크기 컬러 텍스처를 사용해요.'
         ) (
@@ -3910,8 +4085,8 @@ function Update-QualityControls {
         $controls.LodCombo.ToolTip =
             Get-UiText '모델 정밀도' 'Model detail'
     }
+    Update-QueueCamouflageControl
 }
-
 function Sync-SettingsToUi {
     $controls.LegendsPathBox.Text = [string] $script:Settings.LegendsPath
     $controls.PcPathBox.Text = [string] $script:Settings.PcPath
@@ -3925,7 +4100,6 @@ function Sync-SettingsToUi {
     Select-ComboTag $controls.FormatCombo ([string] $script:Settings.Formats)
     Select-ComboTag $controls.TextureCombo ([string] $script:Settings.TextureMaxSize)
     Select-ComboTag $controls.LodCombo ([string] $script:Settings.Lod)
-    Select-ComboTag $controls.CamouflageCombo 'default'
     Update-OutputLabel
     Update-CurrentGamePathUi
     Update-QualityControls
@@ -3950,8 +4124,12 @@ function Sync-UiToSettings {
 }
 
 function Update-QueueUi {
+    $selectedItem = $controls.QueueList.SelectedItem
     $controls.QueueList.ItemsSource = $null
     $controls.QueueList.ItemsSource = $script:ExtractionQueue
+    if ($null -ne $selectedItem -and $script:ExtractionQueue.Contains($selectedItem)) {
+        $controls.QueueList.SelectedItem = $selectedItem
+    }
     $count = $script:ExtractionQueue.Count
     $busy = $null -ne $script:ActiveRunner -or $script:BatchActive
     $selectedIndex = $controls.QueueList.SelectedIndex
@@ -3982,8 +4160,8 @@ function Update-QueueUi {
     $controls.QueueUpButton.IsEnabled = $selectedIndex -gt 0 -and -not $busy
     $controls.QueueDownButton.IsEnabled = $selectedIndex -ge 0 -and
         $selectedIndex -lt ($count - 1) -and -not $busy
+    Update-QueueCamouflageControl
 }
-
 function Set-BusyState {
     $busy = $null -ne $script:ActiveRunner -or $script:BatchActive
     foreach ($name in @(
@@ -4147,7 +4325,8 @@ function Start-ShipExtraction {
         "• $($_.Ship.LocalizedName) — $(Get-SourceDisplay $_.Source)"
     }) -join "`n"
     if ($count -gt 8) { $preview += "`n• 외 $($count - 8)척" }
-    $profiles = "$(Get-ComboTag $controls.FormatCombo) · 텍스처 $(Get-ComboTag $controls.TextureCombo) · LOD $(Get-ComboTag $controls.LodCombo) · 도색 $(Get-ComboTag $controls.CamouflageCombo)"
+    $camouflageProfile = Get-UiText '위장 함선별 설정' 'camouflage per ship'
+    $profiles = "$(Get-ComboTag $controls.FormatCombo) · 텍스처 $(Get-ComboTag $controls.TextureCombo) · LOD $(Get-ComboTag $controls.LodCombo) · $camouflageProfile"
     $answer = [Windows.MessageBox]::Show(
         $window,
         (Get-UiText "${count}척을 단일 대기열 엔진으로 추출할까요?`n`n$preview`n`n$profiles`n네 게임 모두 Blender 없이 OBJ로 조립해요." "Extract $count ships with the queue engine?`n`n$preview`n`n$profiles`nAll four game sources are assembled without Blender."),
@@ -4309,6 +4488,23 @@ function Move-QueueItem {
     Update-QueueUi
     $controls.QueueList.SelectedIndex = $target
     $controls.QueueList.ScrollIntoView($item)
+}
+
+function Remove-SelectedQueueItem {
+    $busy = $null -ne $script:ActiveRunner -or $script:BatchActive
+    $selected = $controls.QueueList.SelectedItem
+    if ($busy -or $null -eq $selected) { return $false }
+    $selectedIndex = $controls.QueueList.SelectedIndex
+    [void] $script:ExtractionQueue.Remove($selected)
+    Update-QueueUi
+    if ($script:ExtractionQueue.Count -gt 0) {
+        $controls.QueueList.SelectedIndex = [math]::Min(
+            $selectedIndex,
+            $script:ExtractionQueue.Count - 1
+        )
+    }
+    Add-Log "대기열에서 제거: $($selected.Ship.LocalizedName)"
+    return $true
 }
 
 function Save-QueueFile {
@@ -4486,27 +4682,375 @@ function Find-FirstExisting {
     return ''
 }
 
+function Add-GameDetectionCandidate {
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()]
+        [Collections.Generic.List[string]] $Candidates,
+        [Parameter(Mandatory)] [AllowEmptyCollection()]
+        [Collections.Generic.HashSet[string]] $Seen,
+        [string] $Path
+    )
+    if ([string]::IsNullOrWhiteSpace($Path)) { return }
+    $candidate = [Environment]::ExpandEnvironmentVariables($Path.Trim().Trim('"'))
+    try { $candidate = [IO.Path]::GetFullPath($candidate) }
+    catch { return }
+    $candidate = $candidate.TrimEnd('\', '/')
+    if ($Seen.Add($candidate)) { [void] $Candidates.Add($candidate) }
+}
+
+function Get-SteamLibraryRoots {
+    $roots = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($registryPath in @(
+        'HKCU:\Software\Valve\Steam',
+        'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam',
+        'HKLM:\SOFTWARE\Valve\Steam'
+    )) {
+        try {
+            $item = Get-ItemProperty -LiteralPath $registryPath -ErrorAction Stop
+            foreach ($name in @('SteamPath', 'InstallPath')) {
+                $property = $item.PSObject.Properties[$name]
+                if ($null -ne $property) {
+                    Add-GameDetectionCandidate -Candidates $roots -Seen $seen -Path ([string] $property.Value)
+                }
+            }
+        }
+        catch {}
+    }
+    $programFilesX86 = ${env:ProgramFiles(x86)}
+    if (-not [string]::IsNullOrWhiteSpace($programFilesX86)) {
+        Add-GameDetectionCandidate -Candidates $roots -Seen $seen `
+            -Path (Join-Path $programFilesX86 'Steam')
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:ProgramFiles)) {
+        Add-GameDetectionCandidate -Candidates $roots -Seen $seen `
+            -Path (Join-Path $env:ProgramFiles 'Steam')
+    }
+    foreach ($drive in [IO.DriveInfo]::GetDrives()) {
+        try {
+            if (-not $drive.IsReady -or $drive.DriveType -ne [IO.DriveType]::Fixed) { continue }
+            Add-GameDetectionCandidate -Candidates $roots -Seen $seen `
+                -Path (Join-Path $drive.RootDirectory.FullName 'SteamLibrary')
+        }
+        catch {}
+    }
+    foreach ($steamRoot in @($roots)) {
+        $libraryFile = Join-Path $steamRoot 'steamapps\libraryfolders.vdf'
+        if (-not (Test-Path -LiteralPath $libraryFile -PathType Leaf)) { continue }
+        try {
+            $text = [IO.File]::ReadAllText($libraryFile)
+            foreach ($match in [regex]::Matches($text, '(?m)"path"\s+"(?<path>(?:\\.|[^"])*)"')) {
+                $path = $match.Groups['path'].Value.Replace('\\', '\')
+                Add-GameDetectionCandidate -Candidates $roots -Seen $seen -Path $path
+            }
+        }
+        catch {}
+    }
+    return $roots.ToArray()
+}
+
+function Get-SteamGameCandidatePaths {
+    param([string[]] $LibraryRoots)
+    $paths = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($libraryRoot in $LibraryRoots) {
+        $steamApps = Join-Path $libraryRoot 'steamapps'
+        if (-not (Test-Path -LiteralPath $steamApps -PathType Container)) { continue }
+        foreach ($manifest in Get-ChildItem -LiteralPath $steamApps -Filter 'appmanifest_*.acf' -File -ErrorAction SilentlyContinue) {
+            try {
+                $text = [IO.File]::ReadAllText($manifest.FullName)
+                $nameMatch = [regex]::Match(
+                    $text,
+                    '(?m)^\s*"name"\s+"(?<name>[^"]+)"'
+                )
+                if (-not $nameMatch.Success -or $nameMatch.Groups['name'].Value -notmatch '(?i)warships|korabli') { continue }
+                $installMatch = [regex]::Match(
+                    $text,
+                    '(?m)^\s*"installdir"\s+"(?<dir>[^"]+)"'
+                )
+                if (-not $installMatch.Success) { continue }
+                Add-GameDetectionCandidate -Candidates $paths -Seen $seen `
+                    -Path (Join-Path $steamApps ('common\' + $installMatch.Groups['dir'].Value))
+            }
+            catch {}
+        }
+        foreach ($folderName in @(
+            'World of Warships Legends',
+            'World of Warships',
+            'Korabli'
+        )) {
+            Add-GameDetectionCandidate -Candidates $paths -Seen $seen `
+                -Path (Join-Path $steamApps ('common\' + $folderName))
+        }
+    }
+    return $paths.ToArray()
+}
+
+function Get-GameCenterCandidatePaths {
+    $paths = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $preferenceFiles = @(
+        (Join-Path $env:ProgramData 'Wargaming.net\GameCenter\preferences.xml'),
+        (Join-Path $env:ProgramData 'Wargaming.net\GameCenter for Steam\preferences.xml'),
+        (Join-Path $env:ProgramData 'Lesta\GameCenter\preferences.xml')
+    )
+    foreach ($preferenceFile in $preferenceFiles) {
+        if (-not (Test-Path -LiteralPath $preferenceFile -PathType Leaf)) { continue }
+        try {
+            [xml] $xml = [IO.File]::ReadAllText($preferenceFile)
+            foreach ($xpath in @(
+                '//selectedGames/*',
+                '//current_game',
+                '//games/game/working_dir'
+            )) {
+                foreach ($node in @($xml.SelectNodes($xpath))) {
+                    Add-GameDetectionCandidate -Candidates $paths -Seen $seen `
+                        -Path ([Net.WebUtility]::HtmlDecode([string] $node.InnerText))
+                }
+            }
+        }
+        catch {}
+    }
+    return $paths.ToArray()
+}
+
+function Get-RegistryGameCandidatePaths {
+    $paths = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($registryRoot in @(
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*'
+    )) {
+        foreach ($item in @(Get-ItemProperty -Path $registryRoot -ErrorAction SilentlyContinue)) {
+            $displayProperty = $item.PSObject.Properties['DisplayName']
+            $displayName = if ($null -eq $displayProperty) { '' } else { [string] $displayProperty.Value }
+            if ($displayName -notmatch '(?i)world\s*of\s*warships|korabli') { continue }
+            $locationProperty = $item.PSObject.Properties['InstallLocation']
+            if ($null -ne $locationProperty) {
+                Add-GameDetectionCandidate -Candidates $paths -Seen $seen `
+                    -Path ([string] $locationProperty.Value)
+            }
+            foreach ($propertyName in @('DisplayIcon', 'UninstallString')) {
+                $property = $item.PSObject.Properties[$propertyName]
+                if ($null -eq $property) { continue }
+                $match = [regex]::Match(
+                    [string] $property.Value,
+                    '(?i)"?(?<exe>[a-z]:\\[^",]*\.exe)'
+                )
+                if ($match.Success) {
+                    Add-GameDetectionCandidate -Candidates $paths -Seen $seen `
+                        -Path (Split-Path -Parent $match.Groups['exe'].Value)
+                }
+            }
+        }
+    }
+    return $paths.ToArray()
+}
+
+function Get-StandardGameCandidatePaths {
+    param([string[]] $SteamLibraryRoots)
+    $paths = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($steamRoot in $SteamLibraryRoots) {
+        foreach ($folderName in @('World of Warships Legends', 'World of Warships', 'Korabli')) {
+            Add-GameDetectionCandidate -Candidates $paths -Seen $seen `
+                -Path (Join-Path $steamRoot ('steamapps\common\' + $folderName))
+        }
+    }
+    foreach ($drive in [IO.DriveInfo]::GetDrives()) {
+        try {
+            if (-not $drive.IsReady -or $drive.DriveType -ne [IO.DriveType]::Fixed) { continue }
+            $root = $drive.RootDirectory.FullName
+            foreach ($relative in @(
+                'Games\World_of_Warships',
+                'Games\World of Warships',
+                'World_of_Warships',
+                'World of Warships',
+                'Games\Korabli',
+                'Korabli',
+                'WoWS-Blitz-Extraction',
+                'wows-blitz-extraction',
+                'Games\WoWS-Blitz-Extraction'
+            )) {
+                Add-GameDetectionCandidate -Candidates $paths -Seen $seen `
+                    -Path (Join-Path $root $relative)
+            }
+        }
+        catch {}
+    }
+    foreach ($personalRoot in @(
+        $documents,
+        [Environment]::GetFolderPath([Environment+SpecialFolder]::DesktopDirectory),
+        (Join-Path ([Environment]::GetFolderPath([Environment+SpecialFolder]::UserProfile)) 'Downloads')
+    )) {
+        foreach ($folderName in @('WoWS-Blitz-Extraction', 'wows-blitz-extraction')) {
+            if (-not [string]::IsNullOrWhiteSpace($personalRoot)) {
+                Add-GameDetectionCandidate -Candidates $paths -Seen $seen `
+                    -Path (Join-Path $personalRoot $folderName)
+            }
+        }
+    }
+    return $paths.ToArray()
+}
+
+function Test-GamePathForSource {
+    param(
+        [Parameter(Mandatory)] [string] $Source,
+        [string] $Path
+    )
+    if ([string]::IsNullOrWhiteSpace($Path) -or
+        -not (Test-Path -LiteralPath $Path -PathType Container)) {
+        return $false
+    }
+    try {
+        $root = Resolve-GameFolderRoot $Path
+        if ([string]::IsNullOrWhiteSpace([string] $root) -or
+            (Get-GameFolderSource $root) -ne $Source) {
+            return $false
+        }
+        return [string]::IsNullOrWhiteSpace(
+            (Get-GameFolderProblem -Source $Source -Path $root)
+        )
+    }
+    catch { return $false }
+}
+
+function Find-InstalledGamePaths {
+    param([hashtable] $CurrentPaths = @{})
+    $result = [ordered] @{
+        legends = ''
+        pc = ''
+        korabli = ''
+        blitz = ''
+    }
+    foreach ($source in @($result.Keys)) {
+        $current = if ($CurrentPaths.ContainsKey($source)) {
+            [string] $CurrentPaths[$source]
+        }
+        else { '' }
+        if (Test-GamePathForSource -Source $source -Path $current) {
+            $result[$source] = [IO.Path]::GetFullPath($current).TrimEnd('\', '/')
+        }
+    }
+
+    $candidates = [Collections.Generic.List[string]]::new()
+    $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($source in @('legends', 'pc', 'korabli', 'blitz')) {
+        if ($CurrentPaths.ContainsKey($source)) {
+            Add-GameDetectionCandidate -Candidates $candidates -Seen $seen `
+                -Path ([string] $CurrentPaths[$source])
+        }
+    }
+    foreach ($path in Get-GameCenterCandidatePaths) {
+        Add-GameDetectionCandidate -Candidates $candidates -Seen $seen -Path $path
+    }
+    $steamRoots = @(Get-SteamLibraryRoots)
+    foreach ($path in Get-SteamGameCandidatePaths -LibraryRoots $steamRoots) {
+        Add-GameDetectionCandidate -Candidates $candidates -Seen $seen -Path $path
+    }
+    foreach ($path in Get-RegistryGameCandidatePaths) {
+        Add-GameDetectionCandidate -Candidates $candidates -Seen $seen -Path $path
+    }
+    foreach ($path in Get-StandardGameCandidatePaths -SteamLibraryRoots $steamRoots) {
+        Add-GameDetectionCandidate -Candidates $candidates -Seen $seen -Path $path
+    }
+
+    $valid = @{
+        legends = [Collections.Generic.List[string]]::new()
+        pc = [Collections.Generic.List[string]]::new()
+        korabli = [Collections.Generic.List[string]]::new()
+        blitz = [Collections.Generic.List[string]]::new()
+    }
+    $validSeen = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($candidate in $candidates) {
+        if (-not (Test-Path -LiteralPath $candidate -PathType Container)) { continue }
+        $root = Resolve-GameFolderRoot $candidate
+        if ([string]::IsNullOrWhiteSpace([string] $root)) { continue }
+        $source = Get-GameFolderSource $root
+        if (-not $valid.ContainsKey($source) -or
+            -not [string]::IsNullOrWhiteSpace((Get-GameFolderProblem -Source $source -Path $root))) {
+            continue
+        }
+        $normalized = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')
+        if ($validSeen.Add("$source|$normalized")) {
+            [void] $valid[$source].Add($normalized)
+        }
+    }
+    foreach ($source in @($result.Keys)) {
+        if (-not [string]::IsNullOrWhiteSpace([string] $result[$source])) { continue }
+        $choices = @($valid[$source])
+        $preferred = @($choices | Where-Object {
+            $_ -notmatch '(?i)(?:^|[\\ _-])(?:pt|pts|tst|test|beta)(?:[\\ _-]|$)|closed beta'
+        })
+        $selected = if ($preferred.Count -gt 0) { $preferred[0] }
+            elseif ($choices.Count -gt 0) { $choices[0] }
+            else { '' }
+        $result[$source] = $selected
+    }
+    return [pscustomobject] $result
+}
+
+function Invoke-StartupGamePathDetection {
+    if (-not $script:NeedsStartupPathDetection -or $automatedMode) { return }
+    $current = @{
+        legends = [string] $script:Settings.LegendsPath
+        pc = [string] $script:Settings.PcPath
+        korabli = [string] $script:Settings.KorabliPath
+        blitz = [string] $script:Settings.BlitzPath
+    }
+    $detected = Find-InstalledGamePaths -CurrentPaths $current
+    $found = [Collections.Generic.List[string]]::new()
+    foreach ($source in @('legends', 'pc', 'korabli', 'blitz')) {
+        $path = [string] $detected.$source
+        if ([string]::IsNullOrWhiteSpace($path)) { continue }
+        if (-not (Test-GamePathForSource -Source $source -Path $current[$source])) {
+            Set-GamePath -Source $source -Path $path
+            [void] $found.Add("$(Get-SourceDisplay $source) · $path")
+        }
+    }
+    $script:Settings.SettingsSchema = '3'
+    $script:NeedsStartupPathDetection = $false
+    Save-Settings
+    if ($found.Count -gt 0) {
+        Add-Log (Get-UiText (
+            "첫 실행 게임 경로 자동 감지: $($found -join ' / ')"
+        ) (
+            "Detected game paths on first run: $($found -join ' / ')"
+        ))
+    }
+}
 function Auto-DetectPaths {
-    $controls.LegendsPathBox.Text = Find-FirstExisting @(
-        $controls.LegendsPathBox.Text,
-        'D:\SteamLibrary\steamapps\common\World of Warships Legends',
-        'C:\Program Files (x86)\Steam\steamapps\common\World of Warships Legends',
-        'C:\Program Files\Steam\steamapps\common\World of Warships Legends'
-    )
-    $controls.PcPathBox.Text = Find-FirstExisting @(
-        $controls.PcPathBox.Text, 'D:\Games\World_of_Warships', 'C:\Games\World_of_Warships'
-    )
-    $controls.KorabliPathBox.Text = Find-FirstExisting @(
-        $controls.KorabliPathBox.Text, 'D:\Games\Korabli', 'C:\Games\Korabli'
-    )
-    $controls.BlitzPathBox.Text = Find-FirstExisting @(
-        $controls.BlitzPathBox.Text,
-        'I:\codex_making\wows-blitz-extraction',
-        (Join-Path $documents 'WoWS-Blitz-Extraction')
-    )
+    $current = @{
+        legends = $controls.LegendsPathBox.Text.Trim()
+        pc = $controls.PcPathBox.Text.Trim()
+        korabli = $controls.KorabliPathBox.Text.Trim()
+        blitz = $controls.BlitzPathBox.Text.Trim()
+    }
+    $detected = Find-InstalledGamePaths -CurrentPaths $current
+    $found = 0
+    foreach ($binding in @(
+        @('legends', 'LegendsPathBox'),
+        @('pc', 'PcPathBox'),
+        @('korabli', 'KorabliPathBox'),
+        @('blitz', 'BlitzPathBox')
+    )) {
+        $source = [string] $binding[0]
+        $boxName = [string] $binding[1]
+        $path = [string] $detected.$source
+        if ([string]::IsNullOrWhiteSpace($path)) { continue }
+        $controls[$boxName].Text = $path
+        $found++
+    }
     $oodle = Find-OodleRuntime
-    if (-not [string]::IsNullOrWhiteSpace($oodle)) { $controls.OodlePathBox.Text = $oodle }
-    $controls.SettingsStatus.Text = Convert-ToUiText '자동 탐색 결과를 채웠어요. 경로 검사 후 저장해 주세요.'
+    if (-not [string]::IsNullOrWhiteSpace($oodle)) {
+        $controls.OodlePathBox.Text = $oodle
+    }
+    $controls.SettingsStatus.Text = Get-UiText (
+        "게임 설치 경로 ${found}개를 감지했어요. 경로 검사 후 저장해 주세요."
+    ) (
+        "Detected $found game installation path(s). Validate and save the settings."
+    )
 }
 
 function New-DiagnosticsZip {
@@ -4575,6 +5119,7 @@ $controls.QueueList.Add_SelectionChanged({
     $queueIndex = $controls.QueueList.SelectedIndex
     $controls.QueueUpButton.IsEnabled = $queueIndex -gt 0 -and -not $queueBusy
     $controls.QueueDownButton.IsEnabled = $queueIndex -ge 0 -and $queueIndex -lt ($script:ExtractionQueue.Count - 1) -and -not $queueBusy
+    Update-QueueCamouflageControl
 })
 function Get-QueueDropIndex {
     param($OriginalSource)
@@ -4588,6 +5133,13 @@ function Get-QueueDropIndex {
     return $controls.QueueList.ItemContainerGenerator.IndexFromContainer($current)
 }
 
+$controls.QueueList.Add_PreviewKeyDown({
+    param($sender, $eventArgs)
+    if ($eventArgs.Key -ne [Windows.Input.Key]::Delete) { return }
+    if (Remove-SelectedQueueItem) {
+        $eventArgs.Handled = $true
+    }
+})
 $controls.QueueList.Add_PreviewMouseLeftButtonDown({
     param($sender, $eventArgs)
     $script:QueueDragStart = $eventArgs.GetPosition($controls.QueueList)
@@ -4662,7 +5214,15 @@ $controls.PauseButton.Add_Click({
 $controls.FormatCombo.Add_SelectionChanged({ Sync-UiToSettings; Save-Settings })
 $controls.TextureCombo.Add_SelectionChanged({ Sync-UiToSettings; Save-Settings })
 $controls.LodCombo.Add_SelectionChanged({ Sync-UiToSettings; Save-Settings })
-$controls.CamouflageCombo.Add_SelectionChanged({ Sync-UiToSettings; Save-Settings })
+$controls.CamouflageCombo.Add_SelectionChanged({
+    if ($script:QueueCamouflageUpdating) { return }
+    $entry = $controls.QueueList.SelectedItem
+    $option = $controls.CamouflageCombo.SelectedItem
+    if ($null -eq $entry -or $null -eq $option -or [string] $option.Id -eq 'none') { return }
+    Set-QueueEntryCamouflage -Entry $entry -Option $option
+    $controls.QueueList.Items.Refresh()
+    Add-Log "위장 변경: $($entry.Ship.LocalizedName) · $($option.Name)"
+})
 $controls.AutoUpdateCheck.Add_Checked({ Sync-UiToSettings; Save-Settings })
 $controls.AutoUpdateCheck.Add_Unchecked({ Sync-UiToSettings; Save-Settings })
 $controls.CheckUpdateButton.Add_Click({ Start-UpdateCheck -Manual })
@@ -4801,11 +5361,7 @@ $controls.QueueList.Add_SelectionChanged({
         $null -ne $controls.QueueList.SelectedItem -and -not $busy
 })
 $controls.RemoveQueueButton.Add_Click({
-    $selected = $controls.QueueList.SelectedItem
-    if ($null -eq $selected) { return }
-    [void] $script:ExtractionQueue.Remove($selected)
-    Update-QueueUi
-    Add-Log "대기열에서 제거: $($selected.Ship.LocalizedName)"
+    [void] (Remove-SelectedQueueItem)
 })
 $controls.ClearQueueButton.Add_Click({
     if ($script:ExtractionQueue.Count -eq 0) { return }
@@ -4835,7 +5391,7 @@ $controls.CancelButton.Add_Click({
     }
 })
 $controls.BrowseOutputButton.Add_Click({
-    $selected = Select-Folder $script:Settings.OutputPath
+    $selected = & $script:SelectFolderDialog $script:Settings.OutputPath
     if ($null -ne $selected) {
         $script:Settings.OutputPath = $selected
         $controls.SettingsOutputBox.Text = $selected
@@ -4854,12 +5410,12 @@ foreach ($binding in @(
     $buttonName = $binding[0]
     $boxName = $binding[1]
     $controls[$buttonName].Add_Click({
-        $selected = Select-Folder $controls[$boxName].Text
+        $selected = & $script:SelectFolderDialog $controls[$boxName].Text
         if ($null -ne $selected) { $controls[$boxName].Text = $selected }
     }.GetNewClosure())
 }
 $controls.BrowseOodleButton.Add_Click({
-    $selected = Select-File $controls.OodlePathBox.Text `
+    $selected = & $script:SelectFileDialog $controls.OodlePathBox.Text `
         'Oodle 런타임|oo2core_*_win64.dll|DLL 파일|*.dll'
     if ($null -ne $selected) { $controls.OodlePathBox.Text = $selected }
 })
@@ -4900,7 +5456,7 @@ $controls.SaveSettingsButton.Add_Click({
 $controls.OpenModelButton.Add_Click({
     try {
         $initial = [string] $script:Settings.OutputPath
-        $selected = Select-File $initial 'Wavefront OBJ|*.obj|모든 파일|*.*'
+        $selected = & $script:SelectFileDialog $initial 'Wavefront OBJ|*.obj|모든 파일|*.*'
         if ($null -ne $selected) { Open-ModelInViewer $selected }
     }
     catch {
@@ -4912,7 +5468,7 @@ $controls.OpenCompareModelButton.Add_Click({
         if ([string]::IsNullOrWhiteSpace($script:ViewerModelPath)) {
             throw '비교 전에 기준 OBJ를 먼저 열어 주세요.'
         }
-        $selected = Select-File $script:ViewerModelPath 'Wavefront OBJ|*.obj|모든 파일|*.*'
+        $selected = & $script:SelectFileDialog $script:ViewerModelPath 'Wavefront OBJ|*.obj|모든 파일|*.*'
         if ($null -ne $selected) { Send-CompareModelToViewer $selected }
     }
     catch {
@@ -4992,6 +5548,7 @@ $window.Add_Closing({
     $script:ViewerCoreConfigured = $false
 })
 
+Invoke-StartupGamePathDetection
 Sync-SettingsToUi
 Update-QueueUi
 $initialCatalog = Get-CatalogPath 'legends'
@@ -5020,6 +5577,50 @@ if ($QueueSelfTest) {
         (New-ShipQueueEntry -Source 'legends' -Ship $dummyShip)
     )
     Update-QueueUi
+    $dummyPcShip = [pscustomobject] @{
+        Id = 'queue-camouflage-test'
+        LocalizedName = 'Camouflage Test Ship'
+        Tier = 10
+        ShipCode = 'PTEST010'
+        GameParamsKey = 'PTEST010_Camouflage_Test'
+        GameParamsIndex = 'PTEST010'
+        ModelPath = ''
+        ShipResource = ''
+        Nation = 'Test'
+        ShipClass = 'Cruiser'
+        Camouflages = @(
+            [pscustomobject] @{
+                Id = 'PCEP999_Test_Permoflage'
+                Name = 'Test Permanent Camouflage'
+                Scheme = 'camo_permanent_1'
+                Species = 'Permoflage'
+                Nation = 'Test'
+                ColorSchemes = @(
+                    [pscustomobject] @{ Id = 'test-color-default'; Order = 1 },
+                    [pscustomobject] @{ Id = 'test-color-alternate'; Order = 2 }
+                )
+            }
+        )
+    }
+    $pcEntry = New-ShipQueueEntry -Source 'pc' -Ship $dummyPcShip
+    $pcCamouflageOptions = @(Get-ShipCamouflageOptions -Source 'pc' -Ship $dummyPcShip)
+    Set-QueueEntryCamouflage -Entry $pcEntry -Option $pcCamouflageOptions[2]
+    $script:ExtractionQueue.Add($pcEntry)
+    Update-QueueUi
+    $controls.QueueList.SelectedItem = $pcEntry
+    Update-QueueCamouflageControl
+    $queueCamouflageOk =
+        $pcCamouflageOptions.Count -eq 3 -and
+        $controls.CamouflageCombo.IsEnabled -and
+        @($controls.CamouflageCombo.ItemsSource).Count -eq 3 -and
+        [string] $controls.CamouflageCombo.SelectedItem.ColorScheme -eq 'test-color-alternate' -and
+        [string] $pcEntry.CamouflageId -eq 'PCEP999_Test_Permoflage' -and
+        [string] $pcEntry.CamouflageColorScheme -eq 'test-color-alternate' -and
+        [string] $pcEntry.Display -match 'Test Permanent Camouflage'
+    $queueRemoveOk = Remove-SelectedQueueItem
+    $queueRemoveOk = $queueRemoveOk -and
+        $script:ExtractionQueue.Count -eq 1 -and
+        -not $script:ExtractionQueue.Contains($pcEntry)
     $queueValidationOk = $false
     try {
         [void] (ConvertTo-ValidatedQueueEntries -Rows @(
@@ -5085,6 +5686,8 @@ if ($QueueSelfTest) {
             $installIsolationOk -and
             $queueValidationOk -and
             $pathSafetyOk -and
+            $queueCamouflageOk -and
+            $queueRemoveOk -and
             $launchOk -and
             ($script:WoWSToolboxLanguage -ne 'en' -or $controls.LogBox.Text -notmatch '[가-힣]')
         queue_count = $script:ExtractionQueue.Count
@@ -5096,6 +5699,8 @@ if ($QueueSelfTest) {
         manifest_formats = [string] $manifestOnDisk.common.formats
         queue_validation_ok = $queueValidationOk
         path_safety_ok = $pathSafetyOk
+        queue_camouflage_ok = $queueCamouflageOk
+        queue_remove_ok = $queueRemoveOk
         launch_ok = $launchOk
         english_log_ok = ($script:WoWSToolboxLanguage -ne 'en' -or $controls.LogBox.Text -notmatch '[가-힣]')
         display = $script:ExtractionQueue[0].Display
@@ -5214,6 +5819,8 @@ if ($SmokeTest) {
         selected_source = (Get-SourceKey)
         page = $controls.TopTitle.Text
         event_runtime = $true
+        folder_dialog_callback = $script:SelectFolderDialog -is [scriptblock]
+        path_auto_detection = $null -ne (Get-Command Find-InstalledGamePaths -ErrorAction SilentlyContinue)
         launcher_backend = (Test-Path -LiteralPath $script:ExtractScript)
     } | ConvertTo-Json -Compress
     $timer.Stop()

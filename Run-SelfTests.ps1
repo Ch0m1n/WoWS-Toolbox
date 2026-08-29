@@ -1,4 +1,4 @@
-#requires -Version 7.0
+﻿#requires -Version 7.0
 
 [CmdletBinding()]
 param([string] $Python = 'python')
@@ -46,11 +46,14 @@ $queueSelf = & $pwshCommand -STA -NoLogo -NoProfile -File $mainGui -QueueSelfTes
     Select-Object -Last 1 | ConvertFrom-Json
 Assert-ExitCode 'Queue self-test'
 if (-not $smoke.ok -or -not $smoke.event_runtime -or
+    -not $smoke.folder_dialog_callback -or
+    -not $smoke.path_auto_detection -or
     -not $queueSelf.ok -or $queueSelf.queue_count -ne 1 -or
     -not $queueSelf.extract_enabled -or -not $queueSelf.clear_enabled -or
     -not $queueSelf.manifest_ok -or $queueSelf.manifest_formats -ne 'obj' -or
     -not $queueSelf.english_log_ok -or
     -not $queueSelf.queue_validation_ok -or -not $queueSelf.path_safety_ok -or
+    -not $queueSelf.queue_camouflage_ok -or -not $queueSelf.queue_remove_ok -or
     -not $queueSelf.launch_ok) {
     throw 'Main GUI runtime/queue acceptance failed.'
 }
@@ -119,6 +122,9 @@ $picker = [Windows.Markup.XamlReader]::Load($reader)
 try {
     $grid = $picker.FindName('ShipGrid')
     if ($null -eq $grid -or $grid.Columns.Count -lt 6 -or
+        [string] $picker.Title -ne '함선 선택' -or
+        $null -eq $picker.FindName('PickerSourceCombo') -or
+        $null -eq $picker.FindName('CamoCombo') -or
         $null -eq $picker.FindName('FavoriteOnlyButton') -or
         $null -eq $picker.FindName('RecentOnlyButton') -or
         $null -eq $picker.FindName('SelectVisibleButton') -or
@@ -132,12 +138,15 @@ foreach ($marker in @(
     'AllowDrop="True"', 'function Save-QueueFile', 'function Load-QueueFile',
     'function Start-PersistentBatchExtraction', 'function Show-CompletionNotification',
     'OpenCompareModelButton', 'FormatCombo', 'TextureCombo', 'LodCombo',
-    'CamouflageCombo', 'CamouflageCatalogVersion', '$staleCamouflageCatalog', 'LanguageCombo', 'Convert-XamlToUiLanguage', 'Get-WoWSToolboxLanguageMarker',
+    'CamouflageCombo', 'CamouflageCatalogVersion', '$staleCamouflageCatalog', 'LanguageCombo',
+    'function Get-ShipCamouflageOptions', 'function Update-QueueCamouflageControl',
+    'function Remove-SelectedQueueItem', 'PickerSourceCombo', 'Add_PreviewKeyDown',
+    '[Windows.Input.Key]::Delete', 'Text="위장 선택"', 'Convert-XamlToUiLanguage', 'Get-WoWSToolboxLanguageMarker',
     'function Update-DynamicUiLanguage',
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.67',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.68',
     'ConvertTo-ValidatedQueueEntries', '[PIPELINE] ', 'child_heartbeat',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -147,7 +156,7 @@ foreach ($marker in @(
     'function Get-QueueEntryGamePath', 'game_path = Get-QueueEntryGamePath',
     "modelMapping=' +", '$script:ViewerReady = $false',
     'Add-Log "뷰어 오류: $viewerError" -ErrorLine',
-    "SettingsSchema = '2'", "TextureMaxSize = '0'",
+    "SettingsSchema = '3'", "TextureMaxSize = '0'",
     'ModelWebView.Dispose()', 'function Write-JsonAtomic',
     'Local\WoWSToolbox.Gui.v1', 'function Update-QualityControls',
     'Ship-specific appearance · automatic',
@@ -577,8 +586,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.67.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.67') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.68.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.68') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -726,9 +735,9 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.67 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.68 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.67 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.68 self-tests passed.'
 }
 
