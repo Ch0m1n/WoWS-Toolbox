@@ -115,9 +115,12 @@ def run_converter(
     """Run one converter with a hard timeout and reap it on expiry."""
 
     try:
+        environment = os.environ.copy()
+        environment["PYTHONIOENCODING"] = "utf-8"
         run = subprocess.run(
             list(command),
             text=True,
+            env=environment,
             encoding="utf-8",
             errors="replace",
             capture_output=True,
@@ -184,13 +187,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_key = base._safe_output_key(model_path)
         model_output = output_root / output_key
         manifest = base.make_manifest(
-            use, model_record, extracted_root, fingerprint_cache
+            use,
+            model_record,
+            extracted_root,
+            fingerprint_cache,
+            mapping.get("default_camouflage"),
         )
         manifest_path = model_output / f"{output_key}.manifest.json"
         write_json(manifest_path, manifest)
         for model in manifest["models"]:
             for render_set in model["render_sets"]:
                 required_textures.update(render_set["texture_maps"].values())
+                if isinstance(render_set.get("camouflage_mask"), str):
+                    required_textures.add(render_set["camouflage_mask"])
         prepared.append(
             {
                 "use": use,

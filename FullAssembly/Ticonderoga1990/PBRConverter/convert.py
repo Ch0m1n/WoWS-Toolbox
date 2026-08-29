@@ -43,6 +43,10 @@ class RenderSet:
     material_properties: list[dict]
     rigid_node_world_matrix: tuple[float, ...] | None = None
     rigid_node_name: str | None = None
+    uv_scale: tuple[float, float] = (1.0, 1.0)
+    camouflage_mask: str | None = None
+    camouflage_palette: tuple[str, ...] | None = None
+    camouflage_blend: float = 0.0
 
 
 MAP_SUFFIXES = {"a": "_a.dds", "n": "_n.dds", "mg": "_mg.dds", "ao": "_ao.dds"}
@@ -390,6 +394,52 @@ def parse_render_sets(payload: dict, manifest_path: Path) -> list[RenderSet]:
                 str(rigid_node_name_value) if rigid_node_name_value else None
             )
 
+            uv_scale_value = render_set.get("uv_scale", [1.0, 1.0])
+            if (
+                not isinstance(uv_scale_value, (list, tuple))
+                or len(uv_scale_value) != 2
+            ):
+                raise ConversionError("uv_scale must contain two values")
+            try:
+                uv_scale = tuple(float(value) for value in uv_scale_value)
+            except (TypeError, ValueError) as error:
+                raise ConversionError("uv_scale values must be numeric") from error
+            if not all(math.isfinite(value) and value > 0.0 for value in uv_scale):
+                raise ConversionError("uv_scale values must be finite and positive")
+
+            camouflage_mask_value = render_set.get("camouflage_mask")
+            camouflage_mask = None
+            if camouflage_mask_value is not None:
+                if not isinstance(camouflage_mask_value, str) or not camouflage_mask_value:
+                    raise ConversionError("camouflage_mask must be a path string")
+                logical_mask = Path(camouflage_mask_value.replace("\\", "/"))
+                if logical_mask.is_absolute() or ".." in logical_mask.parts:
+                    raise ConversionError("unsafe camouflage_mask path")
+                camouflage_mask = logical_mask.as_posix()
+            palette_value = render_set.get("camouflage_palette")
+            camouflage_palette = None
+            if palette_value is not None:
+                if (
+                    not isinstance(palette_value, list)
+                    or len(palette_value) != 4
+                    or not all(
+                        isinstance(value, str)
+                        and re.fullmatch(r"#[0-9A-Fa-f]{6}", value)
+                        for value in palette_value
+                    )
+                ):
+                    raise ConversionError(
+                        "camouflage_palette must contain four #RRGGBB colours"
+                    )
+                camouflage_palette = tuple(palette_value)
+            camouflage_blend = float(render_set.get("camouflage_blend", 0.0))
+            if not math.isfinite(camouflage_blend) or not 0.0 <= camouflage_blend <= 1.0:
+                raise ConversionError("camouflage_blend must be between 0 and 1")
+            if (camouflage_mask is None) != (camouflage_palette is None):
+                raise ConversionError(
+                    "camouflage_mask and camouflage_palette must be supplied together"
+                )
+
             object_name = blender_id_name(f"{geometry_label}__{part_name}")
             if object_name in used_objects:
                 raise ConversionError(f"duplicate render-set object: {object_name}")
@@ -413,6 +463,10 @@ def parse_render_sets(payload: dict, manifest_path: Path) -> list[RenderSet]:
                     material_properties=material_properties_value,
                     rigid_node_world_matrix=rigid_matrix,
                     rigid_node_name=rigid_node_name,
+                    uv_scale=(uv_scale[0], uv_scale[1]),
+                    camouflage_mask=camouflage_mask,
+                    camouflage_palette=camouflage_palette,
+                    camouflage_blend=camouflage_blend,
                 )
             )
     return output
@@ -465,9 +519,17 @@ def find_texture(texture_root: Path, material_mfm_path: str, suffix: str) -> Pat
 def resolve_materials(render_sets: Sequence[RenderSet]) -> tuple[list[dict], list[dict]]:
     materials: list[dict] = []
     missing_maps: list[dict] = []
-    by_key: dict[tuple[str, str, str, str, str, str], dict] = {}
+    by_key: dict[tuple[str, ...], dict] = {}
     for render_set in render_sets:
         explicit_key = json.dumps(render_set.texture_maps, sort_keys=True)
+        camouflage_key = json.dumps(
+            {
+                "mask": render_set.camouflage_mask,
+                "palette": render_set.camouflage_palette,
+                "blend": render_set.camouflage_blend,
+            },
+            sort_keys=True,
+        )
         key = (
             render_set.material_name,
             render_set.material_mfm_path,
@@ -475,6 +537,7 @@ def resolve_materials(render_sets: Sequence[RenderSet]) -> tuple[list[dict], lis
             explicit_key,
             render_set.material_fx_path or "",
             json.dumps(render_set.material_properties, sort_keys=True),
+            camouflage_key,
         )
         if key not in by_key:
             maps: dict[str, str | None] = {}
@@ -521,6 +584,31 @@ def resolve_materials(render_sets: Sequence[RenderSet]) -> tuple[list[dict], lis
                             }
                         )
                 resolution = "MFM-stem heuristic fallback"
+            camouflage = None
+            if render_set.camouflage_mask is not None:
+                mask = (render_set.texture_root / render_set.camouflage_mask).resolve()
+                root = render_set.texture_root.resolve()
+                try:
+                    mask.relative_to(root)
+                except ValueError as error:
+                    raise ConversionError(
+                        f"camouflage mask leaves texture root: {render_set.camouflage_mask}"
+                    ) from error
+                camouflage = {
+                    "mask": str(mask) if mask.is_file() else None,
+                    "palette": list(render_set.camouflage_palette or ()),
+                    "blend": render_set.camouflage_blend,
+                }
+                if not mask.is_file():
+                    missing_maps.append(
+                        {
+                            "material_name": render_set.material_name,
+                            "map": "camouflage_mask",
+                            "logical_path": render_set.camouflage_mask,
+                            "texture_root": str(render_set.texture_root),
+                            "source_declared": True,
+                        }
+                    )
             material = {
                 "id": f"material_{len(materials):03d}",
                 "name": render_set.material_name,
@@ -531,6 +619,7 @@ def resolve_materials(render_sets: Sequence[RenderSet]) -> tuple[list[dict], lis
                 "map_resolution": resolution,
                 "fx_path": render_set.material_fx_path,
                 "properties": render_set.material_properties,
+                "camouflage": camouflage,
                 "mg_semantics": (
                     "unknown; retained as a Non-Color image and split-channel nodes, "
                     "not connected to Metallic or Roughness"
@@ -546,6 +635,14 @@ def resolve_materials(render_sets: Sequence[RenderSet]) -> tuple[list[dict], lis
             json.dumps(render_set.texture_maps, sort_keys=True),
             render_set.material_fx_path or "",
             json.dumps(render_set.material_properties, sort_keys=True),
+            json.dumps(
+                {
+                    "mask": render_set.camouflage_mask,
+                    "palette": render_set.camouflage_palette,
+                    "blend": render_set.camouflage_blend,
+                },
+                sort_keys=True,
+            ),
         )
         object_material = by_key[key]
         object_material.setdefault("objects", []).append(render_set.object_name)
@@ -556,7 +653,10 @@ TEXTURE_TRANSCODE_REVISION = "shared-png-rg-normal-z-v1"
 
 
 def _shared_texture_target(
-    shared_texture_dir: Path, source: Path, channel: str
+    shared_texture_dir: Path,
+    source: Path,
+    channel: str,
+    variant: str = "",
 ) -> Path:
     stat = source.stat()
     identity = json.dumps(
@@ -566,6 +666,7 @@ def _shared_texture_target(
             "source": os.path.normcase(str(source.resolve())),
             "bytes": stat.st_size,
             "mtime_ns": stat.st_mtime_ns,
+            "variant": variant,
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -596,6 +697,39 @@ def _save_png_atomic(image, target: Path) -> None:
         temporary.unlink(missing_ok=True)
 
 
+def apply_palette_camouflage(base_image, mask_image, palette, blend: float):
+    """Bake a four-colour RGB camouflage mask into a diffuse image."""
+
+    from PIL import Image, ImageChops, ImageOps
+
+    base = base_image.convert("RGBA")
+    mask = mask_image.convert("RGB")
+    if mask.size != base.size:
+        mask = mask.resize(base.size, resample=Image.Resampling.BILINEAR)
+    red, green, blue = mask.split()
+    black = ImageOps.invert(ImageChops.lighter(red, ImageChops.lighter(green, blue)))
+
+    def colour(value: str) -> tuple[int, int, int]:
+        return tuple(int(value[index : index + 2], 16) for index in (1, 3, 5))
+
+    colours = [colour(value) for value in palette]
+    colour_map = Image.new("RGB", base.size, colours[3])
+    colour_map.paste(colours[0], mask=red)
+    colour_map.paste(colours[1], mask=green)
+    colour_map.paste(colours[2], mask=blue)
+    colour_map.paste(colours[3], mask=black)
+
+    luminance = ImageOps.grayscale(base.convert("RGB"))
+    scaled_channels = []
+    for channel in colour_map.split():
+        doubled = channel.point(lambda value: min(255, value * 2))
+        scaled_channels.append(ImageChops.multiply(luminance, doubled))
+    coloured = Image.merge("RGB", tuple(scaled_channels))
+    mixed = Image.blend(base.convert("RGB"), coloured, blend)
+    mixed.putalpha(base.getchannel("A"))
+    return mixed
+
+
 def prepare_blender_textures(
     materials: Sequence[dict],
     output_dir: Path,
@@ -617,13 +751,32 @@ def prepare_blender_textures(
     texture_output.mkdir(parents=True, exist_ok=True)
     for material in materials:
         blender_maps: dict[str, str | None] = {}
+        camouflage = material.get("camouflage")
         for channel, source_value in material["source_maps"].items():
             if source_value is None:
                 blender_maps[channel] = None
                 continue
             source = Path(source_value)
+            variant = ""
+            mask_source = None
+            if channel == "a" and isinstance(camouflage, dict):
+                mask_value = camouflage.get("mask")
+                if isinstance(mask_value, str) and mask_value:
+                    mask_source = Path(mask_value)
+                    if mask_source.is_file():
+                        mask_stat = mask_source.stat()
+                        variant = json.dumps(
+                            {
+                                "camouflage_mask": str(mask_source.resolve()),
+                                "mask_bytes": mask_stat.st_size,
+                                "mask_mtime_ns": mask_stat.st_mtime_ns,
+                                "palette": camouflage.get("palette"),
+                                "blend": camouflage.get("blend"),
+                            },
+                            sort_keys=True,
+                        )
             target = (
-                _shared_texture_target(texture_output, source, channel)
+                _shared_texture_target(texture_output, source, channel, variant)
                 if shared_texture_dir is not None
                 else texture_output / f"{material['id']}_{channel}.png"
             )
@@ -635,6 +788,15 @@ def prepare_blender_textures(
                             image = image.convert("RGBA")
                         if channel == "n":
                             image = reconstruct_tangent_normal(image)
+                        elif mask_source is not None and mask_source.is_file():
+                            with Image.open(mask_source) as mask_image:
+                                mask_image.load()
+                                image = apply_palette_camouflage(
+                                    image,
+                                    mask_image,
+                                    camouflage["palette"],
+                                    float(camouflage["blend"]),
+                                )
                         _save_png_atomic(image, target)
                 except (OSError, ValueError) as error:
                     raise ConversionError(
@@ -643,7 +805,8 @@ def prepare_blender_textures(
             blender_maps[channel] = str(target.resolve())
         material["maps"] = blender_maps
         material["texture_transcode"] = (
-            "DDS source -> shared PNG; RG normal +Z reconstructed for Blender 3.5"
+            "DDS source -> shared PNG; RG normal +Z reconstructed; "
+            "active RGB camouflage masks baked into diffuse maps"
         )
 
 
@@ -681,7 +844,7 @@ def write_obj(
                 )
             for vertex in part.vertices:
                 output.write(
-                    ("vt {:.9g} {:.9g}\n".format(*vertex.uv)).encode("ascii")
+                    ("vt {:.9g} {:.9g}\n".format(vertex.uv[0] * render_set.uv_scale[0], vertex.uv[1] * render_set.uv_scale[1])).encode("ascii")
                 )
             for vertex in part.vertices:
                 output.write(

@@ -167,8 +167,9 @@ def _native_exterior_overrides(
     hull_component: str,
     assets: Any,
     prototypes: Any,
+    base_hull_model_path: str | None = None,
 ) -> dict[str, Any] | None:
-    """Resolve the ship's authored default Exterior/Skin model replacements.
+    """Resolve authored default Exterior/Skin/Permoflage appearance data.
 
     Legends special ships can share the ordinary ship module tree while their
     preview appearance is supplied by a linked ``Exterior`` record. That record
@@ -200,10 +201,6 @@ def _native_exterior_overrides(
             text.casefold().endswith("exterior")
             for text in core.flatten_strings(root[preferred])
         )
-        and any(
-            text.casefold().endswith("skin")
-            for text in core.flatten_strings(root[preferred])
-        )
         else None
     )
     if exterior_key is None:
@@ -212,7 +209,23 @@ def _native_exterior_overrides(
     record = root[exterior_key]
     hull_override: str | None = None
     mount_overrides: dict[str, dict[str, dict[str, Any]]] = {}
+    model_replacements: dict[str, str] = {}
     for mapping in _nested_dicts(record):
+        # Collaboration exteriors such as Azur Lane Fusou use a direct
+        # `base.model -> authored.model` table instead of component and
+        # hardpoint dictionaries. Preserve the full table because it can
+        # replace the hull, live guns, destroyed guns, and action meshes.
+        for raw_source, raw_target in mapping.items():
+            if not (
+                isinstance(raw_source, str)
+                and isinstance(raw_target, str)
+                and raw_source.casefold().endswith(".model")
+                and raw_target.casefold().endswith(".model")
+            ):
+                continue
+            source = raw_source.replace("\\", "/")
+            target = raw_target.replace("\\", "/")
+            model_replacements[source] = target
         hull_value = mapping.get(hull_component)
         if isinstance(hull_value, dict):
             model = hull_value.get("model")
@@ -247,12 +260,33 @@ def _native_exterior_overrides(
                     "filter_mode": bool(override.get("filterMode", False)),
                 }
 
+    unavailable_model_replacements = {
+        source: target
+        for source, target in model_replacements.items()
+        if not _available_model_path(target, assets, prototypes)
+    }
+    model_replacements = {
+        source: target
+        for source, target in model_replacements.items()
+        if source not in unavailable_model_replacements
+    }
+    if base_hull_model_path:
+        replacement_lookup = {
+            source.casefold(): target
+            for source, target in model_replacements.items()
+        }
+        hull_override = replacement_lookup.get(
+            base_hull_model_path.replace("\\", "/").casefold(),
+            hull_override,
+        )
+
     required = [hull_override] if hull_override else []
     required.extend(
         override["model"]
         for component in mount_overrides.values()
         for override in component.values()
     )
+    required.extend(model_replacements.values())
     unavailable = [
         path
         for path in _unique_strings(required)
@@ -263,17 +297,23 @@ def _native_exterior_overrides(
             f"linked native exterior {exterior_key} has unavailable models: "
             f"{unavailable}"
         )
+    camouflage_styles = sorted(
+        {
+            text
+            for text in core.flatten_strings(record)
+            if isinstance(text, str) and text.startswith(("mat_", "camo_"))
+        }
+    )
     return {
         "id": exterior_key,
         "hull_model_path": hull_override,
         "mount_overrides": mount_overrides,
-        "material_tints": sorted(
-            {
-                text
-                for text in core.flatten_strings(record)
-                if isinstance(text, str) and text.startswith("mat_")
-            }
-        ),
+        "model_replacements": model_replacements,
+        "unavailable_model_replacements": unavailable_model_replacements,
+        "material_tints": [
+            value for value in camouflage_styles if value.startswith("mat_")
+        ],
+        "camouflage_styles": camouflage_styles,
     }
 
 
@@ -632,7 +672,12 @@ def gameparams_mounts(
         components, assets, prototypes, selected_model_path
     )
     exterior = _native_exterior_overrides(
-        root, ship_key, hull_component, assets, prototypes
+        root,
+        ship_key,
+        hull_component,
+        assets,
+        prototypes,
+        base_hull_model_path,
     )
     hull_model_path = (
         exterior["hull_model_path"] or base_hull_model_path
@@ -749,22 +794,53 @@ def gameparams_mounts(
     applied_overrides: list[dict[str, str]] = []
     if exterior:
         exterior_mounts = exterior["mount_overrides"]
+        replacement_lookup = {
+            source.casefold(): target
+            for source, target in exterior["model_replacements"].items()
+        }
         for mount in mounts:
             override = exterior_mounts.get(mount["component"], {}).get(
                 mount["hardpoint"]
             )
-            if override is None:
-                continue
             original = mount["model_path"]
-            mount["model_path"] = override["model"]
+            replacement_kind: str | None = None
+            if override is not None:
+                mount["model_path"] = override["model"]
+                if override["dead_mesh"]:
+                    mount["dead_model_paths"] = [override["dead_mesh"]]
+                replacement_kind = "hardpoint_override"
+            else:
+                replacement = replacement_lookup.get(
+                    original.replace("\\", "/").casefold()
+                )
+                if replacement:
+                    mount["model_path"] = replacement
+                    replacement_kind = "model_replacement"
+
+            associated_changed = False
+            for field in ("dead_model_paths", "action_model_paths"):
+                original_paths = mount[field]
+                replaced_paths = [
+                    replacement_lookup.get(
+                        path.replace("\\", "/").casefold(), path
+                    )
+                    for path in original_paths
+                ]
+                if replaced_paths != original_paths:
+                    mount[field] = replaced_paths
+                    associated_changed = True
+
+            if replacement_kind is None and not associated_changed:
+                continue
             mount["original_model_path"] = original
             mount["native_exterior_id"] = exterior["id"]
-            if override["dead_mesh"]:
-                mount["dead_model_paths"] = [override["dead_mesh"]]
             mount["selection_evidence"] = {
                 **mount["selection_evidence"],
                 "native_exterior_override": exterior["id"],
                 "base_model_path": original,
+                "native_exterior_override_kind": (
+                    replacement_kind or "associated_model_replacement"
+                ),
             }
             applied_overrides.append(
                 {
@@ -772,6 +848,7 @@ def gameparams_mounts(
                     "hardpoint": mount["hardpoint"],
                     "base_model_path": original,
                     "model_path": mount["model_path"],
+                    "kind": replacement_kind or "associated_model_replacement",
                 }
             )
     mounts.sort(key=lambda item: core.natural_key(item["hardpoint"]))
@@ -803,6 +880,11 @@ def gameparams_mounts(
                 "hull_model_path": hull_model_path,
                 "hull_model_overridden": bool(exterior["hull_model_path"]),
                 "material_tints": exterior["material_tints"],
+                "camouflage_styles": exterior["camouflage_styles"],
+                "model_replacements": exterior["model_replacements"],
+                "unavailable_model_replacements": exterior[
+                    "unavailable_model_replacements"
+                ],
                 "applied_mount_overrides": applied_overrides,
             }
             if exterior

@@ -398,6 +398,80 @@ class SelectedShipMappingTests(unittest.TestCase):
         self.assertEqual(base_evidence["hull_model_path"], base_hull)
         self.assertEqual(base_mounts[0]["model_path"], base_main)
 
+    def test_native_exterior_applies_direct_model_replacement_table(self) -> None:
+        ship_key = "PJSB516_AL_Fusou"
+        exterior_key = "PJES526_AZUR_FUSOU"
+        base_hull = (
+            "content/gameplay/japan/ship/battleship/JSB006_Fuso_1943/"
+            "JSB006_Fuso_1943.model"
+        )
+        authored_hull = (
+            "content/gameplay/japan/ship/battleship/JSB053_Fuso_1943_Azur/"
+            "JSB053_Fuso_1943_Azur.model"
+        )
+        base_main = "content/gameplay/japan/gun/main/JGM006/JGM006.model"
+        authored_main = (
+            "content/gameplay/japan/gun/main/JGM662_Azur/JGM662_Azur.model"
+        )
+        base_dead = base_main.replace(".model", "_dead.model")
+        authored_dead = authored_main.replace(".model", "_dead.model")
+
+        components = {
+            "A_Hull": {"model": base_hull},
+            "A_Artillery": {
+                "HP_JGM_1": {"models": [base_main, base_dead]}
+            },
+        }
+        general = selected.core.NeutralObject()
+        general_state = [None] * 34
+        general_state[27] = exterior_key
+        general.state = tuple(general_state)
+        ship = selected.core.NeutralObject()
+        ship.state = (general, None, components)
+
+        skin = selected.core.NeutralObject(
+            "GameParamsData.Exterior", "__pyx_unpickle_Skin"
+        )
+        skin.state = (
+            "camo_white_tint2",
+            {
+                base_hull: authored_hull,
+                base_main: authored_main,
+                base_dead: authored_dead,
+            },
+        )
+        exterior = selected.core.NeutralObject()
+        exterior.state = (skin, None)
+
+        paths = [
+            base_hull,
+            authored_hull,
+            base_main,
+            authored_main,
+            base_dead,
+            authored_dead,
+        ]
+        assets = FakeAssets(paths)
+        prototypes = FakePrototypes(set(assets.path_to_id.values()))
+        mounts, evidence = selected.gameparams_mounts(
+            {ship_key: ship, exterior_key: exterior},
+            ship_key,
+            assets,
+            prototypes,
+            base_hull,
+        )
+
+        native = evidence["native_exterior"]
+        self.assertEqual(evidence["hull_model_path"], authored_hull)
+        self.assertTrue(native["hull_model_overridden"])
+        self.assertEqual(native["model_replacements"][base_hull], authored_hull)
+        self.assertEqual(mounts[0]["model_path"], authored_main)
+        self.assertEqual(mounts[0]["dead_model_paths"], [authored_dead])
+        self.assertEqual(
+            mounts[0]["selection_evidence"]["native_exterior_override_kind"],
+            "model_replacement",
+        )
+
     def test_native_exterior_can_be_material_tint_only(self) -> None:
         ship_key = "PBSB710_Test_STEEL"
         exterior_key = "PBES709_TEST_EXCLUSIVE"
@@ -441,6 +515,44 @@ class SelectedShipMappingTests(unittest.TestCase):
             ["mat_SteelStyle2021"],
         )
         self.assertEqual(mounts[0]["model_path"], base_main)
+
+    def test_native_permoflage_style_is_selected_from_active_exterior(self) -> None:
+        ship_key = "PJSD706_Test"
+        exterior_key = "PCEP901_TEST_PERMO"
+        base_hull = (
+            "content/gameplay/japan/ship/destroyer/JSD013_Test/"
+            "JSD013_Test.model"
+        )
+        general = selected.core.NeutralObject()
+        general_state = [None] * 34
+        general_state[27] = exterior_key
+        general.state = tuple(general_state)
+        ship = selected.core.NeutralObject()
+        ship.state = (general, None, {"A_Hull": {"model": base_hull}})
+
+        permoflage = selected.core.NeutralObject(
+            "GameParamsData.Exterior", "__pyx_unpickle_Permoflage"
+        )
+        permoflage.state = ("camo_permanent_1",)
+        exterior = selected.core.NeutralObject()
+        exterior.state = (permoflage, None)
+        assets = FakeAssets([base_hull])
+        prototypes = FakePrototypes(set(assets.path_to_id.values()))
+
+        result = selected._native_exterior_overrides(
+            {ship_key: ship, exterior_key: exterior},
+            ship_key,
+            "A_Hull",
+            assets,
+            prototypes,
+        )
+
+        self.assertIsNotNone(result)
+        assert result is not None
+        self.assertEqual(result["id"], exterior_key)
+        self.assertEqual(result["camouflage_styles"], ["camo_permanent_1"])
+        self.assertEqual(result["material_tints"], [])
+
     def test_numbered_module_family_belongs_to_selected_hull(self) -> None:
         class FakeShip:
             def __init__(self, components: dict[str, object]) -> None:

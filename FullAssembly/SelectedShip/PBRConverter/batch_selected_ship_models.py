@@ -298,11 +298,85 @@ def _rigid_render_set_transform(
     }
 
 
+def _apply_default_camouflage(
+    render_set: dict[str, Any],
+    profile: Mapping[str, Any] | None,
+) -> None:
+    if not isinstance(profile, Mapping):
+        return
+    if profile.get("schema") != "wows-legends-default-camouflage/v1":
+        raise BatchError("unsupported default camouflage profile")
+    mode = profile.get("mode")
+    style = profile.get("style")
+    if mode == "preserve_authored_textures":
+        # matCamo DDS files are shader layers. They cannot safely replace the
+        # model-authored diffuse/MG maps without the game's per-material blend
+        # controls, so record the selected style and leave every map intact.
+        render_set["default_camouflage"] = {
+            "mode": mode,
+            "style": style,
+            "exterior_id": profile.get("exterior_id"),
+        }
+        return
+    if mode == "material_override":
+        maps = profile.get("texture_maps")
+        if not isinstance(maps, Mapping) or not isinstance(maps.get("a"), str):
+            raise BatchError("material camouflage profile has no diffuse texture")
+        for channel in ("a", "mg", "n", "ao"):
+            value = maps.get(channel)
+            if isinstance(value, str) and value:
+                render_set["texture_maps"][channel] = value
+        scale = profile.get("uv_scale", [1.0, 1.0])
+        if not isinstance(scale, list) or len(scale) != 2:
+            raise BatchError("material camouflage uv_scale must have two values")
+        render_set["uv_scale"] = [float(scale[0]), float(scale[1])]
+        render_set["default_camouflage"] = {
+            "mode": mode,
+            "style": style,
+            "exterior_id": profile.get("exterior_id"),
+        }
+        return
+    if mode != "palette_mask":
+        return
+    base_diffuse = render_set["texture_maps"].get("a")
+    if not isinstance(base_diffuse, str) or not base_diffuse:
+        return
+    name = PurePosixPath(base_diffuse).name
+    stem = name[:-6] if name.casefold().endswith("_a.dds") else ""
+    masks = profile.get("masks", [])
+    if not isinstance(masks, list):
+        raise BatchError("palette camouflage masks must be an array")
+    matched = next(
+        (
+            item
+            for item in masks
+            if isinstance(item, Mapping)
+            and str(item.get("base_texture_stem", "")).casefold() == stem.casefold()
+            and isinstance(item.get("mask"), str)
+        ),
+        None,
+    )
+    if matched is None:
+        return
+    palette = profile.get("palette")
+    if not isinstance(palette, list) or len(palette) != 4:
+        raise BatchError("palette camouflage must contain four colours")
+    render_set["camouflage_mask"] = str(matched["mask"])
+    render_set["camouflage_palette"] = [str(value) for value in palette]
+    render_set["camouflage_blend"] = float(profile.get("blend", 0.88))
+    render_set["default_camouflage"] = {
+        "mode": mode,
+        "style": style,
+        "exterior_id": profile.get("exterior_id"),
+    }
+
+
 def make_manifest(
     use: Mapping[str, Any],
     model_record: Mapping[str, Any],
     extracted_root: Path,
     fingerprint_cache: dict[Path, dict[str, Any]] | None = None,
+    default_camouflage: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     model_path = _normalize_model_path(use.get("model_path"))
     visual = _lod0_visual(model_path, model_record)
@@ -405,19 +479,24 @@ def make_manifest(
         rigid_transform = _rigid_render_set_transform(model_record, raw_render_set)
         if rigid_transform is not None:
             item.update(rigid_transform)
+        _apply_default_camouflage(item, default_camouflage)
         selected.append(item)
 
     if not selected:
         raise BatchError(f"{model_path}: no static-intact render sets selected")
 
     texture_inputs: list[dict[str, Any]] = []
-    logical_textures = sorted(
-        {
-            logical_path
-            for render_set in selected
-            for logical_path in render_set["texture_maps"].values()
-        }
+    logical_textures = {
+        logical_path
+        for render_set in selected
+        for logical_path in render_set["texture_maps"].values()
+    }
+    logical_textures.update(
+        str(render_set["camouflage_mask"])
+        for render_set in selected
+        if isinstance(render_set.get("camouflage_mask"), str)
     )
+    logical_textures = sorted(logical_textures)
     for logical_path in logical_textures:
         parts = PurePosixPath(logical_path).parts
         texture_path = (extracted_root / Path(*parts)).resolve()
@@ -789,13 +868,19 @@ def main(argv: Sequence[str] | None = None) -> int:
         output_key = _safe_output_key(model_path)
         model_output = output_root / output_key
         manifest = make_manifest(
-            use, model_record, extracted_root, fingerprint_cache
+            use,
+            model_record,
+            extracted_root,
+            fingerprint_cache,
+            mapping.get("default_camouflage"),
         )
         manifest_path = model_output / f"{output_key}.manifest.json"
         _write_json(manifest_path, manifest)
         for model in manifest["models"]:
             for render_set in model["render_sets"]:
                 required_textures.update(render_set["texture_maps"].values())
+                if isinstance(render_set.get("camouflage_mask"), str):
+                    required_textures.add(render_set["camouflage_mask"])
         manifest_sha256 = _sha256(manifest_path)
         output_glb = model_output / f"{output_key}.glb"
         validation_path = model_output / f"{output_key}.validation.json"

@@ -134,6 +134,60 @@ class CollectUsedModelsTests(unittest.TestCase):
         self.assertTrue(second.startswith("gun__"))
 
 
+class DefaultCamouflageApplicationTests(unittest.TestCase):
+    def test_material_style_preserves_all_authored_maps(self) -> None:
+        item = {
+            "texture_maps": {
+                "a": "content/authored_ship_a.dds",
+                "mg": "content/authored_ship_mg.dds",
+                "n": "content/authored_ship_n.dds",
+            }
+        }
+        original = dict(item["texture_maps"])
+        profile = {
+            "schema": "wows-legends-default-camouflage/v1",
+            "mode": "preserve_authored_textures",
+            "style": "mat_Golden_tint",
+            "exterior_id": "PGES744_MECKLENBURG_GOLDEN",
+            "style_texture_maps": {
+                "a": "content/mat_Gold_01_a.dds",
+                "mg": "content/mat_Gold_01_mgn.dds",
+            },
+        }
+
+        BATCH._apply_default_camouflage(item, profile)
+
+        self.assertEqual(item["texture_maps"], original)
+        self.assertEqual(
+            item["default_camouflage"]["mode"],
+            "preserve_authored_textures",
+        )
+
+    def test_material_override_replaces_diffuse_and_metallic_gloss(self) -> None:
+        item = {
+            "texture_maps": {
+                "a": "content/base_a.dds",
+                "mg": "content/base_mg.dds",
+            }
+        }
+        profile = {
+            "schema": "wows-legends-default-camouflage/v1",
+            "mode": "material_override",
+            "style": "mat_SteelStyle2021",
+            "exterior_id": "PBES709_TEST",
+            "texture_maps": {
+                "a": "content/mat_Steel_01_a.dds",
+                "mg": "content/mat_Steel_01_mgn.dds",
+            },
+            "uv_scale": [1.0, 1.0],
+        }
+
+        BATCH._apply_default_camouflage(item, profile)
+
+        self.assertEqual(item["texture_maps"]["a"], profile["texture_maps"]["a"])
+        self.assertEqual(item["texture_maps"]["mg"], profile["texture_maps"]["mg"])
+        self.assertEqual(item["default_camouflage"]["style"], "mat_SteelStyle2021")
+
 class SemanticManifestTests(unittest.TestCase):
     def _manifest(
         self, render_sets: list[dict], nodes: list[dict] | None = None

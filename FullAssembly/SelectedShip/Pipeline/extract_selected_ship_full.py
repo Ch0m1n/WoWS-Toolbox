@@ -85,6 +85,10 @@ from legends_assets.core import (  # noqa: E402
     normalize_virtual_path,
     write_manifest,
 )
+from legends_default_camouflage import (  # noqa: E402
+    resolve_default_camouflage,
+    resource_definitions as camouflage_resource_definitions,
+)
 
 
 class PipelineError(RuntimeError):
@@ -223,6 +227,33 @@ def validate_resource_definitions(
     if not any(item["kind"] == "geometry" for item in normalized):
         raise PipelineError("resource profile contains no LOD0 geometry")
     return normalized
+
+
+def discover_camouflage_virtual_paths(game_dir: Path) -> list[str]:
+    """List installed camouflage DDS paths without reading their payloads."""
+
+    prefix = "content/gameplay/common/camouflage/textures/"
+    found: list[str] = []
+    scan_errors: list[str] = []
+    try:
+        for entry in iter_assets(
+            game_dir,
+            skip_errors=False,
+            errors=scan_errors,
+        ):
+            path = entry.virtual_path.replace("\\", "/")
+            if (
+                path.casefold().startswith(prefix.casefold())
+                and path.casefold().endswith(".dds")
+            ):
+                found.append(path)
+    except (OSError, ValueError) as exc:
+        raise PipelineError(f"camouflage IDX scan failed: {exc}") from exc
+    if scan_errors:
+        raise PipelineError(
+            "camouflage IDX scan reported errors: " + "; ".join(scan_errors)
+        )
+    return list(dict.fromkeys(found))
 
 
 def locate_exact_resources(
@@ -872,7 +903,60 @@ def execute_pipeline(
         )
     )
     profile = load_object(resource_profile)
-    resources = validate_resource_definitions(profile.get("resources"))
+    mapping_payload = load_object(mapping)
+    raw_resources = profile.get("resources")
+    if not isinstance(raw_resources, list):
+        raise PipelineError("resource profile resources must be an array")
+    base_texture_paths = [
+        str(item.get("path"))
+        for item in raw_resources
+        if isinstance(item, dict)
+        and item.get("kind") == "texture"
+        and isinstance(item.get("path"), str)
+    ]
+    ship_metadata = mapping_payload.get("ship")
+    exterior = (
+        ship_metadata.get("native_exterior")
+        if isinstance(ship_metadata, dict)
+        else None
+    )
+    styles = (
+        exterior.get("camouflage_styles", exterior.get("material_tints", []))
+        if isinstance(exterior, dict)
+        else []
+    )
+    camouflage_profile = None
+    if isinstance(styles, list) and styles:
+        emit_progress(16, "기본 위장과 특별 외형 텍스처를 찾는 중")
+        camouflage_profile = resolve_default_camouflage(
+            mapping_payload,
+            base_texture_paths,
+            discover_camouflage_virtual_paths(game_dir),
+        )
+        if camouflage_profile is not None:
+            mapping_payload["default_camouflage"] = camouflage_profile
+            write_json_atomic(mapping, mapping_payload)
+            profile["default_camouflage"] = camouflage_profile
+            existing = {
+                str(item.get("path")).casefold()
+                for item in raw_resources
+                if isinstance(item, dict) and isinstance(item.get("path"), str)
+            }
+            for item in camouflage_resource_definitions(camouflage_profile):
+                if item["path"].casefold() not in existing:
+                    raw_resources.append(item)
+                    existing.add(item["path"].casefold())
+            profile["resources"] = raw_resources
+            counts = profile.get("expected_counts")
+            if isinstance(counts, dict):
+                counts["declared_textures"] = sum(
+                    1
+                    for item in raw_resources
+                    if isinstance(item, dict) and item.get("kind") == "texture"
+                )
+                counts["total"] = len(raw_resources)
+            write_json_atomic(resource_profile, profile)
+    resources = validate_resource_definitions(raw_resources)
     located = locate_exact_resources(game_dir, resources)
     emit_progress(20, f"필요한 리소스 {len(located)}개를 추출하는 중")
     asset_results, asset_crc = _extract_located(

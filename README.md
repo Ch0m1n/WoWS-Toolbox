@@ -73,6 +73,35 @@ The release package includes a private CPython 3.10 runtime, Pillow, UnityPy, an
 
 PC and Korabli extraction can require a compatible Oodle runtime from software the user is entitled to use. WoWS Toolbox does not redistribute proprietary Oodle libraries.
 
+## 5.0.67 Legends collaboration-appearance hotfix
+
+- Reads direct base .model -> authored .model replacement tables used by
+  Azur Lane and other collaboration exteriors, including hull, live weapon,
+  destroyed, and action-helper models.
+- Treats camo_white_tint2 as an authored-model routing marker instead of
+  painting every ship part with a flat white material texture.
+- Audited 87 active ship records across 84 replacement-table exteriors in the
+  current Legends client. Four targets absent from the installed client are
+  reported and skipped without breaking the rest of the ship extraction.
+- Re-extracted AL Fusou with the authored JSB053 hull and JGM662/663 guns:
+  61 distinct base-color maps, zero global white overrides, and full pipeline
+  acceptance.
+- Treats matCamo DDS files such as mat_Golden_tint and mat_SteelStyle2021 as
+  game-shader layers, never as global replacements for every albedo and MG map.
+- Preserves per-part authored textures for special appearances including
+  Mecklenburg G and Aki SE, preventing the flat gold/white regression.
+
+## 5.0.66 Legends default-camouflage extraction
+
+- Reads each ship's active GameParams exterior and now supports Permoflage and
+  Trophy records in addition to Skin records.
+- Identifies special material styles and bakes standard RGB camouflage masks
+  into the final OBJ base-color textures.
+- Resolves ship-specific masks even when multiple ships share the same hull
+  texture, including Shinonome's Fubuki-based hull.
+- Identified and audited all 127 active special-material appearances in the
+  current Legends client.
+
 ## 5.0.65 Legends rigid-part placement hotfix
 
 - Preserves each non-skinned, single-palette ModelUber render set's authored
@@ -369,7 +398,7 @@ PowerShell 7 is required for the release scripts.
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.65 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.67 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
@@ -480,7 +509,7 @@ PC판과 Korabli 추출에는 사용자가 합법적으로 이용할 수 있는 
 pwsh -NoLogo -NoProfile -File .\Launcher\Build-Launcher.ps1
 pwsh -NoLogo -NoProfile -File .\Update-SourceManifest.ps1
 pwsh -NoLogo -NoProfile -File .\Run-SelfTests.ps1
-pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.65 -CreateZip
+pwsh -NoLogo -NoProfile -File .\Build-Release.ps1 -Version 5.0.67 -CreateZip
 pwsh -NoLogo -NoProfile -File .\Installer\Build-Installer.ps1
 ```
 
