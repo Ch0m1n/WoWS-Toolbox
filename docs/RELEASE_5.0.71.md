@@ -16,13 +16,6 @@ future Ships 2.0 asset. Deferred normal-only decals and renderer-specific effect
 retain their existing compatibility limitations. No proprietary texture SDK or
 Unreal Engine runtime is bundled.
 
-## Known armor-viewer limitation
-
-Ships 2.0 hull armor is not yet supported by this release. Songun and Krasnoe
-Znamya currently export turret armor only; the viewer's armor-available label
-does not mean that every hull armor zone is present. Model/texture extraction
-remains usable. Hull armor support is being developed separately.
-
 ## Installer
 
 `WoWS-Toolbox-Setup-5.0.71.exe` (19,711,280 bytes)
