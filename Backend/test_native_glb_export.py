@@ -219,6 +219,23 @@ class NativeGlbExportTests(unittest.TestCase):
             self.assertNotIn("\nPr ", result)
             self.assertNotIn("\nPm ", result)
 
+    def test_decal_opacity_uses_alpha_not_rgb(self) -> None:
+        from PIL import Image
+        document = {
+            "materials": [{"name": "Decal", "alphaMode": "BLEND",
+                "pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}}],
+            "textures": [{"source": 0}], "images": [{}],
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image = Image.new("RGBA", (2, 1))
+            image.putdata([(255,255,255,0), (0,0,0,255)])
+            image.save(root / "decal.png")
+            NATIVE.write_mtl(document, root / "ship.mtl", {0: "decal.png"})
+            self.assertIn("map_d textures/0_decal_opacity.png", (root / "ship.mtl").read_text())
+            with Image.open(root / "textures/0_decal_opacity.png") as opacity:
+                self.assertEqual([opacity.getpixel((0,0)), opacity.getpixel((1,0))], [0,255])
+
     def test_english_runtime_lines_contain_no_hangul(self) -> None:
         old = os.environ.get("WOWS_TOOLBOX_LANGUAGE")
         os.environ["WOWS_TOOLBOX_LANGUAGE"] = "en"

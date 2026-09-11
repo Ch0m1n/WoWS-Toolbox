@@ -1,4 +1,4 @@
-# WoWS Toolbox 5.0.68
+# WoWS Toolbox 5.0.70
 
 내 PC에 설치된 World of Warships 계열 게임에서 원하는 함선을 골라 파트별 모델로 내보내고, 프로그램 안에서 모델과 장갑을 바로 확인하는 Windows GUI 도구예요.
 
@@ -16,6 +16,21 @@ WoWS Blitz는 에뮬레이터를 직접 수정하지 않고, `full_bundle`(또�
 
 [WoWS Blitz 상세 준비·추출 가이드](docs/WOWS_BLITZ_GUIDE_KO.md)에서 root/ADB
 확인, bundle·OBB 복사, 폴더 검사, 게임 업데이트와 문제 해결 절차를 볼 수 있어요.
+
+## 5.0.70 Korabli Ships 2.0 재질 복원
+
+- `ship_material_indexed.fx`의 196개 재질 ID와 30층 공용 타일 배열을 해석해 Ships 2.0 선체의 실제 색·도장·함번을 일반 PNG로 복원해요.
+- 32×32 미리보기나 `_art` 보조 채널을 알베도로 대신 쓰지 않아 Songun·Znamya·Aquitaine 같은 함선이 단색 또는 검정·갈색으로 추출되던 문제를 고쳤어요.
+- 4K 재질 합성을 CPU 병렬 처리해 첫 추출 때의 긴 정체를 크게 줄였어요.
+- Bow·MidFront·MidBack·Stern 분할 선체와 부포·대공포 조립, `_alpha_n`·AO PBR 자료 처리는 그대로 유지해요.
+
+## 5.0.69 Korabli Ships 2.0 추출 호환성
+
+- Ships 2.0의 Bow·MidFront·MidBack·Stern 분할 선체를 하나의 함선으로 조립하고, 무장 마운트를 빠뜨리지 않게 했어요.
+- `set3/xyznuvtpc` 계열 정점 형식을 실제 stride에 맞게 읽어 뒤틀린 메시와 장시간 정체를 막았어요.
+- 색상용이 아닌 `_art` 채널 맵을 알베도로 오인하지 않고, 게임이 제공하는 정상 색상 미리보기 텍스처를 사용해 검정·금색 추출을 막았어요.
+- Ships 2.0의 `_alpha_n` 고해상도 법선과 AO 맵을 OBJ PBR 자료에 연결하고, 짧은 DDS 꼬리도 안전하게 읽게 했어요.
+- 상태 전용 ports helper와 sentinel geometry를 건너뛰어 Tre Kronor 같은 함선의 추출 실패를 고쳤어요.
 
 ## 5.0.68 대기열 위장 선택과 함선 선택창 개선
 

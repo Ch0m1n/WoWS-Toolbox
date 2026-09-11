@@ -26,6 +26,8 @@ class PbrMaterialsTests(unittest.TestCase):
         candidates = PBR.candidate_sets(paths[0], "Test_Hull")
         self.assertTrue(candidates[0]["normal"][0].endswith("Test_Hull_n.dd0"))
         self.assertTrue(candidates[0]["normal"][1].endswith("Test_Hull_n.dds"))
+        self.assertTrue(candidates[0]["normal"][2].endswith("Test_Hull_alpha_n.dd0"))
+        self.assertTrue(candidates[0]["normal"][3].endswith("Test_Hull_alpha_n.dds"))
 
     def test_negative_cache_requires_current_schema(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

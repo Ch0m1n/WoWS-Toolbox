@@ -146,7 +146,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.68',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.71',
     'ConvertTo-ValidatedQueueEntries', '[PIPELINE] ', 'child_heartbeat',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -586,8 +586,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.68.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.68') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.71.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.71') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -686,8 +686,8 @@ if ($threeCore.Length -lt 1000000 -or $threeModule.Length -lt 500000 -or
     throw 'Dependency or license acceptance failed.'
 }
 $expectedExporterHashes = @{
-    'Backend\wowsunpack.exe' = '8BB74A2AAECC1997FE7E4D2A26156E596FE1C25D228401AC968ECF0009DAE3F3'
-    'Backend\wowsunpack_armor.exe' = '8BB74A2AAECC1997FE7E4D2A26156E596FE1C25D228401AC968ECF0009DAE3F3'
+    'Backend\wowsunpack.exe' = 'D19163418F004BCC733B43D4A0DCD0DF697B5C7B6032DF2A5CDB7BA7B7DDC496'
+    'Backend\wowsunpack_armor.exe' = 'BEFCD0B4EF013FF55A35FEEA8540FDC724084646197474B32F668051BC8A4B64'
 }
 foreach ($relative in $expectedExporterHashes.Keys) {
     $actualHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $relative) -Algorithm SHA256).Hash
@@ -735,9 +735,9 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.68 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.71 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.68 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.71 self-tests passed.'
 }
 

@@ -684,7 +684,16 @@ def write_mtl(
                 output.write(f"map_Kd {image_paths[image_index]}\n")
             if image_index is not None and image_index in image_paths:
                 if str(material.get("alphaMode", "OPAQUE")) != "OPAQUE":
-                    output.write(f"map_d {image_paths[image_index]}\n")
+                    # OBJ readers commonly treat map_d as luminance, not the
+                    # RGBA image's alpha. A dedicated grayscale opacity map
+                    # preserves decal cutouts without darkening their colour.
+                    color_path = target.parent / image_paths[image_index]
+                    opacity_dir = target.parent / "textures"
+                    opacity_dir.mkdir(parents=True, exist_ok=True)
+                    opacity_path = opacity_dir / f"{image_index}_{color_path.stem}_opacity.png"
+                    with Image.open(color_path) as source:
+                        source.convert("RGBA").getchannel("A").save(opacity_path)
+                    output.write(f"map_d {opacity_path.relative_to(target.parent).as_posix()}\n")
             if pbr_maps:
                 output.write("# wows_pbr_contract R=gloss G=metalness roughness=1-R\n")
                 if pbr_maps.get("specular"):

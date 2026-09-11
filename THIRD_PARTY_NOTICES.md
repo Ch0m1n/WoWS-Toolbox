@@ -103,12 +103,11 @@ asynchronous requests for one cached image resolve to the decoded bitmap.
   - `Backend/wowsunpack_armor.exe` — armor-sidecar exporter used only with the
     no-texture armor pass; it also emits exact per-triangle thickness metadata
 
-Both executable names contain the same verified build from the modified source
-base and read PC/Korabli indexes, package entries, GameParams, visual/model data,
-geometry, materials and ship hardpoints. The toolbox uses the second name for a
-no-texture armor pass with `--armor-json`; keeping one build prevents the normal
-and armor paths from silently diverging. Armor is converted to the adjacent
-viewer sidecar and is not merged into the editable OBJ.
+The model exporter includes the Ships 2.0 geometry/material and independently
+implemented BC7Prep texture changes. The dedicated armor exporter retains its
+separately verified no-texture build with `--armor-json`. Their hashes are tracked
+individually below. Armor is converted to the adjacent viewer sidecar and is not
+merged into the editable OBJ.
 
 Local modifications add current Korabli executable recognition, split
 visual/node layouts, `_ports.visual` hardpoint merging, GameParams/assets-bin
@@ -120,8 +119,8 @@ The MIT license text is reproduced by the package's root `LICENSE`.
 Packaged SHA-256 values:
 
 ```text
-8BB74A2AAECC1997FE7E4D2A26156E596FE1C25D228401AC968ECF0009DAE3F3  Backend/wowsunpack.exe
-8BB74A2AAECC1997FE7E4D2A26156E596FE1C25D228401AC968ECF0009DAE3F3  Backend/wowsunpack_armor.exe
+D19163418F004BCC733B43D4A0DCD0DF697B5C7B6032DF2A5CDB7BA7B7DDC496  Backend/wowsunpack.exe
+BEFCD0B4EF013FF55A35FEEA8540FDC724084646197474B32F668051BC8A4B64  Backend/wowsunpack_armor.exe
 ```
 
 The Oodle runtime itself is proprietary external software. It is not copied,

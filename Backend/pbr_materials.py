@@ -20,14 +20,19 @@ import time
 from pathlib import Path, PurePosixPath
 from typing import Iterable
 
-from PIL import Image, ImageChops, ImageOps, ImageStat
+from PIL import Image, ImageChops, ImageFile, ImageOps, ImageStat
+
+# Streamed WoWS/Korabli DDS payloads can omit a few tail bytes that the game
+# decoder tolerates. Pillow is stricter by default, so accept those payloads
+# instead of discarding every PBR channel for the material.
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 MFM_LINE = re.compile(r"^\(A\)\s+(/.+\.mfm)\s+\d+\s+bytes\s*$", re.IGNORECASE)
 MFM_STRIP_SUFFIXES = ("_skinned", "_wire", "_dead", "_blaze", "_alpha")
-CHANNEL_SUFFIXES = {"normal": "_n", "metallic_gloss": "_mg", "ao": "_ao"}
-SCHEMA = "wows-toolbox-pbr-materials/v4"
-SELECTION_SCHEMA = "wows-toolbox-pbr-selection/v1"
+CHANNEL_SUFFIXES = {"normal": ("_n", "_alpha_n"), "metallic_gloss": ("_mg",), "ao": ("_ao",)}
+SCHEMA = "wows-toolbox-pbr-materials/v5"
+SELECTION_SCHEMA = "wows-toolbox-pbr-selection/v2"
 PORTABLE_PBR_ROLES = frozenset(
     {"normal", "specular", "roughness", "metalness", "ao"}
 )
@@ -152,10 +157,11 @@ def candidate_sets(mfm_path: str, preferred_stem: str) -> list[dict[str, list[st
             result.append(
                 {
                     channel: [
-                        f"/{candidate_dir.as_posix().lstrip('/')}/{base}{suffix}.dd0",
-                        f"/{candidate_dir.as_posix().lstrip('/')}/{base}{suffix}.dds",
+                        f"/{candidate_dir.as_posix().lstrip('/')}/{base}{suffix}.{extension}"
+                        for suffix in suffixes
+                        for extension in ("dd0", "dds")
                     ]
-                    for channel, suffix in CHANNEL_SUFFIXES.items()
+                    for channel, suffixes in CHANNEL_SUFFIXES.items()
                 }
             )
     return result
@@ -232,15 +238,15 @@ def _cache_prefix(cache_root: Path, logical_path: str) -> Path:
 def _cache_outputs(cache_root: Path, logical_path: str, channel: str) -> dict[str, Path]:
     prefix = _cache_prefix(cache_root, logical_path)
     if channel == "normal":
-        return {"normal": prefix.with_name(prefix.name + "_normal_v4.png")}
+        return {"normal": prefix.with_name(prefix.name + "_normal_v5.png")}
     if channel == "ao":
         # v4 stores lossless single-channel maps with maximum PNG compression.
-        return {"ao": prefix.with_name(prefix.name + "_ao_l_v4.png")}
+        return {"ao": prefix.with_name(prefix.name + "_ao_l_v5.png")}
     return {
-        "metallic_gloss": prefix.with_name(prefix.name + "_metallic_gloss_v4.png"),
-        "specular": prefix.with_name(prefix.name + "_specular_l_v4.png"),
-        "roughness": prefix.with_name(prefix.name + "_roughness_l_v4.png"),
-        "metalness": prefix.with_name(prefix.name + "_metalness_l_v4.png"),
+        "metallic_gloss": prefix.with_name(prefix.name + "_metallic_gloss_v5.png"),
+        "specular": prefix.with_name(prefix.name + "_specular_l_v5.png"),
+        "roughness": prefix.with_name(prefix.name + "_roughness_l_v5.png"),
+        "metalness": prefix.with_name(prefix.name + "_metalness_l_v5.png"),
     }
 
 
@@ -372,8 +378,8 @@ def _raw_path(raw_root: Path, logical_path: str) -> Path:
 
 def _channel_from_path(logical_path: str) -> str:
     folded = PurePosixPath(logical_path).stem.casefold()
-    for channel, suffix in CHANNEL_SUFFIXES.items():
-        if folded.endswith(suffix):
+    for channel, suffixes in CHANNEL_SUFFIXES.items():
+        if any(folded.endswith(suffix) for suffix in suffixes):
             return channel
     raise ValueError(f"Unsupported PBR channel path: {logical_path}")
 
@@ -463,7 +469,7 @@ def prepare_pbr_materials(
     contract: dict = {
         "schema": SCHEMA,
         "source_contract": {
-            "normal": "WoWS signed tangent XY in RG; positive Z reconstructed",
+            "normal": "WoWS signed tangent XY in RG; Ships 2.0 `_alpha_n` supported; positive Z reconstructed",
             "metallic_gloss": "source `_mg` retained in conversion cache; inferred R=gloss, G=metalness",
             "specular": "GM3D-compatible grayscale view of `_mg`.R",
             "roughness": "1 - `_mg`.R",
@@ -589,19 +595,22 @@ def prepare_pbr_materials(
     resolution_seconds = time.perf_counter() - resolution_started
 
     extraction_started = time.perf_counter()
-    # Prefer the highest-resolution DD0 source. Only unresolved channels fall
-    # back to the small DDS mip tail in a second pass.
+    # Prefer every high-resolution DD0 naming variant. A channel can have more
+    # than one suffix (Ships 2.0 normals use `_alpha_n` instead of `_n`), so do
+    # not assume candidate[0]/candidate[1] are the only DD0/DDS pair.
     requested_dd0 = []
     for resolution in resolutions:
         if not resolution or resolution["cached_selection"]:
             continue
         for candidate in resolution["sets"]:
             for channel, values in candidate.items():
-                if (
-                    values[0] not in unavailable
-                    and not _valid_cached(cache_root, values[0], channel)
-                ):
-                    requested_dd0.append(values[0])
+                requested_dd0.extend(
+                    value
+                    for value in values
+                    if value.casefold().endswith(".dd0")
+                    and value not in unavailable
+                    and not _valid_cached(cache_root, value, channel)
+                )
     extraction_calls = (
         _extract_paths(exporter, game_dir, raw_root, requested_dd0)
         if requested_dd0
@@ -625,15 +634,19 @@ def prepare_pbr_materials(
             continue
         for channel in CHANNEL_SUFFIXES:
             if any(
-                available(candidate[channel][0], channel)
+                available(value, channel)
                 for candidate in resolution["sets"]
+                for value in candidate[channel]
+                if value.casefold().endswith(".dd0")
             ):
                 continue
             requested_dds.extend(
-                candidate[channel][1]
+                value
                 for candidate in resolution["sets"]
-                if candidate[channel][1] not in unavailable
-                and not _valid_cached(cache_root, candidate[channel][1], channel)
+                for value in candidate[channel]
+                if value.casefold().endswith(".dds")
+                and value not in unavailable
+                and not _valid_cached(cache_root, value, channel)
             )
     if requested_dds:
         extraction_calls += _extract_paths(
