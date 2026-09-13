@@ -324,7 +324,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.72'
+$script:AppVersion = '5.0.73'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -532,7 +532,7 @@ foreach ($pair in $defaultSettings.GetEnumerator()) {
 }
 if ($script:SettingsFileExisted) {
     try {
-        $saved = Get-Content -Raw -LiteralPath $script:SettingsPath |
+        $saved = Get-Content -Raw -Encoding UTF8 -LiteralPath $script:SettingsPath |
             ConvertFrom-Json -ErrorAction Stop
         if ($null -ne $saved.PSObject.Properties['SettingsSchema']) {
             [void] [int]::TryParse(
@@ -885,7 +885,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.72"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.73"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1341,7 +1341,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.72 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.73 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -2174,14 +2174,20 @@ function Get-ShipCamouflageOptions {
         }
         foreach ($color in $colors) {
             $order = [int] $color.Order
-            $colorLabel = if ($order -le 1) {
-                Get-UiText '기본 색상' 'Default color'
-            }
-            elseif ($order -eq 2) {
+            # The client stores the switchable palette first and the authored
+            # source palette second. Present the choices by their in-game meaning.
+            $colorLabel = if ($colors.Count -gt 1 -and $order -eq 1) {
                 Get-UiText '대체 색상' 'Alternate color'
             }
+            elseif ($colors.Count -gt 1 -and $order -eq 2) {
+                Get-UiText '원본 색상' 'Original color'
+            }
+            elseif ($colors.Count -gt 1) {
+                $alternateNumber = $order - 1
+                Get-UiText "대체 색상 $alternateNumber" "Alternate color $alternateNumber"
+            }
             else {
-                Get-UiText "대체 색상 $order" "Alternate color $order"
+                Get-UiText '원본 색상' 'Original color'
             }
             $optionName = if ($colors.Count -gt 1) {
                 "$($camouflage.Name) · $colorLabel"
@@ -2515,7 +2521,7 @@ function Load-CatalogFile {
         [string] $Source,
         [string] $Path
     )
-    $rows = @(Get-Content -Raw -LiteralPath $Path |
+    $rows = @(Get-Content -Raw -Encoding UTF8 -LiteralPath $Path |
         ConvertFrom-Json -ErrorAction Stop)
     $discoveredCount = $rows.Count
     $script:CatalogDiscoveredCounts[$Source] = $discoveredCount
@@ -2625,7 +2631,7 @@ function Show-ShipPicker {
     )) {
         if (Test-Path -LiteralPath $pair[0] -PathType Leaf) {
             try {
-                foreach ($key in @(Get-Content -Raw -LiteralPath $pair[0] | ConvertFrom-Json)) {
+                foreach ($key in @(Get-Content -Raw -Encoding UTF8 -LiteralPath $pair[0] | ConvertFrom-Json)) {
                     [void] $pair[1].Add([string] $key)
                 }
             }
@@ -3588,7 +3594,7 @@ function Get-ModelMaterialPath {
     param([Parameter(Mandatory)] [string] $ObjPath)
     $objDirectory = [IO.Path]::GetDirectoryName($ObjPath)
     try {
-        foreach ($line in Get-Content -LiteralPath $ObjPath -TotalCount 120) {
+        foreach ($line in Get-Content -Encoding UTF8 -LiteralPath $ObjPath -TotalCount 120) {
             if ($line -match '^\s*mtllib\s+(.+?)\s*$') {
                 $candidate = Join-Path $objDirectory $Matches[1].Trim('"')
                 if (Test-Path -LiteralPath $candidate -PathType Leaf) {
@@ -3667,7 +3673,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.72&lang=' +
+            'https://viewer.local/index.html?app=5.0.73&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -3921,7 +3927,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.72&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.73&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }
@@ -4478,7 +4484,7 @@ function Add-RecentShip {
     [void] $keys.Add([string] $Entry.Key)
     if (Test-Path -LiteralPath $script:RecentShipsPath -PathType Leaf) {
         try {
-            foreach ($key in @(Get-Content -Raw -LiteralPath $script:RecentShipsPath | ConvertFrom-Json)) {
+            foreach ($key in @(Get-Content -Raw -Encoding UTF8 -LiteralPath $script:RecentShipsPath | ConvertFrom-Json)) {
                 if (-not $keys.Contains([string] $key)) { [void] $keys.Add([string] $key) }
             }
         }
@@ -4626,7 +4632,7 @@ function Load-QueueFile {
     try {
         $file = Get-Item -LiteralPath $dialog.FileName -ErrorAction Stop
         if ($file.Length -gt 16MB) { throw '대기열 파일이 16MB 안전 한도를 넘었어요.' }
-        $raw = Get-Content -Raw -LiteralPath $file.FullName -ErrorAction Stop
+        $raw = Get-Content -Raw -Encoding UTF8 -LiteralPath $file.FullName -ErrorAction Stop
         if ([string]::IsNullOrWhiteSpace($raw) -or -not $raw.TrimStart().StartsWith('[')) {
             throw '대기열 JSON의 최상위 값은 배열이어야 해요.'
         }
@@ -5003,20 +5009,36 @@ function Find-InstalledGamePaths {
 }
 
 function Invoke-StartupGamePathDetection {
-    if (-not $script:NeedsStartupPathDetection -or $automatedMode) { return }
+    if ($automatedMode) { return }
     $current = @{
         legends = [string] $script:Settings.LegendsPath
         pc = [string] $script:Settings.PcPath
         korabli = [string] $script:Settings.KorabliPath
         blitz = [string] $script:Settings.BlitzPath
     }
+    $invalidSavedSources = @($current.Keys | Where-Object {
+        -not [string]::IsNullOrWhiteSpace([string] $current[$_]) -and
+        -not (Test-GamePathForSource -Source $_ -Path $current[$_])
+    })
+    if (-not $script:NeedsStartupPathDetection -and $invalidSavedSources.Count -eq 0) {
+        return
+    }
+
     $detected = Find-InstalledGamePaths -CurrentPaths $current
     $found = [Collections.Generic.List[string]]::new()
+    $cleared = [Collections.Generic.List[string]]::new()
     foreach ($source in @('legends', 'pc', 'korabli', 'blitz')) {
+        if (Test-GamePathForSource -Source $source -Path $current[$source]) {
+            continue
+        }
         $path = [string] $detected.$source
-        if ([string]::IsNullOrWhiteSpace($path)) { continue }
-        if (-not (Test-GamePathForSource -Source $source -Path $current[$source])) {
-            Set-GamePath -Source $source -Path $path
+        Set-GamePath -Source $source -Path $path
+        if ([string]::IsNullOrWhiteSpace($path)) {
+            if (-not [string]::IsNullOrWhiteSpace([string] $current[$source])) {
+                [void] $cleared.Add((Get-SourceDisplay $source))
+            }
+        }
+        else {
             [void] $found.Add("$(Get-SourceDisplay $source) · $path")
         }
     }
@@ -5025,9 +5047,16 @@ function Invoke-StartupGamePathDetection {
     Save-Settings
     if ($found.Count -gt 0) {
         Add-Log (Get-UiText (
-            "첫 실행 게임 경로 자동 감지: $($found -join ' / ')"
+            "게임 경로 자동 감지: $($found -join ' / ')"
         ) (
-            "Detected game paths on first run: $($found -join ' / ')"
+            "Detected game paths: $($found -join ' / ')"
+        ))
+    }
+    if ($cleared.Count -gt 0) {
+        Add-Log (Get-UiText (
+            "사라진 이전 게임 경로를 비웠어요: $($cleared -join ', ')"
+        ) (
+            "Cleared missing saved game paths: $($cleared -join ', ')"
         ))
     }
 }
@@ -5625,6 +5654,8 @@ if ($QueueSelfTest) {
         $controls.CamouflageCombo.IsEnabled -and
         @($controls.CamouflageCombo.ItemsSource).Count -eq 3 -and
         [string] $controls.CamouflageCombo.SelectedItem.ColorScheme -eq 'test-color-alternate' -and
+        [string] $pcCamouflageOptions[1].Name -match (Get-UiText '대체 색상' 'Alternate color') -and
+        [string] $pcCamouflageOptions[2].Name -match (Get-UiText '원본 색상' 'Original color') -and
         [string] $pcEntry.CamouflageId -eq 'PCEP999_Test_Permoflage' -and
         [string] $pcEntry.CamouflageColorScheme -eq 'test-color-alternate' -and
         [string] $pcEntry.Display -match 'Test Permanent Camouflage'
@@ -5643,7 +5674,7 @@ if ($QueueSelfTest) {
         (Get-OutputPathProblem -OutputPath $script:StateRoot -GamePaths @($script:StateRoot))
     )
     $batchManifest = New-BatchManifest
-    $manifestOnDisk = Get-Content -Raw -LiteralPath $script:BatchManifestPath |
+    $manifestOnDisk = Get-Content -Raw -Encoding UTF8 -LiteralPath $script:BatchManifestPath |
         ConvertFrom-Json
     $manifestOk =
         $batchManifest.items.Count -eq 1 -and
@@ -5654,6 +5685,17 @@ if ($QueueSelfTest) {
     $installIsolationOk =
         (Get-GamePathToken 'C:\Games\WoWS-Live') -ne
         (Get-GamePathToken 'C:\Games\WoWS-PTS')
+    $unicodeJsonPath = Join-Path $script:StateRoot '한글 경로 테스트.json'
+    [IO.File]::WriteAllText(
+        $unicodeJsonPath,
+        '[{"LocalizedName":"시험함","Path":"C:\\게임 폴더\\함선"}]',
+        [Text.UTF8Encoding]::new($false)
+    )
+    $unicodePayload = Get-Content -Raw -Encoding UTF8 -LiteralPath $unicodeJsonPath |
+        ConvertFrom-Json -ErrorAction Stop
+    $unicodeJsonOk =
+        [string] $unicodePayload[0].LocalizedName -eq '시험함' -and
+        [string] $unicodePayload[0].Path -eq 'C:\게임 폴더\함선'
     $launchProbe = Join-Path $script:StateRoot 'queue_launch_probe.py'
     [IO.File]::WriteAllText(
         $launchProbe,
@@ -5695,6 +5737,7 @@ if ($QueueSelfTest) {
             $controls.ClearQueueButton.IsEnabled -and
             $manifestOk -and
             $installIsolationOk -and
+            $unicodeJsonOk -and
             $queueValidationOk -and
             $pathSafetyOk -and
             $queueCamouflageOk -and
@@ -5707,6 +5750,7 @@ if ($QueueSelfTest) {
         clear_enabled = $controls.ClearQueueButton.IsEnabled
         manifest_ok = $manifestOk
         install_isolation_ok = $installIsolationOk
+        unicode_json_ok = $unicodeJsonOk
         manifest_formats = [string] $manifestOnDisk.common.formats
         queue_validation_ok = $queueValidationOk
         path_safety_ok = $pathSafetyOk

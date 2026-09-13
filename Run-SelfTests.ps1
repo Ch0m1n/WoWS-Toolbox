@@ -54,7 +54,7 @@ if (-not $smoke.ok -or -not $smoke.event_runtime -or
     -not $queueSelf.english_log_ok -or
     -not $queueSelf.queue_validation_ok -or -not $queueSelf.path_safety_ok -or
     -not $queueSelf.queue_camouflage_ok -or -not $queueSelf.queue_remove_ok -or
-    -not $queueSelf.launch_ok) {
+    -not $queueSelf.unicode_json_ok -or -not $queueSelf.launch_ok) {
     throw 'Main GUI runtime/queue acceptance failed.'
 }
 
@@ -146,7 +146,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.72',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.73',
     'ConvertTo-ValidatedQueueEntries', '[PIPELINE] ', 'child_heartbeat',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -616,8 +616,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.72.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.72') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.73.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.73') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -643,7 +643,9 @@ if (Test-Path -LiteralPath $installerDefinition -PathType Leaf) {
         'Tasks: desktopicon', 'CloseApplications=no',
         'RestartApplications=no', 'UpgradeWelcome', 'InstalledVersion',
         'PrepareToInstall', 'FindWindowByWindowName', 'CloseAppForUpdate',
-        'onlyifdoesntexist', 'LanguageDetectionMethod=none')) {
+        'onlyifdoesntexist', 'LanguageDetectionMethod=none',
+        '[UninstallDelete]', 'Name: "{localappdata}\WoWSToolbox"',
+        'Name: "{app}\output"')) {
         if (-not $installerText.Contains($marker)) { throw "Installer shortcut marker missing: $marker" }
     }
     if ($installerText -notmatch 'AppId=\{\{88AA1660-CC89-4EDA-9895-BC051E8CAD26\}' -or
@@ -729,7 +731,7 @@ if ($threeCore.Length -lt 1000000 -or $threeModule.Length -lt 500000 -or
     throw 'Dependency or license acceptance failed.'
 }
 $expectedExporterHashes = @{
-    'Backend\wowsunpack.exe' = 'D19163418F004BCC733B43D4A0DCD0DF697B5C7B6032DF2A5CDB7BA7B7DDC496'
+    'Backend\wowsunpack.exe' = 'FCED4778C7492970A5E8AC981FC9402C91A159BCAD93E6F64CB49F6959A7B375'
     'Backend\wowsunpack_armor.exe' = '4BF82B3CA9910AC36CD5144CF145FA1D149451D465391437668E4E78E0E0DB05'
 }
 foreach ($relative in $expectedExporterHashes.Keys) {
@@ -778,9 +780,9 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.72 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.73 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.72 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.73 self-tests passed.'
 }
 

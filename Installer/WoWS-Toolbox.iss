@@ -1,8 +1,8 @@
 #define MyAppName "WoWS Toolbox"
-#define MyAppVersion "5.0.72"
+#define MyAppVersion "5.0.73"
 #define MyAppPublisher "WoWS Toolbox contributors"
 #ifndef ReleaseRoot
-#define ReleaseRoot "..\..\..\outputs\WoWS-Toolbox-v5.0.72"
+#define ReleaseRoot "..\..\..\outputs\WoWS-Toolbox-v5.0.73"
 #endif
 
 [Setup]
@@ -13,7 +13,7 @@ AppVerName={#MyAppName} {#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppCopyright=Copyright (c) 2026 WoWS Toolbox contributors
 AppComments=Unofficial WoWS-family model extraction and inspection toolbox
-VersionInfoVersion=5.0.72.0
+VersionInfoVersion=5.0.73.0
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription={#MyAppName} Installer
 VersionInfoCompany={#MyAppPublisher}
@@ -115,6 +115,14 @@ Type: files; Name: "{app}\Backend\test_*.py"
 Type: files; Name: "{app}\BlenderExtractor\test_*.py"
 ; Remove the retired experimental weapon/part rotation module during upgrades.
 Type: files; Name: "{app}\Viewer\web\weapon-kinematics.js"
+
+[UninstallDelete]
+; Remove Toolbox-owned settings, caches, WebView2 data, update downloads,
+; diagnostics, and the default in-app export folder on explicit uninstall.
+; Custom output folders outside {app} are never touched.
+Type: filesandordirs; Name: "{localappdata}\WoWSToolbox"
+Type: filesandordirs; Name: "{app}\output"
+
 [Run]
 Filename: "{tmp}\MicrosoftEdgeWebview2Setup.exe"; Parameters: "/silent /install"; StatusMsg: "{cm:InstallingWebView2}"; Flags: waituntilterminated; Check: NeedsWebView2; AfterInstall: VerifyWebView2Install
 Filename: "{app}\README.txt"; Description: "{cm:ViewReadme}"; Flags: postinstall shellexec skipifsilent skipifdoesntexist
