@@ -146,7 +146,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.71',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.72',
     'ConvertTo-ValidatedQueueEntries', '[PIPELINE] ', 'child_heartbeat',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -168,6 +168,36 @@ foreach ($marker in @(
     'digest', 'Get-FileHash -LiteralPath $InstallerPath -Algorithm SHA256'
 )) {
     if (-not $guiText.Contains($marker)) { throw "Modern queue marker missing: $marker" }
+}
+$tokens = $null
+$parseErrors = $null
+$guiAst = [Management.Automation.Language.Parser]::ParseFile(
+    $mainGui, [ref] $tokens, [ref] $parseErrors
+)
+if ($parseErrors.Count) { throw 'Main GUI PowerShell parse acceptance failed.' }
+$folderCompatibilityFunction = $guiAst.Find(
+    {
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -eq 'Enable-FolderDialogDescriptionTitle'
+    },
+    $true
+)
+if ($null -eq $folderCompatibilityFunction) {
+    throw 'Folder dialog compatibility function is missing.'
+}
+Invoke-Expression $folderCompatibilityFunction.Extent.Text
+$legacyFolderDialogFixture = [pscustomobject] @{ Description = '' }
+Enable-FolderDialogDescriptionTitle -Dialog $legacyFolderDialogFixture
+$modernFolderDialogFixture = [pscustomobject] @{
+    Description = ''
+    UseDescriptionForTitle = $false
+}
+Enable-FolderDialogDescriptionTitle -Dialog $modernFolderDialogFixture
+if ($null -ne $legacyFolderDialogFixture.PSObject.Properties['UseDescriptionForTitle'] -or
+    -not $modernFolderDialogFixture.UseDescriptionForTitle -or
+    $guiText.Contains('$dialog.UseDescriptionForTitle = $true')) {
+    throw 'Folder dialog runtime compatibility acceptance failed.'
 }
 $localizationScript = Join-Path $PSScriptRoot 'GUI\Localization.ps1'
 $localizationText = Get-Content -Raw -LiteralPath $localizationScript
@@ -586,8 +616,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.71.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.71') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.72.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.72') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -649,6 +679,8 @@ $allowedDll = @(
     'Viewer\Runtime\Microsoft.Web.WebView2.Core.dll',
     'Viewer\Runtime\Microsoft.Web.WebView2.Wpf.dll',
     'Viewer\Runtime\WebView2Loader.dll',
+    'Backend\vcruntime140.dll',
+    'Backend\vcruntime140_1.dll',
     'Runtime\Python\libcrypto-1_1.dll',
     'Runtime\Python\libffi-7.dll',
     'Runtime\Python\libssl-1_1.dll',
@@ -669,11 +701,22 @@ if ($forbidden.Count -or $unexpectedDll.Count -or $cacheDirs.Count) {
 
 Write-Host '8/9 Dependency and license audit'
 $webViewBootstrapper = Join-Path $PSScriptRoot 'Installer\dependencies\MicrosoftEdgeWebview2Setup.exe'
+$backendRuntimeDlls = @(
+    Join-Path $PSScriptRoot 'Backend\vcruntime140.dll'
+    Join-Path $PSScriptRoot 'Backend\vcruntime140_1.dll'
+)
 if (Test-Path -LiteralPath (Join-Path $PSScriptRoot 'Installer') -PathType Container) {
     if (-not (Test-Path -LiteralPath $webViewBootstrapper -PathType Leaf) -or
         (Get-FileHash -LiteralPath $webViewBootstrapper -Algorithm SHA256).Hash -ne
             '8C4A80540B6BBCBEF30A4E8C7D1AC504B6FC09DB922B4ACDFD85C9D5F6F1050E') {
         throw 'Microsoft WebView2 bootstrapper is missing or has the wrong SHA-256.'
+    }
+}
+foreach ($runtimeDll in $backendRuntimeDlls) {
+    $signature = Get-AuthenticodeSignature -LiteralPath $runtimeDll
+    if ($signature.Status -ne 'Valid' -or
+        $signature.SignerCertificate.Subject -notlike '*Microsoft Corporation*') {
+        throw "Bundled native exporter runtime is missing or unsigned: $runtimeDll"
     }
 }
 $threeCore = Get-Item -LiteralPath (Join-Path $PSScriptRoot 'Viewer\web\vendor\three.core.js')
@@ -687,7 +730,7 @@ if ($threeCore.Length -lt 1000000 -or $threeModule.Length -lt 500000 -or
 }
 $expectedExporterHashes = @{
     'Backend\wowsunpack.exe' = 'D19163418F004BCC733B43D4A0DCD0DF697B5C7B6032DF2A5CDB7BA7B7DDC496'
-    'Backend\wowsunpack_armor.exe' = 'BEFCD0B4EF013FF55A35FEEA8540FDC724084646197474B32F668051BC8A4B64'
+    'Backend\wowsunpack_armor.exe' = '4BF82B3CA9910AC36CD5144CF145FA1D149451D465391437668E4E78E0E0DB05'
 }
 foreach ($relative in $expectedExporterHashes.Keys) {
     $actualHash = (Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $relative) -Algorithm SHA256).Hash
@@ -735,9 +778,9 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.71 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.72 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.71 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.72 self-tests passed.'
 }
 

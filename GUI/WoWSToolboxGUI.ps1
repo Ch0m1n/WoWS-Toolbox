@@ -324,7 +324,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.71'
+$script:AppVersion = '5.0.72'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -885,7 +885,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.71"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.72"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1341,7 +1341,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.71 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.72 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -2324,11 +2324,22 @@ function Save-Settings {
         -Language ([string] $script:Settings.Language))
 }
 
+function Enable-FolderDialogDescriptionTitle {
+    param([Parameter(Mandatory)] [object] $Dialog)
+
+    # UseDescriptionForTitle was added in newer WinForms runtimes. Windows
+    # PowerShell/.NET Framework builds on older Windows do not expose it.
+    $property = $Dialog.PSObject.Properties['UseDescriptionForTitle']
+    if ($null -ne $property -and $property.IsSettable) {
+        $property.Value = $true
+    }
+}
+
 $script:SelectFolderDialog = {
     param([string] $InitialPath)
     $dialog = [Windows.Forms.FolderBrowserDialog]::new()
     $dialog.Description = '폴더를 선택해 주세요.'
-    $dialog.UseDescriptionForTitle = $true
+    Enable-FolderDialogDescriptionTitle -Dialog $dialog
     if (Test-Path -LiteralPath $InitialPath -PathType Container) {
         $dialog.SelectedPath = $InitialPath
     }
@@ -2365,7 +2376,7 @@ function Select-Folder {
     param([string] $InitialPath)
     $dialog = [Windows.Forms.FolderBrowserDialog]::new()
     $dialog.Description = '폴더를 선택해 주세요.'
-    $dialog.UseDescriptionForTitle = $true
+    Enable-FolderDialogDescriptionTitle -Dialog $dialog
     if (Test-Path -LiteralPath $InitialPath -PathType Container) {
         $dialog.SelectedPath = $InitialPath
     }
@@ -3656,7 +3667,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.71&lang=' +
+            'https://viewer.local/index.html?app=5.0.72&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -3910,7 +3921,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.71&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.72&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }

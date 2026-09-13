@@ -105,8 +105,9 @@ asynchronous requests for one cached image resolve to the decoded bitmap.
 
 The model exporter includes the Ships 2.0 geometry/material and independently
 implemented BC7Prep texture changes. The dedicated armor exporter retains its
-separately verified no-texture build with `--armor-json`. Their hashes are tracked
-individually below. Armor is converted to the adjacent viewer sidecar and is not
+separately verified no-texture build with `--armor-json` and includes unified-root
+armor geometry used by Ships 2.0 hulls. Their hashes are tracked individually
+below. Armor is converted to the adjacent viewer sidecar and is not
 merged into the editable OBJ.
 
 Local modifications add current Korabli executable recognition, split
@@ -120,12 +121,17 @@ Packaged SHA-256 values:
 
 ```text
 D19163418F004BCC733B43D4A0DCD0DF697B5C7B6032DF2A5CDB7BA7B7DDC496  Backend/wowsunpack.exe
-BEFCD0B4EF013FF55A35FEEA8540FDC724084646197474B32F668051BC8A4B64  Backend/wowsunpack_armor.exe
+4BF82B3CA9910AC36CD5144CF145FA1D149451D465391437668E4E78E0E0DB05  Backend/wowsunpack_armor.exe
 ```
 
 The Oodle runtime itself is proprietary external software. It is not copied,
 modified, or redistributed here; users may point the GUI at a compatible DLL
 from software they are entitled to use.
+
+The Microsoft-signed `vcruntime140.dll` and `vcruntime140_1.dll` files from the
+bundled CPython distribution are also placed beside the native exporters for
+app-local loading. This avoids requiring a separate Visual C++ Redistributable
+installation on a clean supported Windows system.
 
 ## wows-tools/wows-model-exporter
 

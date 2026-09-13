@@ -70,11 +70,17 @@ def test_installer_checks_powershell_and_webview2() -> None:
     assert "VerifyWebView2Install" in text
     assert 'Parameters: "/silent /install"' in text
     assert "F3017226-FE2A-4295-8BDF-00C3A9A7E4C5" in text
+    assert r'Source: "dependencies\MicrosoftEdgeWebview2Setup.exe"' in text
     assert 'Name: "desktopicon"' in text
     assert r'Filename: "{app}\WoWS Toolbox.exe"' in text
     assert r'Name: "{group}\WoWS Toolbox"' in text
     assert 'Tasks: desktopicon' in text
     assert r'Filename: "{app}\WoWS-Toolbox-GUI.cmd"' not in text
+
+
+def test_native_exporter_runtime_is_app_local() -> None:
+    for name in ("vcruntime140.dll", "vcruntime140_1.dll"):
+        assert (ROOT / "Backend" / name).is_file()
 
 
 def test_webview2_bootstrapper_is_pinned() -> None:
@@ -84,4 +90,3 @@ def test_webview2_bootstrapper_is_pinned() -> None:
         "8C4A80540B6BBCBEF30A4E8C7D1AC504"
         "B6FC09DB922B4ACDFD85C9D5F6F1050E"
     )
-
