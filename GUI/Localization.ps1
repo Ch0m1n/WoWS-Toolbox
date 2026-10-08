@@ -1,6 +1,12 @@
 ﻿$script:WoWSToolboxLanguage = 'en'
 
 $script:WoWSToolboxEnglishText = [ordered]@{
+    '블리츠 데이터 가져오기' = 'Import Blitz data'
+    '블리츠 연결 고급 설정' = 'Advanced Blitz connection settings'
+    '블리츠 에뮬레이터 실행' = 'Start Blitz emulator'
+    '블리츠 ADB 실행 파일 · 비우면 자동 찾기' = 'Blitz ADB executable · leave empty to auto-detect'
+    '기기 ID 또는 ADB 주소 · 한 대만 연결됐으면 비워도 돼요' = 'Device ID or ADB address · optional with one connected device'
+    '게임과 리소스를 업데이트한 뒤 블리츠를 종료하고 가져와 주세요. root 권한이 필요해요.' = 'Update the game and resources, then close Blitz before importing. Root access is required.'
     '1K 텍스처' = '1K textures'
     '2K 텍스처' = '2K textures'
     '3D 모델 뷰어' = '3D Model Viewer'
@@ -120,7 +126,7 @@ $script:WoWSToolboxEnglishText = [ordered]@{
     '선체·주함포·부포·대공포·어뢰를 형식별 개별 오브젝트로 저장해요.' = 'Saves hull, main guns, secondary guns, AA guns, and torpedoes as separate objects for each format.'
     '여러 함선을 대기열에 담아 선체와 무장을 선택한 형식으로 내보내요.' = 'Queue multiple ships and export hulls and weapons in the selected format.'
     '파트별 OBJ와 계층·원점 보존 GLB를 함께 저장해요.' = 'Saves part-based OBJ and hierarchy/origin-preserving GLB files.'
-    'WoWS Toolbox 5.0.73 · 비공식 커뮤니티 도구' = 'WoWS Toolbox 5.0.73 · Unofficial community tool'
+    'WoWS Toolbox 5.0.74 · 비공식 커뮤니티 도구' = 'WoWS Toolbox 5.0.74 · Unofficial community tool'
     '설정을 저장했어요.' = 'Settings saved.'
     '인터페이스 언어' = 'Interface language'
     '언어 변경은 프로그램을 다시 열 때 적용돼요.' = 'Language changes apply the next time the program starts.'

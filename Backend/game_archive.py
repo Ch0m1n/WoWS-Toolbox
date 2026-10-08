@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from runtime_i18n import translate_text
+from cache_retention import prune_old_build_caches
 
 
 IDX_MAGIC = 0x50465349
@@ -436,6 +437,7 @@ def prepare_korabli_cache(
                 and cached_oodle.is_file()
             ):
                 progress("cache", 100, "코라블리 변환 캐시를 재사용해요")
+                prune_old_build_caches(cache_root, build)
                 return {
                     "build": build,
                     "game_params": str(params_path),
@@ -485,6 +487,7 @@ def prepare_korabli_cache(
     finally:
         manifest_temporary.unlink(missing_ok=True)
     progress("cache", 100, "코라블리 변환 캐시 준비 완료")
+    prune_old_build_caches(cache_root, build)
     return {
         "build": build,
         "game_params": str(params_path),

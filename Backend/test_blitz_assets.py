@@ -3,6 +3,8 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from blitz_assets import blitz_catalog, resolve_blitz_layout
 
@@ -64,6 +66,28 @@ class BlitzLayoutTests(unittest.TestCase):
 
             self.assertEqual(layout.bundle_root, root.resolve())
             self.assertIsNone(layout.obb_path)
+
+    def test_design_data_restores_localized_names_and_tiers(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            body = self.make_workspace(root)
+            (body / 'us_bb_iowa_1943.ab').write_bytes(b'body')
+            (root / 'DesignData').write_bytes(b'metadata')
+            ship = {'SerializableShipBaseInfo': {'Keys': [1], 'Values': [{
+                'Introduction': {'Name': 'IowaName'},
+                'LevelInfoList': [{'Prefab': 'US_BB_Iowa_1943', 'ShipID': 1, 'DescLevel': 9}]
+            }]}}
+            def reader(payload):
+                return SimpleNamespace(parse_as_dict=lambda: payload)
+            objects = {'ShipDatabase': reader(ship)}
+            for language, title, object_name in [('en', 'Iowa', 'LocalizationDatabaseEN'),
+                                                  ('ko', '아이오와', 'LocalizationDatabaseKOR')]:
+                objects[object_name] = reader({'SerializableDataList': [{'Keys': ['IowaName'], 'Values': [title]}]})
+                with patch('blitz_assets._named_monobehaviours', return_value=objects):
+                    rows = blitz_catalog(root, language)
+                self.assertEqual(rows[0]['LocalizedName'], title)
+                self.assertEqual(rows[0]['Tier'], 9)
+                self.assertTrue(rows[0]['Supported'])
 
 
 if __name__ == "__main__":

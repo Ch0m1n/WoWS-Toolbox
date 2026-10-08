@@ -11,6 +11,53 @@ import pbr_materials as PBR
 
 
 class PbrMaterialsTests(unittest.TestCase):
+    def test_bc7prep_supported_decoder_output_is_used(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "Hull_n.dd0"
+            header = bytearray(196)
+            header[:4] = b"DDS "
+            header[84:88] = b"DX10"
+            header[148:152] = b"\xbc\x07\x00\x00"
+            source.write_bytes(header)
+            def decode(command):
+                Image.new("RGBA", (16, 16), (128, 128, 0, 255)).save(command[-1])
+            with mock.patch.object(PBR, "_run", side_effect=decode):
+                outputs, _ = PBR._convert_to_cache(source, root / "cache", "/Hull_n.dd0", "normal", 0, Path("exporter.exe"))
+            with Image.open(outputs["normal"]) as image:
+                self.assertEqual(image.size, (16, 16))
+                self.assertEqual(image.getpixel((0, 0)), (128, 128, 255, 255))
+
+    def test_bc7prep_never_reaches_pillow_when_decoder_rejects_it(self) -> None:
+        import subprocess
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "Hull_n.dd0"
+            header = bytearray(196)
+            header[:4] = b"DDS "
+            header[84:88] = b"DX10"
+            header[148:152] = b"\xbc\x07\x00\x00"
+            source.write_bytes(header)
+            Image.new("RGBA", (8, 8), (128, 128, 0, 255)).save(source.with_suffix(".dds"), format="DDS")
+            with mock.patch.object(PBR, "_run", side_effect=subprocess.CalledProcessError(1, "decode", output="unsupported layout")):
+                outputs, _ = PBR._convert_to_cache(source, root / "cache", "/Hull_n.dd0", "normal", 0, Path("exporter.exe"))
+            with Image.open(outputs["normal"]) as image:
+                self.assertEqual(image.size, (8, 8))
+                self.assertEqual(image.getpixel((0, 0)), (128, 128, 255, 255))
+            self.assertTrue(list((root / "cache" / "maps").glob("*.decode_v6.json")))
+
+    def test_bc7prep_without_decoder_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "Hull_n.dd0"
+            header = bytearray(196)
+            header[:4] = b"DDS "
+            header[84:88] = b"DX10"
+            header[148:152] = b"\xbc\x07\x00\x00"
+            source.write_bytes(header)
+            with self.assertRaisesRegex(RuntimeError, "requires the compatible exporter"):
+                PBR._convert_to_cache(source, root / "cache", "/Hull_n.dd0", "normal", 0)
+
     def test_parses_asset_index_and_builds_dd0_first_candidates(self) -> None:
         output = "\n".join(
             [
@@ -203,6 +250,55 @@ class PbrMaterialsTests(unittest.TestCase):
                 )
             self.assertEqual(contract["coverage"]["pbr_materials"], 1)
             self.assertEqual(contract["materials"][0]["base_image"], document["images"][0]["name"])
+
+    def test_parallel_cache_writers_have_unique_temporary_paths(self) -> None:
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "shared.png"
+            image = Image.new("L", (2, 2), 73)
+            barrier = Barrier(4)
+            paths = []
+            original_save = Image.Image.save
+            def save(instance, path, **kwargs):
+                paths.append(str(path))
+                barrier.wait(timeout=5)
+                return original_save(instance, path, **kwargs)
+            with mock.patch.object(Image.Image, "save", new=save):
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    list(pool.map(lambda _: PBR._save_cached_png(image, target), range(4)))
+            self.assertEqual(len(set(paths)), 4)
+            with Image.open(target) as cached:
+                self.assertEqual(cached.getpixel((0, 0)), 73)
+            self.assertEqual(list(Path(directory).glob("*.part")), [])
+
+    def test_locked_valid_winner_is_reused_without_losing_pbr(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "shared.png"
+            Image.new("L", (2, 2), 73).save(target)
+            with mock.patch.object(PBR.os, "replace", side_effect=PermissionError("reader holds winner")):
+                PBR._save_cached_png(Image.new("L", (2, 2), 73), target)
+            with Image.open(target) as cached:
+                self.assertEqual(cached.getpixel((0, 0)), 73)
+            self.assertEqual(list(Path(directory).glob("*.part")), [])
+
+    def test_temporarily_locked_winner_is_retried(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "shared.png"
+            Image.new("L", (2, 2), 73).save(target)
+            original_open = Image.open
+            calls = 0
+            def open_winner(path, *args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise PermissionError("publication still in progress")
+                return original_open(path, *args, **kwargs)
+            with mock.patch.object(PBR.os, "replace", side_effect=PermissionError("locked")), \
+                    mock.patch.object(PBR.Image, "open", side_effect=open_winner):
+                PBR._save_cached_png(Image.new("L", (2, 2), 73), target)
+            self.assertEqual(calls, 2)
+            self.assertEqual(list(Path(directory).glob("*.part")), [])
 
     def test_cached_output_contract_keeps_source_mg(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

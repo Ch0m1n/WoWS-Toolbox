@@ -17,6 +17,7 @@ import re
 import shutil
 import subprocess
 import time
+import tempfile
 from pathlib import Path, PurePosixPath
 from typing import Iterable
 
@@ -31,7 +32,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 MFM_LINE = re.compile(r"^\(A\)\s+(/.+\.mfm)\s+\d+\s+bytes\s*$", re.IGNORECASE)
 MFM_STRIP_SUFFIXES = ("_skinned", "_wire", "_dead", "_blaze", "_alpha")
 CHANNEL_SUFFIXES = {"normal": ("_n", "_alpha_n"), "metallic_gloss": ("_mg",), "ao": ("_ao",)}
-SCHEMA = "wows-toolbox-pbr-materials/v5"
+SCHEMA = "wows-toolbox-pbr-materials/v6"
 SELECTION_SCHEMA = "wows-toolbox-pbr-selection/v2"
 PORTABLE_PBR_ROLES = frozenset(
     {"normal", "specular", "roughness", "metalness", "ao"}
@@ -238,15 +239,15 @@ def _cache_prefix(cache_root: Path, logical_path: str) -> Path:
 def _cache_outputs(cache_root: Path, logical_path: str, channel: str) -> dict[str, Path]:
     prefix = _cache_prefix(cache_root, logical_path)
     if channel == "normal":
-        return {"normal": prefix.with_name(prefix.name + "_normal_v5.png")}
+        return {"normal": prefix.with_name(prefix.name + "_normal_v6.png")}
     if channel == "ao":
         # v4 stores lossless single-channel maps with maximum PNG compression.
-        return {"ao": prefix.with_name(prefix.name + "_ao_l_v5.png")}
+        return {"ao": prefix.with_name(prefix.name + "_ao_l_v6.png")}
     return {
-        "metallic_gloss": prefix.with_name(prefix.name + "_metallic_gloss_v5.png"),
-        "specular": prefix.with_name(prefix.name + "_specular_l_v5.png"),
-        "roughness": prefix.with_name(prefix.name + "_roughness_l_v5.png"),
-        "metalness": prefix.with_name(prefix.name + "_metalness_l_v5.png"),
+        "metallic_gloss": prefix.with_name(prefix.name + "_metallic_gloss_v6.png"),
+        "specular": prefix.with_name(prefix.name + "_specular_l_v6.png"),
+        "roughness": prefix.with_name(prefix.name + "_roughness_l_v6.png"),
+        "metalness": prefix.with_name(prefix.name + "_metalness_l_v6.png"),
     }
 
 
@@ -384,19 +385,79 @@ def _channel_from_path(logical_path: str) -> str:
     raise ValueError(f"Unsupported PBR channel path: {logical_path}")
 
 
+def _is_bc7prep_file(source: Path) -> bool:
+    if not source.is_file():
+        return False
+    with source.open("rb") as stream:
+        header = stream.read(152)
+    return (header[:4] == b"DDS " and header[84:88] == b"DX10"
+            and header[148:152] == b"\xbc\x07\x00\x00")
+
+
+def _save_cached_png(image: Image.Image, target: Path) -> None:
+    # Several materials may share a channel. A PID is not unique across workers.
+    fd, name = tempfile.mkstemp(prefix=target.name + ".", suffix=".part", dir=target.parent)
+    os.close(fd)
+    temporary = Path(name)
+    try:
+        image.save(temporary, format="PNG", compress_level=9)
+        for attempt in range(10):
+            try:
+                os.replace(temporary, target)
+                break
+            except PermissionError:
+                # Windows can briefly deny both replacement and reading while
+                # another worker publishes this same channel.
+                try:
+                    with Image.open(target) as winner:
+                        winner.verify()
+                    break
+                except (PermissionError, FileNotFoundError):
+                    if attempt == 9:
+                        raise
+                    time.sleep(0.02)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def _convert_to_cache(
     source: Path,
     cache_root: Path,
     logical_path: str,
     channel: str,
     max_size: int,
+    exporter: Path | None = None,
 ) -> tuple[dict[str, Path], bool]:
     outputs = _cache_outputs(cache_root, logical_path, channel)
     if _valid_cached(cache_root, logical_path, channel):
         return outputs, False
     next(iter(outputs.values())).parent.mkdir(parents=True, exist_ok=True)
-    with Image.open(source) as opened:
-        converted, resized = _resize(opened.convert("RGBA"), max_size)
+    # Pillow accepts the BC7Prep payload as ordinary BC7 and returns garbage.
+    # Route this container through the exporter's validated inverse transform.
+    is_prep = _is_bc7prep_file(source)
+    with tempfile.TemporaryDirectory(prefix="wows-pbr-") as temporary:
+        decoded_source = source
+        fallback_reason = None
+        if is_prep:
+            if exporter is None:
+                raise RuntimeError("BC7Prep texture requires the compatible exporter")
+            decoded_source = Path(temporary) / "decoded.png"
+            try:
+                _run([str(exporter), "decode-texture", str(source), "--output", str(decoded_source)])
+            except subprocess.CalledProcessError as error:
+                # Unsupported preprocessing layouts must never reach Pillow.
+                # The sibling DDS contains the game's authored standalone mip.
+                fallback = source.with_suffix(".dds")
+                if not fallback.is_file() or _is_bc7prep_file(fallback):
+                    raise RuntimeError(f"Unsupported BC7Prep and no standalone mip: {logical_path}") from error
+                decoded_source = fallback
+                fallback_reason = str(error.stdout or error)
+        with Image.open(decoded_source) as opened:
+            converted, resized = _resize(opened.convert("RGBA"), max_size)
+        if fallback_reason:
+            marker = _cache_prefix(cache_root, logical_path).with_suffix(".decode_v6.json")
+            marker.write_text(json.dumps({"source": logical_path, "fallback": decoded_source.name,
+                                         "size": converted.size, "reason": fallback_reason}), encoding="utf-8")
         if channel == "normal":
             images = {"normal": reconstruct_tangent_normal(converted)}
         elif channel == "ao":
@@ -412,9 +473,7 @@ def _convert_to_cache(
             }
         for name, image in images.items():
             target = outputs[name]
-            temporary = target.with_suffix(f".png.{os.getpid()}.part")
-            image.save(temporary, format="PNG", compress_level=9)
-            os.replace(temporary, target)
+            _save_cached_png(image, target)
     return outputs, resized
 
 
@@ -638,6 +697,10 @@ def prepare_pbr_materials(
                 for candidate in resolution["sets"]
                 for value in candidate[channel]
                 if value.casefold().endswith(".dd0")
+            ) and not any(
+                _is_bc7prep_file(_raw_path(raw_root, value))
+                for candidate in resolution["sets"] for value in candidate[channel]
+                if value.casefold().endswith(".dd0")
             ):
                 continue
             requested_dds.extend(
@@ -722,6 +785,7 @@ def prepare_pbr_materials(
                     logical,
                     channel,
                     max_size,
+                    exporter,
                 ): (logical, channel)
                 for (logical, channel), source in conversion_jobs.items()
             }
@@ -780,6 +844,14 @@ def prepare_pbr_materials(
         contract["coverage"]["pbr_materials"] += 1
         contract["coverage"]["channels"] += len(entry["maps"])
     publish_seconds = time.perf_counter() - publish_started
+    for selected in selected_sources:
+        for logical in selected.values():
+            marker = _cache_prefix(cache_root, logical).with_suffix(".decode_v6.json")
+            if marker.is_file():
+                fallback = json.loads(marker.read_text(encoding="utf-8"))
+                warning = f"Unsupported BC7Prep uses authored standalone mip {fallback['size']}: {logical}"
+                if warning not in contract["warnings"]:
+                    contract["warnings"].append(warning)
 
     for resolution, selected in zip(resolutions, selected_sources):
         if resolution and selected:

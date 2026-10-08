@@ -4,8 +4,9 @@
 정상적으로 설치하고 내려받은 World of Warships Blitz 데이터**를 준비해 모델을
 추출하는 과정을 설명해요.
 
-WoWS Toolbox는 에뮬레이터에 접속하거나 게임을 수정하지 않아요. 사용자가 PC로
-복사해 둔 폴더만 읽기 전용으로 사용해요. APK, OBB, AssetBundle, 추출한 모델과
+WoWS Toolbox는 설정의 **블리츠 데이터 가져오기** 버튼으로 ADB에 연결해 필요한
+게임 자산을 PC로 복사할 수 있어요. 추출은 PC에 준비된 폴더를 읽기 전용으로
+사용해요. APK, OBB, AssetBundle, 추출한 모델과
 텍스처는 게임 자산이므로 다른 사람에게 배포하면 안 돼요.
 
 ## 1. 준비물과 지원 범위
@@ -17,6 +18,31 @@ WoWS Toolbox는 에뮬레이터에 접속하거나 게임을 수정하지 않아
 - 앱 전용 폴더를 읽을 수 있는 root 권한과 ADB 연결
 - 게임 업데이트와 항구 진입까지 끝난 본인 계정의 로컬 데이터
 - 번들과 OBB를 보관할 충분한 PC 공간
+
+### 버튼으로 가져오기
+
+1. 에뮬레이터에서 게임 업데이트와 추가 리소스 다운로드를 끝내고 블리츠를 종료해요.
+2. 기존 블리츠 전용 환경은 자동으로 찾아요. **설정 > 게임 설치 폴더**의
+   **블리츠 에뮬레이터 실행** 버튼으로 기존 에뮬레이터를 열 수 있어요.
+   PATH와 Android SDK에서 ADB도 자동으로 찾아요. 자동으로 찾지 못한 경우에만
+   **블리츠 연결 고급 설정**에서 `adb.exe`를 직접 선택해요.
+3. 연결 기기가 한 대면 기기 ID는 비워도 돼요. 여러 대면 고급 설정에 대상 ID를 입력해요.
+   에뮬레이터의 ADB 주소(`127.0.0.1:포트`)를 입력하면 해당 주소에 연결을 시도해요.
+4. **블리츠 데이터 가져오기**를 눌러요. 보관 위치도 자동으로 정해요.
+   기존 전용 환경이 있으면 그 데이터 폴더의 `ToolboxImports`에,
+   그 외에는 Toolbox 사용자 상태 폴더의 `BlitzImports`에 저장해요.
+5. 번들, 기본 OBB와 이름·티어 데이터 `DesignData`를 새 날짜별 폴더로 복사해요.
+   `/sdcard/Android/data/net.wargaming.wows.blitz/files/Assets/Resources/DesignData`를
+   먼저 확인하고, 없으면 앱 내부 `files` 폴더에서 찾아요.
+   완료되면 블리츠 데이터 경로가 저장되고 함선 목록도 자동으로 새로고침돼요.
+
+root ADB 또는 `su` 권한과 Android의 `tar`, `find`, `stat`, `pidof` 명령이 필요해요.
+게임이 실행 중이거나 복사 중 원본 파일 목록·크기·수정 시각이 바뀌면 적용하지 않아요.
+설정 화면의 **취소**로 중단할 수 있어요. 실패·취소된 폴더는 `.partial`로 남으며
+자동으로 데이터 경로에 적용되지 않아요. 기존 데이터 폴더는 덮어쓰지 않아요.
+게임 자체 업데이트와 아직 내려받지 않은 함선 리소스 다운로드는 게임에서 먼저 해요.
+
+아래 ADB 명령은 버튼을 쓰지 않고 수동으로 준비할 때 참고하면 돼요.
 
 Google Play Games 베타의 Windows 설치 폴더 자체는 WoWS Toolbox의 Blitz 경로로
 사용할 수 없어요. Android 앱 전용 데이터가 일반 폴더로 노출되지 않기 때문이에요.
@@ -174,13 +200,13 @@ PC 복사와 폴더 검사가 끝난 뒤에만 임시 폴더를 지워요. 아�
 먼저 현재 설치본에서 위치를 찾아요.
 
 ```powershell
-& $adb shell su -c "find /data/data/net.wargaming.wows.blitz -type f -name DesignData 2>/dev/null"
+& $adb shell su -c "find /sdcard/Android/data/net.wargaming.wows.blitz/files /data/data/net.wargaming.wows.blitz -type f -name DesignData 2>/dev/null"
 ```
 
 경로가 출력되면 그 파일을 준비 폴더 최상단의 `DesignData`로 복사해요.
 
 ```powershell
-$designRemote = ((& $adb shell su -c "find /data/data/net.wargaming.wows.blitz -type f -name DesignData 2>/dev/null") |
+$designRemote = ((& $adb shell su -c "find /sdcard/Android/data/net.wargaming.wows.blitz/files /data/data/net.wargaming.wows.blitz -type f -name DesignData 2>/dev/null") |
     Select-Object -First 1).Trim()
 if ($designRemote) {
     & $adb pull $designRemote (Join-Path $blitzData 'DesignData')

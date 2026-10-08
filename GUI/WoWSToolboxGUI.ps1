@@ -324,7 +324,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.73'
+$script:AppVersion = '5.0.74'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -513,6 +513,8 @@ $defaultSettings = [ordered] @{
     PcPath = ''
     KorabliPath = ''
     BlitzPath = ''
+    BlitzAdbPath = ''
+    BlitzAdbDevice = ''
     OutputPath = $programDefaultOutputPath
     OodlePath = ''
     Language = 'en'
@@ -885,7 +887,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.73"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.74"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1268,6 +1270,29 @@ $xaml = @'
                                     <Button Grid.Column="1" x:Name="BrowseBlitzButton"
                                             Content="찾기" Margin="8,0,0,0"/>
                                 </Grid>
+                                <Expander Header="블리츠 연결 고급 설정" Margin="0,12,0,0" IsExpanded="False">
+                                <StackPanel>
+                                <TextBlock Text="블리츠 ADB 실행 파일 · 비우면 자동 찾기" Foreground="#8FA2BC"/>
+                                <Grid Margin="0,5,0,8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="BlitzAdbPathBox"/>
+                                    <Button Grid.Column="1" x:Name="BrowseBlitzAdbButton" Content="찾기" Margin="8,0,0,0"/>
+                                </Grid>
+                                <TextBlock Text="기기 ID 또는 ADB 주소 · 한 대만 연결됐으면 비워도 돼요" Foreground="#8FA2BC"/>
+                                <TextBox x:Name="BlitzAdbDeviceBox" Margin="0,5,0,8"/>
+                                </StackPanel>
+                                </Expander>
+                                <TextBlock Text="게임과 리소스를 업데이트한 뒤 블리츠를 종료하고 가져와 주세요. root 권한이 필요해요."
+                                           TextWrapping="Wrap" Foreground="#8195AF" FontSize="11" Margin="0,0,0,8"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <Button x:Name="StartBlitzEmulatorButton" Content="블리츠 에뮬레이터 실행" Margin="0,0,8,0"/>
+                                    <Button x:Name="ImportBlitzButton" Content="블리츠 데이터 가져오기"/>
+                                    <Button x:Name="CancelBlitzImportButton" Content="취소" IsEnabled="False" Margin="8,0,0,0"/>
+                                </StackPanel>
+                                <TextBlock x:Name="BlitzImportStatus" TextWrapping="Wrap" Foreground="#8FA2BC" Margin="0,8,0,0"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
@@ -1341,7 +1366,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.73 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.74 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -1409,6 +1434,7 @@ $controlNames = @(
     'LogBox', 'ModelWebView', 'ViewerPathLabel', 'ViewerStatus',
     'OpenModelButton', 'OpenRecentModelButton', 'OpenCompareModelButton', 'OpenViewerFolderButton',
     'LegendsPathBox', 'PcPathBox', 'KorabliPathBox', 'BlitzPathBox',
+    'BlitzAdbPathBox', 'BlitzAdbDeviceBox', 'BrowseBlitzAdbButton', 'StartBlitzEmulatorButton', 'ImportBlitzButton', 'CancelBlitzImportButton', 'BlitzImportStatus',
     'SettingsOutputBox', 'BlenderPathBox', 'OodlePathBox',
     'BrowseLegendsButton', 'BrowsePcButton', 'BrowseKorabliButton', 'BrowseBlitzButton',
     'BrowseSettingsOutputButton', 'BrowseBlenderButton',
@@ -1435,6 +1461,11 @@ if ($SelfTest) {
         source_count = $sourceCombo.Items.Count
         blitz_control_present = $null -ne $window.FindName('BlitzPathBox') -and
             $null -ne $window.FindName('BrowseBlitzButton')
+        blitz_import_controls_present = $null -ne $window.FindName('ImportBlitzButton') -and
+            $null -ne $window.FindName('StartBlitzEmulatorButton') -and
+            $null -ne $window.FindName('BlitzAdbPathBox') -and
+            $null -ne $window.FindName('BlitzAdbDeviceBox') -and
+            (Test-Path -LiteralPath (Join-Path $script:BackendRoot 'blitz_import.py'))
         backend_catalog = (Test-Path -LiteralPath $script:CatalogScript)
         backend_extract = (Test-Path -LiteralPath $script:ExtractScript)
         hull_only_control_present = $null -ne $window.FindName('HullOnly')
@@ -2514,6 +2545,126 @@ function Get-CatalogPath {
     # Language-specific caches keep ship and camouflage names aligned with the UI.
     $catalogVersion = if ($Source -eq 'legends') { 4 } else { 1 }
     return Join-Path $script:CatalogRoot "$Source-v$catalogVersion-$catalogLanguage-$installToken.json"
+}
+
+function Get-BlitzEnvironment {
+    $roots = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($initial in @([string] $script:Settings.BlitzPath, $script:PackageRoot)) {
+        if ([string]::IsNullOrWhiteSpace($initial)) { continue }
+        $directory = [IO.DirectoryInfo]::new($initial)
+        for ($level = 0; $level -lt 5 -and $null -ne $directory; $level++) {
+            [void] $roots.Add($directory.FullName)
+            [void] $roots.Add((Join-Path $directory.FullName 'wows-blitz-extraction'))
+            $directory = $directory.Parent
+        }
+    }
+    $adb = ''
+    $command = Get-Command adb.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($null -ne $command) { $adb = $command.Source }
+    foreach ($candidate in @(
+        [string] $script:Settings.BlitzAdbPath,
+        $(if ($env:ANDROID_SDK_ROOT) { Join-Path $env:ANDROID_SDK_ROOT 'platform-tools\adb.exe' }),
+        $(if ($env:ANDROID_HOME) { Join-Path $env:ANDROID_HOME 'platform-tools\adb.exe' }),
+        (Join-Path $env:LOCALAPPDATA 'Android\Sdk\platform-tools\adb.exe')
+    )) {
+        if (-not [string]::IsNullOrWhiteSpace($candidate) -and
+            (Test-Path -LiteralPath $candidate -PathType Leaf)) {
+            $adb = $candidate
+            break
+        }
+    }
+    $result = [ordered] @{ AdbPath = $adb; DataRoot = ''; EmulatorPath = ''; SdkRoot = ''; AvdHome = ''; AvdName = '' }
+    foreach ($root in $roots) {
+        if (-not $result.DataRoot -and
+            (Test-Path -LiteralPath (Join-Path $root 'full_bundle\prefab\ship\body') -PathType Container)) {
+            $result.DataRoot = $root
+        }
+        $sdk = Join-Path $root 'android-sdk'
+        $emulator = Join-Path $sdk 'emulator\emulator.exe'
+        $avdHome = Join-Path $root 'avd'
+        if (-not $result.EmulatorPath -and
+            (Test-Path -LiteralPath $emulator -PathType Leaf) -and
+            (Test-Path -LiteralPath (Join-Path $avdHome 'WoWS_Blitz_Extraction.ini') -PathType Leaf)) {
+            $result.EmulatorPath = $emulator
+            $result.SdkRoot = $sdk
+            $result.AvdHome = $avdHome
+            $result.AvdName = 'WoWS_Blitz_Extraction'
+            if (Test-Path -LiteralPath (Join-Path $root 'full_bundle\prefab\ship\body') -PathType Container) {
+                $result.DataRoot = $root
+            }
+        }
+        if (-not $result.AdbPath) {
+            $candidate = Join-Path $sdk 'platform-tools\adb.exe'
+            if (Test-Path -LiteralPath $candidate -PathType Leaf) { $result.AdbPath = $candidate }
+        }
+    }
+    return [pscustomobject] $result
+}
+
+function Start-BlitzEmulator {
+    $environment = Get-BlitzEnvironment
+    if (-not $environment.EmulatorPath) {
+        throw (Get-UiText '기존 블리츠 전용 에뮬레이터를 찾지 못했어요.' 'The existing dedicated Blitz emulator was not found.')
+    }
+    $info = [Diagnostics.ProcessStartInfo]::new()
+    $info.FileName = $environment.EmulatorPath
+    $info.Arguments = '-avd ' + $environment.AvdName + ' -gpu host -memory 6144 -cores 6'
+    $info.UseShellExecute = $false
+    $info.EnvironmentVariables['ANDROID_SDK_ROOT'] = $environment.SdkRoot
+    $info.EnvironmentVariables['ANDROID_HOME'] = $environment.SdkRoot
+    $info.EnvironmentVariables['ANDROID_AVD_HOME'] = $environment.AvdHome
+    # Clicking this button explicitly opens the interactive game environment.
+    [void] [Diagnostics.Process]::Start($info)
+    $controls.BlitzImportStatus.Text = Get-UiText '에뮬레이터를 실행했어요. 블리츠 업데이트를 끝내고 게임을 종료한 뒤 가져오기를 눌러 주세요.' 'Emulator started. Update Blitz, close the game, then click Import Blitz data.'
+}
+
+function Start-BlitzImport {
+    if ($null -ne $script:ActiveRunner -or $script:BatchActive) { return }
+    $environment = Get-BlitzEnvironment
+    $destination = if ($environment.DataRoot -and $environment.EmulatorPath) {
+        Join-Path $environment.DataRoot 'ToolboxImports'
+    } else { Join-Path $script:StateRoot 'BlitzImports' }
+    if ([string]::IsNullOrWhiteSpace($controls.BlitzAdbPathBox.Text)) {
+        $controls.BlitzAdbPathBox.Text = $environment.AdbPath
+    }
+    $script:Settings.BlitzAdbPath = $controls.BlitzAdbPathBox.Text.Trim()
+    $script:Settings.BlitzAdbDevice = $controls.BlitzAdbDeviceBox.Text.Trim()
+    Save-Settings
+    $script:LastResult = $null
+    $script:BlitzImportError = ''
+    $controls.BlitzImportStatus.Text = Get-UiText 'ADB 연결을 확인하는 중' 'Checking ADB connection'
+    $controls.MainProgress.IsIndeterminate = $true
+    $completion = {
+        param($exitCode)
+        $controls.MainProgress.IsIndeterminate = $false
+        if ($exitCode -ne 0 -or $null -eq $script:LastResult -or
+            $script:LastResult.schema -ne 'wows-toolbox-blitz-import/v1') {
+            $controls.BlitzImportStatus.Text = if ($script:CancelRequested) {
+                Get-UiText '가져오기를 취소했어요. 기존 데이터 경로는 유지돼요.' 'Import cancelled. The existing data path is preserved.'
+            } elseif (-not [string]::IsNullOrWhiteSpace($script:BlitzImportError)) {
+                $script:BlitzImportError
+            } else {
+                Get-UiText '가져오기를 완료하지 못했어요. 로그에서 오류를 확인해 주세요.' 'Import did not complete. Check the log for details.'
+            }
+            return
+        }
+        $path = [string] $script:LastResult.path
+        Set-GamePath -Source 'blitz' -Path $path
+        [void] $script:Catalogs.Remove('blitz')
+        Save-Settings
+        $controls.SourceCombo.SelectedIndex = 3
+        Update-CurrentGamePathUi
+        $controls.BlitzImportStatus.Text = Get-UiText "데이터를 가져왔어요: $path" "Imported data: $path"
+        Add-Log $controls.BlitzImportStatus.Text
+        # Defer until the process timer has cleared its catalog bookkeeping.
+        $window.Dispatcher.BeginInvoke([action] { Start-CatalogRefresh }) | Out-Null
+    }
+    Start-ToolProcess -Operation 'blitz-import' -Arguments @(
+        '-B', (Join-Path $script:BackendRoot 'blitz_import.py'),
+        '--adb', [string] $script:Settings.BlitzAdbPath,
+        '--device', [string] $script:Settings.BlitzAdbDevice,
+        '--destination', $destination
+    ) -Completion $completion
 }
 
 function Load-CatalogFile {
@@ -3673,7 +3824,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.73&lang=' +
+            'https://viewer.local/index.html?app=5.0.74&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -3927,7 +4078,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.73&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.74&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }
@@ -4109,6 +4260,8 @@ function Sync-SettingsToUi {
     $controls.PcPathBox.Text = [string] $script:Settings.PcPath
     $controls.KorabliPathBox.Text = [string] $script:Settings.KorabliPath
     $controls.BlitzPathBox.Text = [string] $script:Settings.BlitzPath
+    $controls.BlitzAdbPathBox.Text = [string] $script:Settings.BlitzAdbPath
+    $controls.BlitzAdbDeviceBox.Text = [string] $script:Settings.BlitzAdbDevice
     $controls.SettingsOutputBox.Text = [string] $script:Settings.OutputPath
     $controls.OodlePathBox.Text = [string] $script:Settings.OodlePath
     Select-ComboTag $controls.LanguageCombo ([string] $script:Settings.Language)
@@ -4127,6 +4280,8 @@ function Sync-UiToSettings {
     $script:Settings.PcPath = $controls.PcPathBox.Text.Trim()
     $script:Settings.KorabliPath = $controls.KorabliPathBox.Text.Trim()
     $script:Settings.BlitzPath = $controls.BlitzPathBox.Text.Trim()
+    $script:Settings.BlitzAdbPath = $controls.BlitzAdbPathBox.Text.Trim()
+    $script:Settings.BlitzAdbDevice = $controls.BlitzAdbDeviceBox.Text.Trim()
     $script:Settings.OutputPath = $controls.SettingsOutputBox.Text.Trim()
     $script:Settings.OodlePath = $controls.OodlePathBox.Text.Trim()
     $script:Settings.Language = Get-ComboTag $controls.LanguageCombo
@@ -4187,11 +4342,14 @@ function Set-BusyState {
         'SaveQueueButton', 'LoadQueueButton', 'BrowseOutputButton', 'InspectButton',
         'FormatCombo', 'TextureCombo', 'LodCombo', 'CamouflageCombo', 'OverwriteCheck',
         'NavViewer', 'NavSettings'
+        'ImportBlitzButton', 'StartBlitzEmulatorButton', 'BrowseBlitzAdbButton', 'BlitzAdbPathBox', 'BlitzAdbDeviceBox',
+        'BrowseBlitzButton', 'BlitzPathBox', 'SaveSettingsButton', 'AutoDetectButton'
     )) {
         $controls[$name].IsEnabled = -not $busy
     }
     $controls.CamouflageCombo.IsEnabled = $false
     $controls.CancelButton.IsEnabled = $busy
+    $controls.CancelBlitzImportButton.IsEnabled = $busy -and $script:ActiveOperation -eq 'blitz-import'
     $controls.PauseButton.IsEnabled = $script:BatchActive
     if ($busy) {
         $controls.ExtractButton.IsEnabled = $false
@@ -4364,11 +4522,24 @@ function Handle-ProcessLine {
         ''
     )
     Add-Log $text -ErrorLine:$Line.IsError
+    if ($script:ActiveOperation -eq 'blitz-import' -and $text.StartsWith('[ERROR] ')) {
+        $script:BlitzImportError = $text.Substring(8)
+        $controls.BlitzImportStatus.Text = $script:BlitzImportError
+        return
+    }
     if ($text.StartsWith('[PROGRESS] ')) {
         try {
             $progress = $text.Substring(11) | ConvertFrom-Json
             $stage = [string] $progress.stage
             $percent = [double] $progress.percent
+            if ($script:ActiveOperation -eq 'blitz-import') {
+                $controls.BlitzImportStatus.Text = [string] $progress.message
+                $controls.ProgressStage.Text = Get-UiText '블리츠 데이터 가져오기' 'Import Blitz data'
+                $controls.ProgressMessage.Text = [string] $progress.message
+                $controls.MainProgress.Value = $percent
+                $controls.MainProgress.IsIndeterminate = $false
+                return
+            }
             $total = [math]::Max(1, @($script:BatchItems).Count)
             $position = [math]::Min($total, $script:BatchIndex + 1)
             $shipName = if ($null -ne $script:BatchCurrentItem) {
@@ -5459,6 +5630,30 @@ $controls.BrowseOodleButton.Add_Click({
         'Oodle 런타임|oo2core_*_win64.dll|DLL 파일|*.dll'
     if ($null -ne $selected) { $controls.OodlePathBox.Text = $selected }
 })
+$controls.BrowseBlitzAdbButton.Add_Click({
+    $selected = & $script:SelectFileDialog $controls.BlitzAdbPathBox.Text 'Android Debug Bridge|adb.exe|실행 파일|*.exe'
+    if ($null -ne $selected) { $controls.BlitzAdbPathBox.Text = $selected }
+})
+$controls.ImportBlitzButton.Add_Click({
+    try { Start-BlitzImport }
+    catch {
+        $controls.BlitzImportStatus.Text = $_.Exception.Message
+        Add-Log $_.Exception.Message -ErrorLine
+    }
+})
+$controls.StartBlitzEmulatorButton.Add_Click({
+    try { Start-BlitzEmulator }
+    catch {
+        $controls.BlitzImportStatus.Text = $_.Exception.Message
+        Add-Log $_.Exception.Message -ErrorLine
+    }
+})
+$controls.CancelBlitzImportButton.Add_Click({
+    if ($null -ne $script:ActiveRunner -and $script:ActiveOperation -eq 'blitz-import') {
+        $script:CancelRequested = $true
+        $script:ActiveRunner.CancelTree()
+    }
+})
 $controls.FindOodleButton.Add_Click({
     Sync-UiToSettings
     $found = Find-OodleRuntime
@@ -5589,6 +5784,12 @@ $window.Add_Closing({
 })
 
 Invoke-StartupGamePathDetection
+if (-not $automatedMode) {
+    $blitzEnvironment = Get-BlitzEnvironment
+    if ([string]::IsNullOrWhiteSpace([string] $script:Settings.BlitzAdbPath)) {
+        $script:Settings.BlitzAdbPath = $blitzEnvironment.AdbPath
+    }
+}
 Sync-SettingsToUi
 Update-QueueUi
 $initialCatalog = Get-CatalogPath 'legends'

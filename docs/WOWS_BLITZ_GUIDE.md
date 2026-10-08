@@ -4,11 +4,35 @@ This guide explains how to prepare **World of Warships Blitz data that you
 legitimately installed and downloaded in your own Android environment** for use
 with WoWS Toolbox 5.0.61 or later.
 
-WoWS Toolbox does not connect to or modify an emulator. It reads only a folder
-that you copied to the PC. APKs, OBBs, AssetBundles, exported models, and
+The **Import Blitz data** button in Settings connects through ADB and copies
+the required game assets to a new PC folder. Extraction reads the prepared
+PC folder. APKs, OBBs, AssetBundles, exported models, and
 textures are game assets and must not be redistributed.
 
 ## 1. Requirements and scope
+
+### Import with the button
+
+1. Update Blitz and finish resource downloads in the emulator, then close the game.
+2. The existing dedicated Blitz environment is detected automatically. Use **Start
+   Blitz emulator** under **Settings > Game installation folder** to open it.
+   ADB is detected from PATH and Android SDK locations. Only use **Advanced Blitz
+   connection settings** to select `adb.exe` if automatic detection fails.
+3. Leave the device field empty with one connected device. With multiple devices,
+   enter the target serial. An ADB address such as `127.0.0.1:PORT` is also supported.
+4. Click **Import Blitz data**. Snapshots are stored automatically in `ToolboxImports`
+   under the existing dedicated data folder, or in the app's user-state `BlitzImports`.
+5. Bundles, the main OBB and ship-name/tier `DesignData` are copied into a new dated
+   folder. On success, the data path is saved and the ship catalog refreshes automatically.
+   The importer first checks `/sdcard/Android/data/net.wargaming.wows.blitz/files/Assets/Resources/DesignData`,
+   then searches app-private `files` if it is absent.
+
+Requires root ADB or `su`, and Android `tar`, `find`, `stat`, and `pidof` commands.
+The importer refuses a running game and checks source filenames, sizes and modification
+times before and after copying. **Cancel** stops the transfer. Failed or cancelled
+snapshots remain marked `.partial` and never replace the active data path. Existing
+snapshots are preserved. Update the game and download missing ship resources in the
+game before importing. The manual commands below remain available as an alternative.
 
 You need:
 

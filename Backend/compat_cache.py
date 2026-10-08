@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Any
+from cache_retention import prune_old_build_caches
 
 from game_archive import (
     decode_game_params,
@@ -38,6 +39,8 @@ def prepare_game_params_cache(
                 and destination.stat().st_size == manifest.get("size")
             ):
                 progress("cache", 100, "GameParams 변환 캐시를 재사용해요")
+                if source == "pc":
+                    prune_old_build_caches(cache_root / source, build)
                 return {
                     "build": build,
                     "game_params": str(destination),
@@ -58,6 +61,8 @@ def prepare_game_params_cache(
         "param_count": len(params),
     }
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    if source == "pc":
+        prune_old_build_caches(cache_root / source, build)
     progress("cache", 100, f"GameParams {len(params):,}개 변환 완료")
     return {
         "build": build,
