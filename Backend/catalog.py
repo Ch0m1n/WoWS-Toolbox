@@ -13,6 +13,7 @@ sys.dont_write_bytecode = True
 
 from blitz_assets import blitz_catalog  # noqa: E402
 from mo_reader import MoCatalog, read_mo  # noqa: E402
+from ship_materials import annotate_ship_materials  # noqa: E402
 from game_archive import (  # noqa: E402
     decode_game_params,
     extract_entry,
@@ -359,7 +360,7 @@ def _pc_camouflages(
     return choices
 
 
-def pc_catalog(game_dir: Path, language: str, source: str) -> list[dict[str, Any]]:
+def pc_catalog(game_dir: Path, language: str, source: str, *, cache_root: Path | None = None, refresh_materials: bool = False) -> list[dict[str, Any]]:
     build, entries = read_archive_index(game_dir)
     entry = find_entry(entries, ("GameParams.data", "GameParams_py2.data"))
     raw = extract_entry(game_dir, entry)
@@ -480,6 +481,9 @@ def pc_catalog(game_dir: Path, language: str, source: str) -> list[dict[str, Any
             }
         )
 
+    if source == "korabli":
+        annotate_ship_materials(rows, game_dir, build, entries, cache_root=cache_root, refresh=refresh_materials)
+
     rows.sort(
         key=lambda row: (
             row["LocalizedName"].casefold(),
@@ -583,6 +587,8 @@ def main() -> int:
     parser.add_argument("--toolbox-root", type=Path, required=True)
     parser.add_argument("--language", default="ko")
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--cache-root", type=Path)
+    parser.add_argument("--refresh-materials", action="store_true")
     args = parser.parse_args()
 
     if args.source == "legends":
@@ -590,7 +596,7 @@ def main() -> int:
     elif args.source == "blitz":
         rows = blitz_catalog(args.game_dir, args.language)
     else:
-        rows = pc_catalog(args.game_dir, args.language, args.source)
+        rows = pc_catalog(args.game_dir, args.language, args.source, cache_root=args.cache_root, refresh_materials=args.refresh_materials)
 
     encoded = json.dumps(rows, ensure_ascii=False, indent=2)
     if args.output:

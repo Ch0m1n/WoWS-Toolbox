@@ -1,6 +1,8 @@
 ﻿$script:WoWSToolboxLanguage = 'en'
 
 $script:WoWSToolboxEnglishText = [ordered]@{
+    '2.0 구조' = '2.0 structure'
+    '함선 재질 데이터를 기준으로 2.0 구조를 구분해요.' = 'Identify 2.0 structure from ship material data.'
     '블리츠 데이터 가져오기' = 'Import Blitz data'
     '블리츠 연결 고급 설정' = 'Advanced Blitz connection settings'
     '블리츠 에뮬레이터 실행' = 'Start Blitz emulator'
@@ -126,7 +128,7 @@ $script:WoWSToolboxEnglishText = [ordered]@{
     '선체·주함포·부포·대공포·어뢰를 형식별 개별 오브젝트로 저장해요.' = 'Saves hull, main guns, secondary guns, AA guns, and torpedoes as separate objects for each format.'
     '여러 함선을 대기열에 담아 선체와 무장을 선택한 형식으로 내보내요.' = 'Queue multiple ships and export hulls and weapons in the selected format.'
     '파트별 OBJ와 계층·원점 보존 GLB를 함께 저장해요.' = 'Saves part-based OBJ and hierarchy/origin-preserving GLB files.'
-    'WoWS Toolbox 5.0.75 · 비공식 커뮤니티 도구' = 'WoWS Toolbox 5.0.75 · Unofficial community tool'
+    'WoWS Toolbox 5.0.76 · 비공식 커뮤니티 도구' = 'WoWS Toolbox 5.0.76 · Unofficial community tool'
     '설정을 저장했어요.' = 'Settings saved.'
     '인터페이스 언어' = 'Interface language'
     '언어 변경은 프로그램을 다시 열 때 적용돼요.' = 'Language changes apply the next time the program starts.'

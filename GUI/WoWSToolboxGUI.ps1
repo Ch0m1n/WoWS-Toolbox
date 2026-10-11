@@ -324,7 +324,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.75'
+$script:AppVersion = '5.0.76'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -887,7 +887,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.75"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.76"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1366,7 +1366,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.75 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.76 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -2546,7 +2546,7 @@ function Get-CatalogPath {
     $catalogLanguage = if ($script:WoWSToolboxLanguage -eq 'ko') { 'ko' } else { 'en' }
     # Legends v4 includes exact live modernEra PX rows and model-derived identity.
     # Language-specific caches keep ship and camouflage names aligned with the UI.
-    $catalogVersion = if ($Source -eq 'legends') { 4 } else { 1 }
+    $catalogVersion = if ($Source -eq 'legends') { 4 } elseif ($Source -eq 'korabli') { 2 } else { 1 }
     return Join-Path $script:CatalogRoot "$Source-v$catalogVersion-$catalogLanguage-$installToken.json"
 }
 
@@ -2752,8 +2752,21 @@ function Start-CatalogRefresh {
         '--game-dir', $gamePath,
         '--toolbox-root', $script:PackageRoot,
         '--language', [string] $script:WoWSToolboxLanguage,
-        '--output', $output
+        '--output', $output,
+        '--cache-root', (Join-Path $script:StateRoot 'Cache'),
+        '--refresh-materials'
     ) -Completion $catalogCompletion
+}
+
+function Get-ShipMaterialLabel {
+    param([string] $Source, [object] $Ship)
+    if ($Source -ne 'korabli') { return '' }
+    $status = Get-OptionalShipValue -Ship $Ship -Name 'ShipMaterialStatus'
+    switch ($status) {
+        'indexed' { return '2.0' }
+        'legacy' { return (Get-UiText '기존' 'Traditional') }
+        default { return (Get-UiText '미확인' 'Unverified') }
+    }
 }
 
 function Show-ShipPicker {
@@ -2764,6 +2777,20 @@ function Show-ShipPicker {
         return
     }
     $catalog = @($script:Catalogs[$source])
+    if ($source -eq 'korabli') {
+        $latestBuild = Get-ChildItem -LiteralPath (Join-Path (Get-GamePath $source) 'bin') -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match '^\d+$' -and (Test-Path -LiteralPath (Join-Path $_.FullName 'idx') -PathType Container) } |
+            Sort-Object { [long] $_.Name } -Descending | Select-Object -First 1
+        $staleMaterials = @($catalog | Where-Object {
+            (Get-OptionalShipValue -Ship $_ -Name 'ShipMaterialCatalogVersion') -ne '1' -or
+            ($null -ne $latestBuild -and [string] $_.Build -ne $latestBuild.Name)
+        }).Count -gt 0
+        if ($staleMaterials) {
+            Add-Log (Get-UiText '현재 빌드의 2.0 재질 구조를 확인하도록 함선 목록을 새로고쳐요.' 'Refreshing the ship catalog to check 2.0 material structure for this build.')
+            Start-CatalogRefresh -OpenPickerAfter
+            return
+        }
+    }
     $staleCamouflageCatalog = @($catalog | Where-Object {
         $versionProperty = $_.PSObject.Properties['CamouflageCatalogVersion']
         $versionValue = 0
@@ -2801,6 +2828,7 @@ function Show-ShipPicker {
         $queuedByKey[[string] $entry.Key] = $entry
     }
     foreach ($row in $catalog) {
+        $row | Add-Member -NotePropertyName ShipMaterialLabel -NotePropertyValue (Get-ShipMaterialLabel -Source $source -Ship $row) -Force
         $rowKey = Get-ShipQueueKey -Source $source -Ship $row
         if ($null -eq $row.PSObject.Properties['QueueSelected']) {
             $row | Add-Member -NotePropertyName QueueSelected -NotePropertyValue $false
@@ -2948,13 +2976,16 @@ function Show-ShipPicker {
                 <ColumnDefinition Width="150"/>
                 <ColumnDefinition Width="120"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <TextBox x:Name="SearchBox"
                      ToolTip="인게임 이름, 코드, 내부 변형 검색"/>
             <ComboBox Grid.Column="1" x:Name="NationCombo" Margin="8,0,0,0"/>
             <ComboBox Grid.Column="2" x:Name="ClassCombo" Margin="8,0,0,0"/>
             <ComboBox Grid.Column="3" x:Name="TierCombo" Margin="8,0,0,0"/>
-            <Button Grid.Column="4" x:Name="ResetButton" Content="필터 초기화"
+            <ComboBox Grid.Column="4" x:Name="MaterialCombo" Width="140" Margin="8,0,0,0"
+                      ToolTip="함선 재질 데이터를 기준으로 2.0 구조를 구분해요."/>
+            <Button Grid.Column="5" x:Name="ResetButton" Content="필터 초기화"
                     Margin="8,0,0,0"/>
         </Grid>
         <Grid Grid.Row="2">
@@ -2994,6 +3025,8 @@ function Show-ShipPicker {
                                         Binding="{Binding Tier}" Width="52"/>
                     <DataGridTextColumn Header="코드" IsReadOnly="True"
                                         Binding="{Binding ShipCode}" Width="92"/>
+                    <DataGridTextColumn x:Name="MaterialColumn" Header="2.0 구조" IsReadOnly="True"
+                                        Binding="{Binding ShipMaterialLabel}" Width="86"/>
                 </DataGrid.Columns>
             </DataGrid>
             <Border Grid.Column="1" Background="#101E33" BorderBrush="#263B59"
@@ -3006,6 +3039,8 @@ function Show-ShipPicker {
                                FontSize="19" FontWeight="SemiBold"
                                TextWrapping="Wrap" Margin="0,10,0,0"/>
                     <TextBlock x:Name="DetailMeta" Foreground="#91A4BD"
+                               TextWrapping="Wrap" Margin="0,8,0,0"/>
+                    <TextBlock x:Name="DetailMaterial" Foreground="#7DD3FC"
                                TextWrapping="Wrap" Margin="0,8,0,0"/>
                     <Border Background="#0A1525" BorderBrush="#223653"
                             BorderThickness="1" CornerRadius="8" Padding="12"
@@ -3072,6 +3107,9 @@ function Show-ShipPicker {
     $nation = $dialog.FindName('NationCombo')
     $class = $dialog.FindName('ClassCombo')
     $tier = $dialog.FindName('TierCombo')
+    $material = $dialog.FindName('MaterialCombo')
+    $detailMaterial = $dialog.FindName('DetailMaterial')
+    $materialColumn = $dialog.FindName('MaterialColumn')
     $grid = $dialog.FindName('ShipGrid')
     $count = $dialog.FindName('CountLabel')
     $detailName = $dialog.FindName('DetailName')
@@ -3106,6 +3144,15 @@ function Show-ShipPicker {
     })
 
     $allLabel = Get-UiText '전체' 'All'
+    foreach ($label in @($allLabel, (Get-UiText '2.0 구조' '2.0 structure'), (Get-UiText '기존 구조' 'Traditional structure'), (Get-UiText '미확인' 'Unverified'))) {
+        [void] $material.Items.Add($label)
+    }
+    $material.SelectedIndex = 0
+    if ($source -ne 'korabli') {
+        $material.Visibility = [Windows.Visibility]::Collapsed
+        $materialColumn.Visibility = [Windows.Visibility]::Collapsed
+        $detailMaterial.Visibility = [Windows.Visibility]::Collapsed
+    }
     foreach ($combo in @($nation, $class, $tier)) {
         [void] $combo.Items.Add($allLabel)
         $combo.SelectedIndex = 0
@@ -3139,11 +3186,12 @@ function Show-ShipPicker {
         $tierValue = [string] $tier.SelectedItem
         $filtered = @($catalog | Where-Object {
             $row = $_
-            $searchable = "{0} {1} {2} {3}" -f
+            $searchable = "{0} {1} {2} {3} {4}" -f
                 [string] $row.LocalizedName,
                 [string] $row.ShipCode,
                 [string] $row.VariantLabel,
-                [string] $row.GameParamsKey
+                [string] $row.GameParamsKey,
+                [string] $row.ShipMaterialLabel
             $matchesQuery = [string]::IsNullOrWhiteSpace($query) -or
                 $searchable.IndexOf(
                     $query,
@@ -3157,8 +3205,13 @@ function Show-ShipPicker {
                 [string] $row.Tier -eq $tierValue
             $matchesQuick = (-not $favoriteOnly -or [bool] $row.Favorite) -and
                 (-not $recentOnly -or [bool] $row.Recent)
+            $materialStatus = Get-OptionalShipValue -Ship $row -Name 'ShipMaterialStatus'
+            $matchesMaterial = $source -ne 'korabli' -or $material.SelectedIndex -le 0 -or
+                ($material.SelectedIndex -eq 1 -and $materialStatus -eq 'indexed') -or
+                ($material.SelectedIndex -eq 2 -and $materialStatus -eq 'legacy') -or
+                ($material.SelectedIndex -eq 3 -and $materialStatus -notin @('indexed', 'legacy'))
             $matchesQuery -and $matchesNation -and
-                $matchesClass -and $matchesTier -and $matchesQuick
+                $matchesClass -and $matchesTier -and $matchesQuick -and $matchesMaterial
         })
         $grid.ItemsSource = $filtered
         $selectedCount = @($catalog | Where-Object { [bool] $_.QueueSelected }).Count
@@ -3194,6 +3247,7 @@ function Show-ShipPicker {
         if ($null -eq $row) {
             $detailName.Text = Get-UiText '왼쪽에서 함선을 골라 주세요.' 'Select a ship on the left.'
             $detailMeta.Text = ''
+            $detailMaterial.Text = ''
             $detailVariant.Text = '-'
             $detailKey.Text = '-'
             $script:PickerCamoUpdating = $true
@@ -3210,6 +3264,13 @@ function Show-ShipPicker {
         }
         $detailName.Text = [string] $row.LocalizedName
         $detailMeta.Text = "$($row.Nation) · $($row.ShipClass) · Tier $($row.Tier) · $($row.ShipCode)"
+        $detailMaterial.Text = if ($source -eq 'korabli') {
+            switch (Get-OptionalShipValue -Ship $row -Name 'ShipMaterialStatus') {
+                'indexed' { Get-UiText '2.0 재질 구조 · 선체 재질 데이터에서 확인했어요.' '2.0 material structure · verified from hull materials.' }
+                'legacy' { Get-UiText '기존 재질 구조 · 검사한 선체에 2.0 재질 연결이 없어요.' 'Traditional material structure · no 2.0 binding in the inspected hull.' }
+                default { Get-UiText '재질 구조 미확인 · 목록 새로고침으로 다시 검사할 수 있어요.' 'Material structure unverified · refresh the catalog to retry.' }
+            }
+        } else { '' }
         $detailVariant.Text = [string] $row.VariantLabel
         $detailKey.Text = [string] $row.GameParamsKey
         $options = @(Get-ShipCamouflageOptions -Source $source -Ship $row)
@@ -3243,6 +3304,7 @@ function Show-ShipPicker {
     $nation.Add_SelectionChanged($applyFilter)
     $class.Add_SelectionChanged($applyFilter)
     $tier.Add_SelectionChanged($applyFilter)
+    $material.Add_SelectionChanged($applyFilter)
     $grid.Add_SelectionChanged($updateDetail)
     $camoCombo.Add_SelectionChanged({
         if ($script:PickerCamoUpdating) { return }
@@ -3286,6 +3348,7 @@ function Show-ShipPicker {
         $nation.SelectedIndex = 0
         $class.SelectedIndex = 0
         $tier.SelectedIndex = 0
+        $material.SelectedIndex = 0
     })
     $favoriteOnlyButton.Add_Click({
         $favoriteOnly = -not $favoriteOnly
@@ -3827,7 +3890,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.75&lang=' +
+            'https://viewer.local/index.html?app=5.0.76&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -4081,7 +4144,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.75&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.76&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }

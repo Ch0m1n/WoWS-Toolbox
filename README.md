@@ -31,6 +31,7 @@ The selected game directory is treated as read-only. WoWS Toolbox writes caches 
 ## Main features
 
 - Search ships by in-game name, nation, class, tier, or internal code
+- Identify and filter Korabli 2.0 material structures from installed hull data
 - Queue multiple ships for unattended extraction
 - Export hull, superstructure, main battery, secondary battery, anti-aircraft weapons, and other resolved parts
 - Preserve editable OBJ object groups instead of merging the entire ship into one mesh
@@ -154,6 +155,7 @@ WoWS Toolbox는 내 PC에 설치된 World of Warships 계열 게임에서 원하
 ## 주요 기능
 
 - 인게임 이름, 국가, 함종, 티어 또는 내부 코드로 함선 검색
+- 설치된 선체 데이터로 코라블리 2.0 재질 구조 표시·필터링
 - 여러 함선을 대기열에 추가해 순차 추출
 - 선체, 상부구조물, 주함포, 부함포, 대공포와 확인된 기타 부품 추출
 - 함선 전체를 하나로 합치지 않고 편집 가능한 OBJ 오브젝트 그룹 유지

@@ -99,6 +99,9 @@ asynchronous requests for one cached image resolve to the decoded bitmap.
 - Package version: 0.23.0
 - License: MIT
 - Packaged executables:
+  - `Backend/ship_material_probe.exe` — read-only Korabli hull material inspector;
+    its source is included as `Backend/ship_material_probe.rs` and build details
+    are in `docs/SHIP_2_MATERIAL_DETECTION.md`
   - `Backend/wowsunpack.exe` — normal PC/Korabli ship-model exporter
   - `Backend/wowsunpack_armor.exe` — armor-sidecar exporter used only with the
     no-texture armor pass; it also emits exact per-triangle thickness metadata
@@ -120,8 +123,9 @@ The MIT license text is reproduced by the package's root `LICENSE`.
 Packaged SHA-256 values:
 
 ```text
-FCED4778C7492970A5E8AC981FC9402C91A159BCAD93E6F64CB49F6959A7B375  Backend/wowsunpack.exe
-4BF82B3CA9910AC36CD5144CF145FA1D149451D465391437668E4E78E0E0DB05  Backend/wowsunpack_armor.exe
+8FF1D19335BB2768E91C9F07E19E47CF879C696242EA475CA8EBCAFE4E1DE41F  Backend/ship_material_probe.exe
+5D465F21E8DDDD00605ABF1BF52B0C0AE5ABF0967144E22FE54C61F8CD82101F  Backend/wowsunpack.exe
+5D465F21E8DDDD00605ABF1BF52B0C0AE5ABF0967144E22FE54C61F8CD82101F  Backend/wowsunpack_armor.exe
 ```
 
 The Oodle runtime itself is proprietary external software. It is not copied,
