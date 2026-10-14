@@ -74,6 +74,7 @@ $script:WoWSToolboxEnglishText = [ordered]@{
     '중간 LOD' = 'Medium LOD'
     '즐겨찾기' = 'Favorite'
     '즐겨찾기만' = 'Favorites only'
+    '체크한 함선만 보기' = 'Show checked ships only'
     '직접 선택' = 'Browse'
     '진단 ZIP' = 'Diagnostic ZIP'
     '찾기' = 'Browse'

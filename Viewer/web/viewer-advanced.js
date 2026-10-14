@@ -585,6 +585,7 @@ if (core) {
     const main = core.getShipRoot();
     if (main) main.position.x = 0;
     compareRoot = null;
+    window.dispatchEvent(new CustomEvent('wows-viewer-comparison', {detail:{loaded:false}}));
     compareLayoutButton.disabled = true;
     clearCompareButton.disabled = true;
     compareLayoutButton.classList.remove('active');
@@ -778,6 +779,7 @@ if (core) {
     applyClipping();
     applyCompareLayout();
     core.setStatus(`비교 모델 준비 완료 · ${message.displayName || '두 번째 모델'}`);
+    window.dispatchEvent(new CustomEvent('wows-viewer-comparison', {detail:{loaded:true}}));
     core.hostMessage({ type: 'compareLoaded', name: message.displayName || '비교 모델' });
   }
 
@@ -858,6 +860,7 @@ if (core) {
   });
 
   window.WoWSViewerAdvanced = {
+    getCompareRoot: () => compareRoot,
     frameComparison,
     resetAdvancedState,
   };

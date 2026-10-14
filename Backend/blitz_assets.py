@@ -282,6 +282,7 @@ def _fallback_rows(
                 "ShipCode": ship,
                 "LocalizedName": display,
                 "LocalizedLanguage": "internal",
+                "CatalogMetadataStatus": "asset_only",
                 "InternalName": ship,
                 "VariantLabel": display,
                 "ShipResource": ship,
@@ -376,6 +377,11 @@ def blitz_catalog(game_dir: Path, language: str) -> list[dict[str, Any]]:
                     "UnsupportedReason": "" if supported else "현재 번들에 함선 body가 없어요",
                 }
             )
+    # Updated bundles can arrive before their ShipDatabase records. Retain these
+    # models under internal codes with unknown tier; never invent metadata.
+    registered = {row["ShipResource"] for row in rows}
+    orphaned = {ship: variants for ship, variants in variants_by_ship.items() if ship not in registered}
+    rows.extend(_fallback_rows(layout, orphaned, language))
     rows.sort(
         key=lambda item: (
             item["LocalizedName"].casefold(),

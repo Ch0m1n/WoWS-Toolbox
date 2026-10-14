@@ -55,6 +55,25 @@ class BlitzLayoutTests(unittest.TestCase):
                 "prefab/ship/body/ge_bb_mecklenburg_1945.ab",
             )
 
+    def test_updated_bundle_missing_database_record_remains_selectable(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);body=self.make_workspace(root)
+            for name in ('jp_ca_oni_1942.ab','jp_ca_tengu_1942.ab','jp_ca_tengu_1942_paint_01.ab'):
+                (body/name).write_bytes(b'body')
+            (root/'DesignData').write_bytes(b'metadata')
+            database={'SerializableShipBaseInfo': {'Keys':[1], 'Values':[{'Introduction':{},
+                'LevelInfoList':[{'Prefab':'JP_CA_Oni_1942','ShipID':1,'DescLevel':5}]}]}}
+            with patch('blitz_assets._named_monobehaviours',return_value={'ShipDatabase':SimpleNamespace(parse_as_dict=lambda:database)}):
+                rows=blitz_catalog(root,'ko')
+            self.assertEqual(len(rows),2)
+            tengu=next(row for row in rows if row['ShipResource']=='jp_ca_tengu_1942')
+            self.assertTrue(tengu['Supported'])
+            self.assertEqual(tengu['Tier'],0)
+            self.assertEqual(tengu['LocalizedLanguage'],'internal')
+            self.assertEqual(tengu['CatalogMetadataStatus'],'asset_only')
+            self.assertEqual(len(tengu['Camouflages']),2)
+            self.assertEqual(next(row for row in rows if row['ShipResource']=='jp_ca_oni_1942')['Tier'],5)
+
     def test_direct_bundle_root_is_accepted(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

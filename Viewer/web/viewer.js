@@ -1966,6 +1966,7 @@ async function loadShip(message) {
     meshStats.textContent = `파트 ${parts.length.toLocaleString()} · 삼각형 ${triangles.toLocaleString()}${armorText}`;
     setStatus(armorLoaded ? '모델·장갑 준비 완료' : '모델 준비 완료 · 장갑 데이터 없음');
     hideLoading();
+    window.dispatchEvent(new CustomEvent('wows-viewer-loaded', {detail:{identity:message.modelIdentity || null}}));
     hostMessage({
       type: 'loaded',
       parts: parts.length,

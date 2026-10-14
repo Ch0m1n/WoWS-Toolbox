@@ -7,6 +7,14 @@ fn normalize(path: &str) -> String {
     path.replace('\\', "/").trim_start_matches('/').to_ascii_lowercase()
 }
 
+fn material_stride(checksum: u32) -> Result<usize, String> {
+    match checksum {
+        // Verified against the installed 8868916 material database.
+        0x755D_585C => Ok(0x88),
+        _ => Err("unsupported material prototype".into()),
+    }
+}
+
 fn resolve_visual(
     db: &PrototypeDatabase<'_>, ids: &HashMap<u64, usize>, paths: &HashMap<String, u64>,
     id: u64, depth: usize,
@@ -66,6 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut errors = Vec::new();
         let mut material_ids = HashSet::new();
         let mut checked_visuals = 0;
+        let mut inspection_scope = "selected_visual";
         // Follow the selected model's actual reference. The exporter additionally
         // uses drawable sibling hull visuals for node-only roots in split builds.
         match paths.get(&path).ok_or("model not found").and_then(|id| resolve_visual(&db, &ids, &paths, *id, 0).map_err(|_| "model reference could not be read")) {
@@ -74,6 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     checked_visuals += 1;
                     material_ids.extend(root.render_sets.iter().map(|rs| rs.material_mfm_path_id).filter(|id| *id != 0));
                 } else if let Some((dir, _)) = path.rsplit_once('/') {
+                    inspection_scope = "directory_siblings";
                     for id in directories.get(dir).into_iter().flatten() {
                         match resolve_visual(&db, &ids, &paths, *id, 0) {
                             Ok(vp) if !vp.lods.is_empty() && !vp.render_sets.is_empty() => {
@@ -95,7 +105,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let loc = db.decode_r2p_value(db.lookup_r2p(*id).ok_or("missing material")?).map_err(|e| format!("{e:?}"))?;
                 let blob = &db.databases[loc.blob_index];
                 if blob.prototype_magic != 0x5069_C471 { return Err("unsupported material prototype".into()); }
-                let stride = if blob.prototype_checksum == 0x755D_585C { 0x88 } else { 0x78 };
+                let stride = material_stride(blob.prototype_checksum)?;
                 let data = db.get_prototype_data(loc, stride).map_err(|e| format!("{e:?}"))?;
                 let values = material_texture_ids(data).ok_or("material inputs could not be read")?;
                 let mut result = HashMap::new();
@@ -121,10 +131,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let status = if !indexed.is_empty() { "indexed" } else if errors.is_empty() && materials_checked > 0 { "legacy" } else { "unknown" };
         output.insert(original, serde_json::json!({
             "status": status, "materials_checked": materials_checked,
+            "inspection_scope": inspection_scope,
             "visuals_checked": checked_visuals, "indexed_materials": indexed,
             "errors": errors.into_iter().take(3).collect::<Vec<_>>(),
         }));
     }
     println!("{}", serde_json::to_string(&serde_json::json!({"schema": "ship-material-probe/v1", "models": output}))?);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn unsupported_material_checksum_is_not_assumed_legacy() {
+        assert_eq!(material_stride(0x755D_585C).unwrap(), 0x88);
+        assert!(material_stride(0x1234_5678).is_err());
+        assert!(material_stride(0).is_err());
+    }
 }

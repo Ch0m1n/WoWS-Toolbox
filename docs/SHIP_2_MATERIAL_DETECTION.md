@@ -36,16 +36,10 @@ entries. Scan failures leave extraction selection available and show Unverified.
 ## Rebuilding the helper
 
 The helper links the same modified MIT-licensed `landaire/wowsunpack` library as
-the exporter; it does not replace the two exporter executables. Source is shipped
-as `Backend/ship_material_probe.rs`. Put that file in `examples/ship_material_probe.rs`
-in the modified wowsunpack source checkout and run:
-
-```powershell
-cargo build --offline --release --example ship_material_probe
-```
-
-Copy `target/release/examples/ship_material_probe.exe` to `Backend/`.
-The library must include the current model/visual split-layout parsers.
+the exporter; it does not replace the two exporter executables. The complete modified library, locked dependencies and example are shipped in
+`Backend/probe-source`; see its README for the build commands. Unknown material
+checksums remain unsupported rather than being parsed with a guessed legacy
+stride. The helper also reports selected-visual versus directory-sibling scope.
 
 ## Verification
 

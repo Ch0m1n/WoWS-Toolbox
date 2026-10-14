@@ -25,6 +25,7 @@ from game_archive import (  # noqa: E402
     progress,
 )
 from runtime_i18n import translate_line, translate_text  # noqa: E402
+from output_provenance import finalize_output  # noqa: E402
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -1029,6 +1030,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
     report.update(
         {
             "source": args.source,
+            "build": build,
             "ship_index": args.ship_index,
             "display_name": args.display_name,
             "output_dir": str(output_dir),
@@ -1154,6 +1156,7 @@ def main() -> int:
         result = extract_blitz(args, output_dir)
     else:
         result = extract_pc_family(args, output_dir)
+    result = finalize_output(args, result)
     print("[RESULT] " + json.dumps(result, ensure_ascii=False), flush=True)
     return 0
 

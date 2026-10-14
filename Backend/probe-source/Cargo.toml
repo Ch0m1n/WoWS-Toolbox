@@ -1,0 +1,99 @@
+[package]
+name = "wowsunpack"
+description = "Utility for interacting with World of Warships game assets"
+license = "MIT"
+version = "0.23.0"
+edition = "2024"
+exclude = [".github/", "./format_templates/"]
+repository = "https://github.com/landaire/wowsunpack"
+documentation = "https://docs.rs/wowsunpack/"
+
+[lib]
+name = "wowsunpack"
+path = "src/lib.rs"
+
+[[bin]]
+name = "wowsunpack"
+path = "src/main.rs"
+required-features = ["bin"]
+
+[profile.profiling]
+inherits = "release"
+debug = true
+
+[dependencies]
+clap = { version = "4.3.0", features = ["derive"], optional = true }
+flate2 = { version = "1.1", features = ["zlib-rs"], default-features = false }
+rootcause = "0.12"
+memmap2 = "0.9"
+thiserror = "2.0"
+rayon = { version = "1.11", optional = true }
+# murmur3 = "0.5"
+serde = { version = "1.0", features = ["derive", "rc"], optional = true }
+serde_json = { version = "1.0", optional = true }
+csv = { version = "1.2", optional = true }
+glob = { version = "0.3", optional = true }
+pickled = { version = "2.0.0-alpha3", features = ["variantly"] }
+winnow = "0.7"
+meshopt-rs = "0.1.2"
+variantly = "0.4"
+roxmltree = "0.19"
+tracing = "0.1.40"
+itertools = "0.13.0"
+gettext = "0.4.0"
+convert_case = "0.8.0"
+regex = { version = "1.11.3", optional = true }
+indicatif = { version = "0.18.0", optional = true, features = ["rayon"] }
+thread_local = { version = "1.1.9", optional = true }
+rkyv = { version = "0.8.15", optional = true }
+bon = "3.9.0"
+gltf-json = { version = "1", optional = true, features = ["KHR_materials_variants", "KHR_texture_transform"] }
+gltf = { version = "1", optional = true, features = ["KHR_materials_variants"] }
+half = { version = "2", optional = true }
+image_dds = { version = "0.7", optional = true, default-features = false, features = ["ddsfile", "image"] }
+image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
+unidecode = { version = "0.3", optional = true }
+vfs = { version = "0.12", optional = true }
+async-trait = { version = "0.1", optional = true }
+async-std = { version = "1.13", optional = true }
+futures = { version = "0.3", optional = true }
+oval = { version = "2.0", optional = true }
+
+[dependencies.serde_cbor]
+version = "0.11"
+optional = true
+
+[features]
+arc = []
+serde = ["dep:serde"]
+rkyv = ["dep:rkyv"]
+json = ["dep:serde_json", "serde"]
+vfs = ["arc", "dep:vfs", "dep:oval"]
+async_vfs = ["vfs/async-vfs", "arc", "vfs", "dep:futures", "dep:async-std", "dep:async-trait"]
+models = [
+    "dep:gltf-json",
+    "dep:gltf",
+    "dep:half",
+    "dep:image_dds",
+    "dep:image",
+    "dep:unidecode",
+    "vfs",
+]
+bin = [
+    "dep:clap",
+    "dep:csv",
+    "dep:glob",
+    "dep:rayon",
+    "dep:regex",
+    "dep:indicatif",
+    "dep:thread_local",
+    "models",
+    "arc",
+    "json",
+    "vfs",
+]
+default = ["bin"]
+cbor = ["dep:serde_cbor", "serde"]
+
+[patch.crates-io]
+#pickled = { path = "../pickled" }

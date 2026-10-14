@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 from pathlib import Path
 import sys
 import tarfile
@@ -29,6 +30,8 @@ elif args[:1] in (['exec-out'], ['shell']):
         pass
     elif cmd.startswith('test -d'):
         pass
+    elif "stat -c '%s'" in cmd:
+        print('13')
     elif " -exec stat " in cmd:
         print('bundle/file|13|1000')
     elif cmd.startswith('find /sdcard/'):
@@ -70,8 +73,14 @@ class BlitzImportTests(unittest.TestCase):
             old = root / "imports" / "existing"
             old.mkdir(parents=True)
             (old / "keep.txt").write_text("keep")
-            with contextlib.redirect_stdout(io.StringIO()):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
                 result = import_data(FakeAdb(str(script)), old.parent)
+            events = [json.loads(line[len('[PROGRESS] '):]) for line in output.getvalue().splitlines() if line.startswith('[PROGRESS] ')]
+            bundles = [event for event in events if event.get('phase') == 'bundles']
+            self.assertEqual([(event['copied_files'], event['total_files']) for event in bundles], [(0,1),(1,1)])
+            self.assertEqual([event['percent'] for event in bundles], [15,70])
+            self.assertEqual(result['bundle_file_count'], 1)
             target = Path(result["path"])
             self.assertTrue(target.is_dir())
             self.assertFalse(target.name.endswith(".partial"))
@@ -148,7 +157,7 @@ class BlitzImportTests(unittest.TestCase):
     def test_failed_copy_never_publishes(self):
         with tempfile.TemporaryDirectory() as temp:
             adb = Adb("adb")
-            responses = ["", f"/sdcard/Android/obb/{PACKAGE}/main.123.{PACKAGE}.obb", ""]
+            responses = ["", f"/sdcard/Android/obb/{PACKAGE}/main.123.{PACKAGE}.obb", "", "13"]
             with patch.object(adb, "select"), patch.object(adb, "root"), patch.object(adb, "stopped"), \
                     patch.object(adb, "fingerprint", return_value="stable"), \
                     patch.object(adb, "shell", side_effect=responses), \
@@ -177,6 +186,27 @@ class BlitzImportTests(unittest.TestCase):
                 with tarfile.open(fileobj=stream, mode="r|") as archive:
                     with self.assertRaises(RuntimeError):
                         safe_tar_copy(archive, Path(temp))
+
+    def test_count_rejects_missing_or_invalid_inventory(self):
+        for response in ('', '13\npermission denied', '-1'):
+            with patch.object(Adb, 'shell', return_value=response), self.assertRaises(RuntimeError):
+                Adb('adb').bundle_file_count()
+        with patch.object(Adb, 'shell', return_value='13\n0\n24'):
+            self.assertEqual(Adb('adb').bundle_file_count(), 3)
+
+    def test_file_count_change_does_not_report_bundle_completion(self):
+        for total in (1,3):
+            with tempfile.TemporaryDirectory() as temp:
+                stream=io.BytesIO()
+                with tarfile.open(fileobj=stream, mode='w') as archive:
+                    for name in ('one.ab','two.ab'):
+                        archive.addfile(tarfile.TarInfo(name))
+                stream.seek(0);output=io.StringIO()
+                with tarfile.open(fileobj=stream,mode='r|') as archive, contextlib.redirect_stdout(output):
+                    with self.assertRaisesRegex(RuntimeError, 'count changed'):
+                        safe_tar_copy(archive,Path(temp),total_files=total)
+                events=[json.loads(line[len('[PROGRESS] '):]) for line in output.getvalue().splitlines()]
+                self.assertTrue(all(event['copied_files'] == 0 for event in events))
 
     def test_rejects_case_collisions(self):
         with tempfile.TemporaryDirectory() as temp:

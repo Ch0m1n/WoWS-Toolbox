@@ -31,9 +31,9 @@ def message(ko: str, en: str) -> str:
     return en if is_english() else ko
 
 
-def progress(percent: int, ko: str, en: str) -> None:
+def progress(percent: int, ko: str, en: str, **details) -> None:
     print("[PROGRESS] " + json.dumps({"stage": "Blitz", "percent": percent,
-          "message": message(ko, en)}, ensure_ascii=False), flush=True)
+          "message": message(ko, en), **details}, ensure_ascii=False), flush=True)
 
 
 def adb_path(value: str) -> str:
@@ -124,6 +124,14 @@ class Adb:
             raise RuntimeError(message("블리츠를 종료한 뒤 다시 눌러 주세요. 다운로드도 먼저 끝내야 해요.",
                                        "Close Blitz and finish resource downloads before importing."))
 
+    def bundle_file_count(self) -> int:
+        # One numeric size per regular file, independent of filename newlines.
+        sizes = self.shell(f"find {shlex.quote(BUNDLE)} -type f -exec stat -c '%s' {{}} +").splitlines()
+        if not sizes or any(not re.fullmatch(r"[0-9]+", size) for size in sizes):
+            raise RuntimeError(message("번들 파일 수를 확인하지 못했어요. 다운로드 상태를 확인해 주세요.",
+                                       "Could not count bundle files. Check resource downloads."))
+        return len(sizes)
+
     def fingerprint(self, obb: str, design: str | None) -> str:
         assets = [BUNDLE, obb] + ([design] if design else [])
         command = "find " + " ".join(shlex.quote(path) for path in assets)
@@ -134,12 +142,26 @@ class Adb:
         return hashlib.sha256("\n".join(sorted(inventory.splitlines())).encode("utf-8")).hexdigest()
 
 
-def safe_tar_copy(archive: tarfile.TarFile, destination: Path, report_progress: bool = True) -> int:
+def safe_tar_copy(archive: tarfile.TarFile, destination: Path, report_progress: bool = True,
+                  total_files: int | None = None) -> int:
     """Accept only ordinary files/directories contained in a fresh destination."""
     seen: set[str] = set()
     count = 0
     last = time.monotonic()
     root = destination.resolve()
+    def report():
+        if total_files is None:
+            progress(35, f"번들 파일 {count:,}개를 복사했어요", f"Copied {count:,} bundle files")
+        else:
+            percent = round(100 * count / total_files)
+            progress(15 + round(55 * count / total_files),
+                     f"번들 파일 {count:,} / {total_files:,}개 복사 완료 ({percent}%)",
+                     f"Bundle files: {count:,} / {total_files:,} copied ({percent}%)",
+                     phase="bundles", copied_files=count, total_files=total_files)
+    if total_files is not None and total_files <= 0:
+        raise ValueError("Bundle file total must be positive")
+    if report_progress:
+        report()
     for member in archive:
         name = PurePosixPath(member.name)
         if (name.is_absolute() or ".." in name.parts or "\\" in member.name
@@ -171,9 +193,15 @@ def safe_tar_copy(archive: tarfile.TarFile, destination: Path, report_progress: 
         if target.stat().st_size != member.size:
             raise RuntimeError("Incomplete asset copy")
         count += 1
+        if total_files is not None and count > total_files:
+            raise RuntimeError("Bundle file count changed during transfer; retry after downloads finish")
         if report_progress and time.monotonic() - last > 1:
-            progress(35, f"번들 파일 {count}개를 복사했어요", f"Copied {count} bundle files")
+            report()
             last = time.monotonic()
+    if total_files is not None and count != total_files:
+        raise RuntimeError("Bundle file count changed during transfer; retry after downloads finish")
+    if report_progress:
+        report()
     return count
 
 
@@ -188,7 +216,7 @@ class TailReader:
         return data
 
 
-def copy_remote(adb: Adb, folder: str, entry: str, destination: Path) -> None:
+def copy_remote(adb: Adb, folder: str, entry: str, destination: Path, *, total_files: int | None = None) -> None:
     command = f"tar -C {shlex.quote(folder)} -cf - {shlex.quote(entry)}"
     token = "BLITZ_TAR_EXIT_" + uuid.uuid4().hex
     # exec-out does not reliably carry remote exit status. Append a private
@@ -203,7 +231,7 @@ def copy_remote(adb: Adb, folder: str, entry: str, destination: Path) -> None:
         stream = TailReader(process.stdout)
         try:
             with tarfile.open(fileobj=stream, mode="r|") as archive:
-                safe_tar_copy(archive, destination, report_progress=entry == ".")
+                safe_tar_copy(archive, destination, report_progress=entry == ".", total_files=total_files)
             # tar padding can remain after end-of-archive; drain to avoid a blocked writer.
             while stream.read(1024 * 1024):
                 pass
@@ -237,6 +265,8 @@ def import_data(adb: Adb, parent: Path, requested: str = "") -> dict:
     design = next((p for p in designs if p.startswith((APP + "/files/", EXTERNAL + "/"))
                    and ".." not in PurePosixPath(p).parts), None)
     before = adb.fingerprint(obbs[0], design)
+    progress(10, "복사할 전체 번들 파일 수를 확인하는 중", "Counting all bundle files to copy")
+    total_files = adb.bundle_file_count()
     parent.mkdir(parents=True, exist_ok=True)
     token = datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
     partial = parent / ("Blitz-" + token + ".partial")
@@ -246,7 +276,7 @@ def import_data(adb: Adb, parent: Path, requested: str = "") -> dict:
     progress(15, "블리츠 번들을 새 폴더로 복사하는 중", "Copying Blitz bundles into a new folder")
     bundle = partial / "full_bundle"
     bundle.mkdir()
-    copy_remote(adb, BUNDLE, ".", bundle)
+    copy_remote(adb, BUNDLE, ".", bundle, total_files=total_files)
     progress(70, "기본 OBB를 복사하는 중", "Copying the main OBB")
     downloads = partial / "downloads"
     downloads.mkdir()
@@ -265,6 +295,7 @@ def import_data(adb: Adb, parent: Path, requested: str = "") -> dict:
         raise RuntimeError(message("복사한 함선 데이터가 비어 있어요. 게임 리소스를 먼저 내려받아 주세요.",
                                    "Copied ship data is empty. Download game resources first."))
     report = {"schema": "wows-toolbox-blitz-import/v1", "body_count": len(bodies),
+              "bundle_file_count": total_files,
               "obb": obb.name, "design_data": bool(design), "path": str(final.resolve())}
     (partial / "blitz-import.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     partial.rename(final)

@@ -5,6 +5,7 @@ param(
     [switch] $SelfTest,
     [switch] $SmokeTest,
     [switch] $QueueSelfTest,
+    [string] $PickerTestCatalog = '',
     [ValidateSet('', 'legends', 'pc', 'korabli', 'blitz')]
     [string] $CatalogTestSource = '',
     [string] $ViewerTestModel = ''
@@ -52,6 +53,7 @@ if ([Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
     if ($SelfTest) { $relaunchArguments += '-SelfTest' }
     if ($SmokeTest) { $relaunchArguments += '-SmokeTest' }
     if ($QueueSelfTest) { $relaunchArguments += '-QueueSelfTest' }
+    if ($PickerTestCatalog) { $relaunchArguments += @('-PickerTestCatalog', $PickerTestCatalog) }
     if (-not [string]::IsNullOrWhiteSpace($CatalogTestSource)) {
         $relaunchArguments += @('-CatalogTestSource', $CatalogTestSource)
     }
@@ -307,7 +309,7 @@ namespace WoWSToolboxV5
 }
 
 $automatedMode =
-    $SelfTest -or $SmokeTest -or $QueueSelfTest -or
+    $SelfTest -or $SmokeTest -or $QueueSelfTest -or $PickerTestCatalog -or
     -not [string]::IsNullOrWhiteSpace($CatalogTestSource) -or
     -not [string]::IsNullOrWhiteSpace($ViewerTestModel)
 $script:InstanceMutex = $null
@@ -324,13 +326,15 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.76'
+$script:AppVersion = '5.0.78'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
     throw "Localization module is missing: $localizationScript"
 }
 . $localizationScript
+. (Join-Path $PSScriptRoot 'Workbench.ps1')
+. (Join-Path $PSScriptRoot 'PickerTools.ps1')
 $script:InstallerLanguage = Get-WoWSToolboxLanguageMarker -PackageRoot $script:PackageRoot
 $script:ViewerRoot = Join-Path $script:PackageRoot 'Viewer'
 $script:ViewerRuntimeRoot = Join-Path $script:ViewerRoot 'Runtime'
@@ -357,7 +361,7 @@ $script:PythonCommand = if (Test-Path -LiteralPath $script:BundledPythonCommand 
 else {
     (Get-Command python -ErrorAction Stop).Source
 }
-$script:StateRoot = if ($SelfTest -or $SmokeTest -or $QueueSelfTest -or $CatalogTestSource -or $ViewerTestModel) {
+$script:StateRoot = if ($SelfTest -or $SmokeTest -or $QueueSelfTest -or $PickerTestCatalog -or $CatalogTestSource -or $ViewerTestModel) {
     Join-Path ([IO.Path]::GetTempPath()) "WoWSToolbox-SelfTest-$PID"
 }
 else {
@@ -887,7 +891,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.76"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.78"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1035,6 +1039,7 @@ $xaml = @'
                                     <Button x:Name="QueueDownButton" Content="아래로"
                                             Style="{StaticResource QuietButton}" Margin="0,0,6,0"
                                             IsEnabled="False"/>
+                                    <Button x:Name="WorkbenchButton" Content="작업 도구" Style="{StaticResource QuietButton}" Margin="0,0,6,0"/>
                                     <Button x:Name="SaveQueueButton" Content="저장"
                                             Style="{StaticResource QuietButton}" Margin="0,0,6,0"/>
                                     <Button x:Name="LoadQueueButton" Content="불러오기"
@@ -1366,7 +1371,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.76 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.78 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -1425,7 +1430,7 @@ $controlNames = @(
     'CurrentGamePathText', 'BrowseCurrentGameButton',
     'SelectedShipName', 'SelectedShipMeta', 'QueueList',
     'RefreshCatalogButton', 'OpenPickerButton', 'RemoveQueueButton',
-    'QueueUpButton', 'QueueDownButton', 'SaveQueueButton', 'LoadQueueButton',
+    'QueueUpButton', 'QueueDownButton', 'SaveQueueButton', 'LoadQueueButton', 'WorkbenchButton',
     'ClearQueueButton', 'OutputPathLabel', 'OverwriteCheck',
     'BrowseOutputButton', 'ProgressStage', 'ProgressMessage',
     'MainProgress', 'InspectButton', 'PauseButton', 'CancelButton', 'ExtractButton',
@@ -1539,6 +1544,7 @@ $script:LastOutputDir = ''
 $script:CancelRequested = $false
 $script:CatalogRefreshSource = ''
 $script:CatalogRefreshOutput = ''
+$script:CatalogAutoRefreshAttempts = @{}
 $script:ViewerReady = $false
 $script:ViewerInitializing = $false
 $script:PendingViewerModel = ''
@@ -2546,12 +2552,20 @@ function Get-CatalogPath {
     $catalogLanguage = if ($script:WoWSToolboxLanguage -eq 'ko') { 'ko' } else { 'en' }
     # Legends v4 includes exact live modernEra PX rows and model-derived identity.
     # Language-specific caches keep ship and camouflage names aligned with the UI.
-    $catalogVersion = if ($Source -eq 'legends') { 4 } elseif ($Source -eq 'korabli') { 2 } else { 1 }
+    $catalogVersion = if ($Source -eq 'legends') { 5 } elseif ($Source -eq 'korabli') { 3 } elseif ($Source -eq 'pc') { 2 } else { 1 }
     return Join-Path $script:CatalogRoot "$Source-v$catalogVersion-$catalogLanguage-$installToken.json"
 }
 
 function Get-BlitzEnvironment {
     $roots = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    if ($env:WOWS_BLITZ_ROOT) { [void] $roots.Add($env:WOWS_BLITZ_ROOT) }
+    # The dedicated setup may be outside the installed Toolbox directory.
+    # Inspect only its known folder names on local drives, never a recursive scan.
+    foreach ($drive in [IO.DriveInfo]::GetDrives()) {
+        if ($drive.DriveType -notin @([IO.DriveType]::Fixed, [IO.DriveType]::Removable)) { continue }
+        [void] $roots.Add((Join-Path $drive.RootDirectory.FullName 'wows-blitz-extraction'))
+        [void] $roots.Add((Join-Path $drive.RootDirectory.FullName 'codex_making\wows-blitz-extraction'))
+    }
     foreach ($initial in @([string] $script:Settings.BlitzPath, $script:PackageRoot)) {
         if ([string]::IsNullOrWhiteSpace($initial)) { continue }
         $directory = [IO.DirectoryInfo]::new($initial)
@@ -2670,13 +2684,41 @@ function Start-BlitzImport {
     ) -Completion $completion
 }
 
+function ConvertFrom-ToolboxJsonArray {
+    param([AllowEmptyString()][string]$Json)
+    if ([string]::IsNullOrWhiteSpace($Json) -or -not $Json.TrimStart().StartsWith('[')) {
+        throw 'Toolbox list JSON must contain a top-level array.'
+    }
+    # 5.1 emits a JSON array as one pipeline object; iterate the assigned value
+    # explicitly so 5.1 and 7 produce the same flat sequence, including 0/1 rows.
+    $container = ConvertFrom-Json -InputObject ('{"items":' + $Json + '}') -ErrorAction Stop
+    $parsed = $container.items
+    foreach ($item in $parsed) {
+        if ($null -eq $item -or $item -is [array]) { throw 'Toolbox list JSON must contain non-null, flat entries.' }
+        $item
+    }
+}
+
+function Test-AllowCatalogAutoRefresh {
+    param([string]$Source,[string]$Reason)
+    $key = "$Source|$(Get-CatalogPath $Source)|$Reason"
+    if ($script:CatalogAutoRefreshAttempts.ContainsKey($key)) { return $false }
+    $script:CatalogAutoRefreshAttempts[$key] = $true
+    return $true
+}
+
 function Load-CatalogFile {
     param(
         [string] $Source,
         [string] $Path
     )
-    $rows = @(Get-Content -Raw -Encoding UTF8 -LiteralPath $Path |
-        ConvertFrom-Json -ErrorAction Stop)
+    $json = Get-Content -Raw -Encoding UTF8 -LiteralPath $Path
+    $rows = @(ConvertFrom-ToolboxJsonArray $json)
+    foreach ($row in $rows) {
+        if ($null -eq $row -or $row -is [array] -or $null -eq $row.PSObject.Properties['ShipCode']) {
+            throw 'Invalid catalog row; expected a flat ship list.'
+        }
+    }
     $discoveredCount = $rows.Count
     $script:CatalogDiscoveredCounts[$Source] = $discoveredCount
     $script:Catalogs[$Source] = @($rows | Where-Object {
@@ -2697,7 +2739,7 @@ function Load-CatalogFile {
 }
 
 function Start-CatalogRefresh {
-    param([switch] $OpenPickerAfter)
+    param([switch] $OpenPickerAfter, [string] $SelectedModelsPath = '')
     $source = Get-SourceKey
     $gamePath = Get-GamePath $source
     if (-not (Test-Path -LiteralPath $gamePath -PathType Container)) {
@@ -2746,7 +2788,7 @@ function Start-CatalogRefresh {
             $window.Dispatcher.BeginInvoke([action] { Show-ShipPicker }) | Out-Null
         }
     }
-    Start-ToolProcess -Operation "catalog:$source" -Arguments @(
+    $catalogArguments = @(
         '-B', $script:CatalogScript,
         '--source', $source,
         '--game-dir', $gamePath,
@@ -2755,7 +2797,9 @@ function Start-CatalogRefresh {
         '--output', $output,
         '--cache-root', (Join-Path $script:StateRoot 'Cache'),
         '--refresh-materials'
-    ) -Completion $catalogCompletion
+    )
+    if ($SelectedModelsPath) { $catalogArguments += @('--material-models', $SelectedModelsPath) }
+    Start-ToolProcess -Operation "catalog:$source" -Arguments $catalogArguments -Completion $catalogCompletion
 }
 
 function Get-ShipMaterialLabel {
@@ -2767,6 +2811,57 @@ function Get-ShipMaterialLabel {
         'legacy' { return (Get-UiText '기존' 'Traditional') }
         default { return (Get-UiText '미확인' 'Unverified') }
     }
+}
+
+function Get-ShipMaterialDetail {
+    param($Ship)
+    $status = Get-OptionalShipValue -Ship $Ship -Name 'ShipMaterialStatus'
+    $code = Get-OptionalShipValue -Ship $Ship -Name 'ShipMaterialDiagnostic'
+    $reason = switch ($code) {
+        'helper_missing' { Get-UiText '재질 검사 도구가 없거나 읽을 수 없어요.' 'Material helper is missing or unreadable.' }
+        'assets_failed' { Get-UiText '게임 재질 데이터를 복원하지 못했어요.' 'Game material data could not be decoded.' }
+        'probe_failed' { Get-UiText '재질 검사 도구가 실패하거나 시간이 초과됐어요.' 'Material inspection failed or timed out.' }
+        'response_invalid' { Get-UiText '검사 결과를 읽거나 저장하지 못했어요.' 'Inspection response could not be read or saved.' }
+        'source_unavailable' { Get-UiText '설치 또는 캐시 정보를 읽을 수 없어요.' 'Installation or cache identity is unavailable.' }
+        'partial_inspection' { Get-UiText '2.0 연결은 확인했지만 일부 재질은 검사하지 못했어요.' '2.0 bindings found; some materials could not be inspected.' }
+        'inspection_incomplete' { Get-UiText '선체 재질 검사가 완전하지 않아요.' 'Hull material inspection is incomplete.' }
+        'model_missing' { Get-UiText '선택한 선체 모델을 찾지 못했어요.' 'The selected hull model could not be found.' }
+        'layout_unsupported' { Get-UiText '현재 검사 도구가 지원하지 않는 재질 형식이에요.' 'This material layout is unsupported by the current helper.' }
+        default { '' }
+    }
+    $lines = @(
+        Get-ShipMaterialLabel -Source 'korabli' -Ship $Ship
+        "$(Get-UiText '빌드' 'Build'): $(Get-OptionalShipValue -Ship $Ship -Name 'Build')"
+        "$(Get-UiText '검사 재질 수' 'Materials inspected'): $(Get-OptionalShipValue -Ship $Ship -Name 'ShipMaterialCheckedCount')"
+        "$(Get-UiText '검사 모델 수' 'Visuals inspected'): $(Get-OptionalShipValue -Ship $Ship -Name 'ShipMaterialVisualCount')"
+    )
+    if ($reason) { $lines += $reason }
+    if ((Get-OptionalShipValue $Ship 'ShipMaterialInspectionScope') -eq 'directory_siblings') {
+        $lines += Get-UiText '같은 폴더의 선체 부품을 검사했어요. 다른 변형의 재질이 포함될 수 있어요.' 'Sibling hull parts were inspected; other variants may contribute materials.'
+    }
+    if ($status -eq 'unknown') { $lines += Get-UiText '목록 새로고침으로 다시 검사할 수 있어요.' 'Refresh the catalog to retry.' }
+    return $lines -join [Environment]::NewLine
+}
+
+function Get-ShipSelectionSummary {
+    param($Catalog, $Visible)
+    $total = @($Catalog | Where-Object { [bool] $_.QueueSelected }).Count
+    $shown = @($Visible | Where-Object { [bool] $_.QueueSelected }).Count
+    return Get-UiText "표시 $(@($Visible).Count) / 전체 $(@($Catalog).Count) · 체크 $total · 숨긴 체크 $($total - $shown)" "Showing $(@($Visible).Count) / $(@($Catalog).Count) · checked $total · hidden checked $($total - $shown)"
+}
+
+function Write-OutputValidationSummary {
+    param($Result)
+    if ($null -eq $Result -or $null -eq $Result.PSObject.Properties['output_validation']) { return }
+    $validation = $Result.output_validation
+    $label = if ([string] $validation.status -eq 'warning') {
+        Get-UiText '완료 · 경고 있음' 'Completed with warnings'
+    } else { Get-UiText '파일 검증 완료' 'File validation complete' }
+    Add-Log $label
+    foreach ($issue in @($validation.issues)) {
+        Add-Log "[$($issue.severity)] $($issue.code) $($issue.file)"
+    }
+    Add-Log (Get-UiText '출처와 검증 내역: extraction.manifest.json' 'Provenance and validation: extraction.manifest.json')
 }
 
 function Show-ShipPicker {
@@ -2781,11 +2876,18 @@ function Show-ShipPicker {
         $latestBuild = Get-ChildItem -LiteralPath (Join-Path (Get-GamePath $source) 'bin') -Directory -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -match '^\d+$' -and (Test-Path -LiteralPath (Join-Path $_.FullName 'idx') -PathType Container) } |
             Sort-Object { [long] $_.Name } -Descending | Select-Object -First 1
+        $indexStamp = if ($null -ne $latestBuild) { Get-MaterialIndexStamp -Game (Get-GamePath $source) -Build $latestBuild.Name } else { '' }
+        $installPath=[IO.Path]::GetFullPath((Get-GamePath $source)).Replace('\','/').TrimEnd('/').ToLowerInvariant()
+        $sha=[Security.Cryptography.SHA256]::Create();try{$installToken=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes($installPath)))).Replace('-','').ToLowerInvariant()}finally{$sha.Dispose()}
+        $probePath = Join-Path $script:BackendRoot 'ship_material_probe.exe'
+        $probeHash = if (Test-Path -LiteralPath $probePath -PathType Leaf) { (Get-FileHash -LiteralPath $probePath -Algorithm SHA256).Hash.ToLowerInvariant() } else { '' }
         $staleMaterials = @($catalog | Where-Object {
-            (Get-OptionalShipValue -Ship $_ -Name 'ShipMaterialCatalogVersion') -ne '1' -or
-            ($null -ne $latestBuild -and [string] $_.Build -ne $latestBuild.Name)
+            (Get-OptionalShipValue -Ship $_ -Name 'ShipMaterialCatalogVersion') -ne '2' -or
+            ($null -ne $latestBuild -and [string] $_.Build -ne $latestBuild.Name) -or
+            ((Get-OptionalShipValue $_ 'ModelPath') -and ((Get-OptionalShipValue $_ 'ShipMaterialIndexStamp') -ne $indexStamp -or
+                (Get-OptionalShipValue $_ 'ShipMaterialProbeHash') -ne $probeHash -or (Get-OptionalShipValue $_ 'ShipMaterialInstallToken') -ne $installToken))
         }).Count -gt 0
-        if ($staleMaterials) {
+        if ($staleMaterials -and (Test-AllowCatalogAutoRefresh -Source $source -Reason 'materials')) {
             Add-Log (Get-UiText '현재 빌드의 2.0 재질 구조를 확인하도록 함선 목록을 새로고쳐요.' 'Refreshing the ship catalog to check 2.0 material structure for this build.')
             Start-CatalogRefresh -OpenPickerAfter
             return
@@ -2799,10 +2901,13 @@ function Show-ShipPicker {
             $versionValue -ge 2
         -not $versionIsCurrent
     }).Count -gt 0
-    if ($source -ne 'legends' -and $staleCamouflageCatalog) {
+    if ($source -ne 'legends' -and $staleCamouflageCatalog -and (Test-AllowCatalogAutoRefresh -Source $source -Reason 'camouflages')) {
         Add-Log (Get-UiText '영구 위장 목록을 포함하도록 함선 목록을 새로고칩니다.' 'Refreshing the ship catalog to include permanent camouflage choices.')
         Start-CatalogRefresh -OpenPickerAfter
         return
+    }
+    if ($source -ne 'legends' -and $staleCamouflageCatalog) {
+        Add-Log (Get-UiText '새로고침한 목록의 위장 정보가 여전히 없어요. 자동 반복을 중지하고 기본 외형으로 선택 창을 열어요.' 'Refreshed catalog still lacks camouflage metadata. Stopping automatic retries; the picker uses the default appearance.') -ErrorLine
     }
     $favoritesSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
     $recentSet = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
@@ -2812,7 +2917,7 @@ function Show-ShipPicker {
     )) {
         if (Test-Path -LiteralPath $pair[0] -PathType Leaf) {
             try {
-                foreach ($key in @(Get-Content -Raw -Encoding UTF8 -LiteralPath $pair[0] | ConvertFrom-Json)) {
+                foreach ($key in @(ConvertFrom-ToolboxJsonArray (Get-Content -Raw -Encoding UTF8 -LiteralPath $pair[0]))) {
                     [void] $pair[1].Add([string] $key)
                 }
             }
@@ -2850,6 +2955,9 @@ function Show-ShipPicker {
             }
         }
         $row.QueueSelected = $queuedKeys.Contains($rowKey)
+        if ($script:PickerPendingSelections.ContainsKey($source) -and $script:PickerPendingSelections[$source].ContainsKey($rowKey)) {
+            $row.QueueSelected = [bool] $script:PickerPendingSelections[$source][$rowKey]
+        }
         if ($queuedByKey.ContainsKey($rowKey)) {
             $queuedEntry = $queuedByKey[$rowKey]
             $row.SelectedCamouflageId = [string] $queuedEntry.CamouflageId
@@ -3080,9 +3188,13 @@ function Show-ShipPicker {
             </Border>
         </Grid>
         <Grid Grid.Row="3" Margin="0,14,0,0">
-            <TextBlock x:Name="CountLabel" Foreground="#8194AD"
-                       VerticalAlignment="Center"/>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <DockPanel Margin="0,0,0,8">
+                <Button x:Name="PickerToolsButton" Content="검색·재질 도구" DockPanel.Dock="Right" Margin="8,0,0,0"/>
+                <CheckBox x:Name="SelectedOnlyCheck" Content="체크한 함선만 보기" DockPanel.Dock="Right" Foreground="#D7E4F5"/>
+                <TextBlock x:Name="CountLabel" Foreground="#8194AD" VerticalAlignment="Center"/>
+            </DockPanel>
+            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
                                 <Button x:Name="FavoriteOnlyButton" Content="즐겨찾기만" Margin="0,0,8,0"/>
                 <Button x:Name="RecentOnlyButton" Content="최근 추출만" Margin="0,0,8,0"/>
                 <Button x:Name="SelectVisibleButton" Content="표시 전체 체크" Margin="0,0,8,0"/>
@@ -3112,6 +3224,9 @@ function Show-ShipPicker {
     $materialColumn = $dialog.FindName('MaterialColumn')
     $grid = $dialog.FindName('ShipGrid')
     $count = $dialog.FindName('CountLabel')
+    $selectedOnlyCheck = $dialog.FindName('SelectedOnlyCheck')
+    $pickerToolsButton = $dialog.FindName('PickerToolsButton')
+    $advancedFilters = @{}
     $detailName = $dialog.FindName('DetailName')
     $detailMeta = $dialog.FindName('DetailMeta')
     $detailVariant = $dialog.FindName('DetailVariant')
@@ -3124,8 +3239,7 @@ function Show-ShipPicker {
     $recentOnlyButton = $dialog.FindName('RecentOnlyButton')
     $selectVisibleButton = $dialog.FindName('SelectVisibleButton')
     $clearVisibleButton = $dialog.FindName('ClearVisibleButton')
-    $favoriteOnly = $false
-    $recentOnly = $false
+    $pickerQuickFilters = @{ FavoriteOnly = $false; RecentOnly = $false }
     $camoUpdating = $false
     $defaultCamo = Get-DefaultShipCamouflageOption -Source $source
     $sourceIndexes = @{
@@ -3174,6 +3288,7 @@ function Show-ShipPicker {
 
     $updateQueueCount = {
         $selectedCount = @($catalog | Where-Object { [bool] $_.QueueSelected }).Count
+        $count.Text = Get-ShipSelectionSummary -Catalog $catalog -Visible @($grid.ItemsSource)
         $choose.Content = if ($selectedCount -gt 0) {
             Get-UiText "${selectedCount}척 대기열에 적용" "Apply $selectedCount ships to queue"
         }
@@ -3203,21 +3318,24 @@ function Show-ShipPicker {
                 [string] $row.ShipClass -eq $classValue
             $matchesTier = $tierValue -eq $allLabel -or
                 [string] $row.Tier -eq $tierValue
-            $matchesQuick = (-not $favoriteOnly -or [bool] $row.Favorite) -and
-                (-not $recentOnly -or [bool] $row.Recent)
+            $matchesQuick = (-not $pickerQuickFilters.FavoriteOnly -or [bool] $row.Favorite) -and
+                (-not $pickerQuickFilters.RecentOnly -or [bool] $row.Recent)
             $materialStatus = Get-OptionalShipValue -Ship $row -Name 'ShipMaterialStatus'
             $matchesMaterial = $source -ne 'korabli' -or $material.SelectedIndex -le 0 -or
                 ($material.SelectedIndex -eq 1 -and $materialStatus -eq 'indexed') -or
                 ($material.SelectedIndex -eq 2 -and $materialStatus -eq 'legacy') -or
                 ($material.SelectedIndex -eq 3 -and $materialStatus -notin @('indexed', 'legacy'))
-            $matchesQuery -and $matchesNation -and
+            $matchesSelected = -not $selectedOnlyCheck.IsChecked -or [bool] $row.QueueSelected
+            $matchesAdvanced = Test-PickerAdvancedFilter -Ship $row -Filter $advancedFilters
+            $matchesAdvanced -and $matchesSelected -and $matchesQuery -and $matchesNation -and
                 $matchesClass -and $matchesTier -and $matchesQuick -and $matchesMaterial
         })
         $grid.ItemsSource = $filtered
         $selectedCount = @($catalog | Where-Object { [bool] $_.QueueSelected }).Count
-        $count.Text = Get-UiText "표시 $($filtered.Count) / 전체 $($catalog.Count) · 체크 $selectedCount" "Showing $($filtered.Count) / $($catalog.Count) · checked $selectedCount"
+        $count.Text = Get-ShipSelectionSummary -Catalog $catalog -Visible $filtered
         & $updateQueueCount
     }
+    $script:PickerPendingSelections.Remove($source)
     $showCamoDetail = {
         param($Item)
         if ($null -eq $Item -or [string] $Item.Id -eq 'default') {
@@ -3248,6 +3366,7 @@ function Show-ShipPicker {
             $detailName.Text = Get-UiText '왼쪽에서 함선을 골라 주세요.' 'Select a ship on the left.'
             $detailMeta.Text = ''
             $detailMaterial.Text = ''
+            $detailMaterial.ToolTip = ''
             $detailVariant.Text = '-'
             $detailKey.Text = '-'
             $script:PickerCamoUpdating = $true
@@ -3265,12 +3384,13 @@ function Show-ShipPicker {
         $detailName.Text = [string] $row.LocalizedName
         $detailMeta.Text = "$($row.Nation) · $($row.ShipClass) · Tier $($row.Tier) · $($row.ShipCode)"
         $detailMaterial.Text = if ($source -eq 'korabli') {
-            switch (Get-OptionalShipValue -Ship $row -Name 'ShipMaterialStatus') {
-                'indexed' { Get-UiText '2.0 재질 구조 · 선체 재질 데이터에서 확인했어요.' '2.0 material structure · verified from hull materials.' }
-                'legacy' { Get-UiText '기존 재질 구조 · 검사한 선체에 2.0 재질 연결이 없어요.' 'Traditional material structure · no 2.0 binding in the inspected hull.' }
-                default { Get-UiText '재질 구조 미확인 · 목록 새로고침으로 다시 검사할 수 있어요.' 'Material structure unverified · refresh the catalog to retry.' }
-            }
+            Get-ShipMaterialDetail -Ship $row
         } else { '' }
+        $detailMaterial.ToolTip = @(
+            Get-OptionalShipValue -Ship $row -Name 'ModelPath'
+            Get-OptionalShipValue -Ship $row -Name 'ShipMaterialEvidence'
+            Get-OptionalShipValue -Ship $row -Name 'ShipMaterialReason'
+        ) -join [Environment]::NewLine
         $detailVariant.Text = [string] $row.VariantLabel
         $detailKey.Text = [string] $row.GameParamsKey
         $options = @(Get-ShipCamouflageOptions -Source $source -Ship $row)
@@ -3300,11 +3420,23 @@ function Show-ShipPicker {
             $script:PickerCamoUpdating = $false
         }
     }
+    # Tool-menu callbacks run in a separate closure; bind the picker locals.
+    # Quick filters remain shared mutable state so later toggles are visible.
+    $pickerFunctions = [Collections.Generic.Dictionary[string,scriptblock]]::new()
+    foreach ($name in @('Get-OptionalShipValue','Get-ShipSelectionSummary','Test-PickerAdvancedFilter','Get-UiText','Convert-ToFormalKoreanText')) { $pickerFunctions[$name] = (Get-Command $name).ScriptBlock }
+    $pickerVariables = @(Get-Variable -Scope Local)
+    $updateQueueCount = New-PickerFilterCallback -Code $updateQueueCount -Variables $pickerVariables -Functions $pickerFunctions
+    $queueRefreshAction = [action]$updateQueueCount
+    $pickerVariables = @(Get-Variable -Scope Local)
+    $applyFilter = New-PickerFilterCallback -Code $applyFilter -Variables $pickerVariables -Functions $pickerFunctions
+    Install-PickerTools -Owner $dialog -Catalog $catalog -Source $source -Button $pickerToolsButton -Search $search -Nation $nation -Class $class -Tier $tier -Material $material -Advanced $advancedFilters -Grid $grid -Apply $applyFilter
     $search.Add_TextChanged($applyFilter)
     $nation.Add_SelectionChanged($applyFilter)
     $class.Add_SelectionChanged($applyFilter)
     $tier.Add_SelectionChanged($applyFilter)
     $material.Add_SelectionChanged($applyFilter)
+    $selectedOnlyCheck.Add_Checked($applyFilter)
+    $selectedOnlyCheck.Add_Unchecked($applyFilter)
     $grid.Add_SelectionChanged($updateDetail)
     $camoCombo.Add_SelectionChanged({
         if ($script:PickerCamoUpdating) { return }
@@ -3326,21 +3458,13 @@ function Show-ShipPicker {
     $grid.Add_PreviewMouseLeftButtonUp({
         $dialog.Dispatcher.BeginInvoke(
             [Windows.Threading.DispatcherPriority]::Background,
-            [action] {
-                & $updateQueueCount
-                $selectedCount = @($catalog | Where-Object { [bool] $_.QueueSelected }).Count
-                $count.Text = Get-UiText "표시 $(@($grid.ItemsSource).Count) / 전체 $($catalog.Count) · 체크 $selectedCount" "Showing $(@($grid.ItemsSource).Count) / $($catalog.Count) · checked $selectedCount"
-            }
+            $queueRefreshAction
         ) | Out-Null
     })
     $grid.Add_CurrentCellChanged({
         $dialog.Dispatcher.BeginInvoke(
             [Windows.Threading.DispatcherPriority]::Background,
-            [action] {
-                & $updateQueueCount
-                $selectedCount = @($catalog | Where-Object { [bool] $_.QueueSelected }).Count
-                $count.Text = Get-UiText "표시 $(@($grid.ItemsSource).Count) / 전체 $($catalog.Count) · 체크 $selectedCount" "Showing $(@($grid.ItemsSource).Count) / $($catalog.Count) · checked $selectedCount"
-            }
+            $queueRefreshAction
         ) | Out-Null
     })
     $dialog.FindName('ResetButton').Add_Click({
@@ -3349,28 +3473,31 @@ function Show-ShipPicker {
         $class.SelectedIndex = 0
         $tier.SelectedIndex = 0
         $material.SelectedIndex = 0
+        $selectedOnlyCheck.IsChecked = $false
+        $advancedFilters.Clear()
+        & $applyFilter
     })
     $favoriteOnlyButton.Add_Click({
-        $favoriteOnly = -not $favoriteOnly
-        $favoriteOnlyButton.Background = if ($favoriteOnly) { '#2563EB' } else { '#172943' }
+        $pickerQuickFilters.FavoriteOnly = -not $pickerQuickFilters.FavoriteOnly
+        $favoriteOnlyButton.Background = if ($pickerQuickFilters.FavoriteOnly) { '#2563EB' } else { '#172943' }
         & $applyFilter
     })
     $recentOnlyButton.Add_Click({
-        $recentOnly = -not $recentOnly
-        $recentOnlyButton.Background = if ($recentOnly) { '#2563EB' } else { '#172943' }
+        $pickerQuickFilters.RecentOnly = -not $pickerQuickFilters.RecentOnly
+        $recentOnlyButton.Background = if ($pickerQuickFilters.RecentOnly) { '#2563EB' } else { '#172943' }
         & $applyFilter
     })
     $selectVisibleButton.Add_Click({
         foreach ($row in @($grid.ItemsSource)) { $row.QueueSelected = $true }
         $grid.Items.Refresh()
         & $updateQueueCount
-        $count.Text = Get-UiText "표시 $(@($grid.ItemsSource).Count) / 전체 $($catalog.Count) · 체크 $(@($catalog | Where-Object QueueSelected).Count)" "Showing $(@($grid.ItemsSource).Count) / $($catalog.Count) · checked $(@($catalog | Where-Object QueueSelected).Count)"
+        $count.Text = Get-ShipSelectionSummary -Catalog $catalog -Visible @($grid.ItemsSource)
     })
     $clearVisibleButton.Add_Click({
         foreach ($row in @($grid.ItemsSource)) { $row.QueueSelected = $false }
         $grid.Items.Refresh()
         & $updateQueueCount
-        $count.Text = Get-UiText "표시 $(@($grid.ItemsSource).Count) / 전체 $($catalog.Count) · 체크 $(@($catalog | Where-Object QueueSelected).Count)" "Showing $(@($grid.ItemsSource).Count) / $($catalog.Count) · checked $(@($catalog | Where-Object QueueSelected).Count)"
+        $count.Text = Get-ShipSelectionSummary -Catalog $catalog -Visible @($grid.ItemsSource)
     })
     $applyPickerSelection = {
         [void] $grid.CommitEdit([Windows.Controls.DataGridEditingUnit]::Cell, $true)
@@ -3421,6 +3548,29 @@ function Show-ShipPicker {
     if ($firstChecked.Count -gt 0) {
         $grid.SelectedItem = $firstChecked[0]
         $grid.ScrollIntoView($firstChecked[0])
+    }
+    if ($PickerTestCatalog) {
+        $dialog.Opacity=0
+        $pickerTestContext=@{Dialog=$dialog;Result=$script:PickerTestResult;Count=$count}
+        $pickerTestClose=[action]{
+            $pickerTestContext.Result.count_label=$pickerTestContext.Count.Text
+            $pickerTestContext.Dialog.Close()
+        }.GetNewClosure()
+        $dialog.Add_ContentRendered({
+            try {
+                $script:PickerTestResult.opened=$true
+                $search.Text='jp_ca_oni_1942'; & $applyFilter
+                $script:PickerTestResult.matches=@($grid.ItemsSource).Count
+                $grid.SelectedItem=@($grid.ItemsSource)[0]; & $updateDetail
+                $script:PickerTestResult.detail=$detailName.Text
+                $row=@($grid.ItemsSource)[0];$row.QueueSelected=$true
+                $grid.CurrentCell=[Windows.Controls.DataGridCellInfo]::new($row,$grid.Columns[2])
+                $mouse=[Windows.Input.MouseButtonEventArgs]::new([Windows.Input.Mouse]::PrimaryDevice,0,[Windows.Input.MouseButton]::Left)
+                $mouse.RoutedEvent=[Windows.UIElement]::PreviewMouseLeftButtonUpEvent
+                $grid.RaiseEvent($mouse)
+            } catch { $script:PickerTestResult.error=$_.Exception.Message }
+            finally { [void]$dialog.Dispatcher.BeginInvoke([Windows.Threading.DispatcherPriority]::ApplicationIdle,$pickerTestClose) }
+        })
     }
     $pickerResult = $dialog.ShowDialog()
     if ($script:PickerSwitchSourceIndex -ge 0) {
@@ -3890,7 +4040,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.76&lang=' +
+            'https://viewer.local/index.html?app=5.0.78&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -3899,6 +4049,8 @@ function Send-ModelToViewer {
     $cacheSuffix = '?mapping=' + $script:ViewerMappingSerial
     $message = @{
         type = 'loadModel'
+        modelIdentity = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant()
+        provenance = Get-ViewerProvenance $resolved
         displayName = [IO.Path]::GetFileNameWithoutExtension($resolved)
         objName = $objName
         objUrl = 'https://model.local/' + [Uri]::EscapeDataString($objName) + $cacheSuffix
@@ -3952,6 +4104,7 @@ function Send-CompareModelToViewer {
     $cacheSuffix = '?mapping=' + $script:ViewerCompareMappingSerial
     $message = @{
         type = 'loadCompareModel'
+        provenance = Get-ViewerProvenance $resolved
         displayName = [IO.Path]::GetFileNameWithoutExtension($resolved)
         objUrl = 'https://compare.local/' + [Uri]::EscapeDataString($objName) + $cacheSuffix
         mtlUrl = ''
@@ -4035,6 +4188,15 @@ function Handle-ViewerWebMessage {
     try {
         $message = $MessageArgs.WebMessageAsJson | ConvertFrom-Json
         switch ([string] $message.type) {
+            'saveViewerSession' { Save-ViewerSession $message.session }
+            'loadViewerSession' {
+                $file=Select-MetadataFile
+                if ($file -and (Get-Item -LiteralPath $file).Length -le 1MB) {
+                    $session=Get-Content -Raw -Encoding UTF8 -LiteralPath $file | ConvertFrom-Json
+                    if ($session.schema -ne 'wows-toolbox-viewer-session/v1') { throw 'Unsupported viewer session' }
+                    Send-ViewerMessage @{type='restoreViewerSession';session=$session}
+                }
+            }
             'html-ready' {
                 $controls.ViewerStatus.Text = Convert-ToUiText '3D 모듈을 불러오는 중이에요...'
             }
@@ -4144,7 +4306,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.76&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.78&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }
@@ -4405,7 +4567,7 @@ function Set-BusyState {
     foreach ($name in @(
         'SourceCombo', 'BrowseCurrentGameButton', 'RefreshCatalogButton', 'OpenPickerButton',
         'RemoveQueueButton', 'ClearQueueButton', 'QueueUpButton', 'QueueDownButton',
-        'SaveQueueButton', 'LoadQueueButton', 'BrowseOutputButton', 'InspectButton',
+        'SaveQueueButton', 'LoadQueueButton', 'WorkbenchButton', 'BrowseOutputButton', 'InspectButton',
         'FormatCombo', 'TextureCombo', 'LodCombo', 'CamouflageCombo', 'OverwriteCheck',
         'NavViewer', 'NavSettings'
         'ImportBlitzButton', 'StartBlitzEmulatorButton', 'BrowseBlitzAdbButton', 'BlitzAdbPathBox', 'BlitzAdbDeviceBox',
@@ -4486,6 +4648,7 @@ function New-BatchManifest {
             cache_root = (Join-Path $script:StateRoot 'Cache')
             state_root = $script:StateRoot
             control_file = $script:BatchControlPath
+            output_policy = if ([bool] $controls.OverwriteCheck.IsChecked) { 'replace' } else { $script:WorkbenchOutputPolicy }
             overwrite = [bool] $controls.OverwriteCheck.IsChecked
             keep_glb = $false
             formats = Get-ComboTag $controls.FormatCombo
@@ -4533,7 +4696,8 @@ function Complete-PersistentBatch {
 }
 
 function Start-PersistentBatchExtraction {
-    [void] (New-BatchManifest)
+    param([string] $ApprovedPlan = '')
+    if (-not $ApprovedPlan) { [void] (New-BatchManifest) }
     Write-BatchControl
     $script:BatchItems = @($script:ExtractionQueue)
     $script:BatchIndex = 0
@@ -4561,23 +4725,13 @@ function Start-PersistentBatchExtraction {
 
 function Start-ShipExtraction {
     if (-not (Test-ExtractionReady)) { return }
-    $count = $script:ExtractionQueue.Count
-    $preview = @($script:ExtractionQueue | Select-Object -First 8 | ForEach-Object {
-        "• $($_.Ship.LocalizedName) — $(Get-SourceDisplay $_.Source)"
-    }) -join "`n"
-    if ($count -gt 8) { $preview += "`n• 외 $($count - 8)척" }
-    $camouflageProfile = Get-UiText '위장 함선별 설정' 'camouflage per ship'
-    $profiles = "$(Get-ComboTag $controls.FormatCombo) · 텍스처 $(Get-ComboTag $controls.TextureCombo) · LOD $(Get-ComboTag $controls.LodCombo) · $camouflageProfile"
-    $answer = [Windows.MessageBox]::Show(
-        $window,
-        (Get-UiText "${count}척을 단일 대기열 엔진으로 추출할까요?`n`n$preview`n`n$profiles`n네 게임 모두 Blender 없이 OBJ로 조립해요." "Extract $count ships with the queue engine?`n`n$preview`n`n$profiles`nAll four game sources are assembled without Blender."),
-        (Get-UiText '대기열 모델 추출' 'Extract queued models'),
-        [Windows.MessageBoxButton]::YesNo,
-        [Windows.MessageBoxImage]::Question
-    )
-    if ($answer -ne [Windows.MessageBoxResult]::Yes) { return }
-    [IO.Directory]::CreateDirectory($script:Settings.OutputPath) | Out-Null
-    Start-PersistentBatchExtraction
+    try {
+        $manifest = New-BatchManifest
+        $approved = Approve-ExtractionPlan $manifest
+        if ($approved) { Start-PersistentBatchExtraction -ApprovedPlan $approved }
+    } catch {
+        [void] [Windows.MessageBox]::Show($window, $_.Exception.Message, (Get-UiText '추출 계획 확인 실패' 'Extraction plan failed'))
+    }
 }
 
 function Handle-ProcessLine {
@@ -4622,7 +4776,10 @@ function Handle-ProcessLine {
         catch {}
     }
     elseif ($text.StartsWith('[RESULT] ')) {
-        try { $script:LastResult = $text.Substring(9) | ConvertFrom-Json } catch {}
+        try {
+            $script:LastResult = $text.Substring(9) | ConvertFrom-Json
+            Write-OutputValidationSummary -Result $script:LastResult
+        } catch {}
     }
     elseif ($text.StartsWith('[PIPELINE] ')) {
         try {
@@ -4680,6 +4837,7 @@ function Handle-ProcessLine {
                         Add-RecentShip $entry
                     }
                     $script:LastResult = $event.result
+                    Write-OutputValidationSummary -Result $event.result
                     $script:LastOutputDir = [string] $event.result.output_dir
                     $minutes = [math]::Floor([double] $event.eta_seconds / 60)
                     $seconds = [int] $event.eta_seconds % 60
@@ -4694,6 +4852,9 @@ function Handle-ProcessLine {
                         Message = [string] $event.message
                     })
                     $controls.ProgressMessage.Text = Convert-ToUiText "$($event.name) 실패 — $($event.message)"
+                    if ($null -ne $event.PSObject.Properties['guidance']) {
+                        Add-Log (Get-RetryActionText ([string] $event.guidance.action))
+                    }
                 }
                 'paused' {
                     $controls.ProgressStage.Text = '대기열 일시 정지'
@@ -4721,7 +4882,7 @@ function Add-RecentShip {
     [void] $keys.Add([string] $Entry.Key)
     if (Test-Path -LiteralPath $script:RecentShipsPath -PathType Leaf) {
         try {
-            foreach ($key in @(Get-Content -Raw -Encoding UTF8 -LiteralPath $script:RecentShipsPath | ConvertFrom-Json)) {
+            foreach ($key in @(ConvertFrom-ToolboxJsonArray (Get-Content -Raw -Encoding UTF8 -LiteralPath $script:RecentShipsPath))) {
                 if (-not $keys.Contains([string] $key)) { [void] $keys.Add([string] $key) }
             }
         }
@@ -4873,7 +5034,7 @@ function Load-QueueFile {
         if ([string]::IsNullOrWhiteSpace($raw) -or -not $raw.TrimStart().StartsWith('[')) {
             throw '대기열 JSON의 최상위 값은 배열이어야 해요.'
         }
-        $rows = @($raw | ConvertFrom-Json -ErrorAction Stop)
+        $rows = @(ConvertFrom-ToolboxJsonArray $raw)
         $loaded = ConvertTo-ValidatedQueueEntries -Rows $rows
         $script:ExtractionQueue.Clear()
         foreach ($entry in $loaded) { $script:ExtractionQueue.Add($entry) }
@@ -5331,64 +5492,24 @@ function Auto-DetectPaths {
 }
 
 function New-DiagnosticsZip {
-    $output = [string] $script:Settings.OutputPath
-    [IO.Directory]::CreateDirectory($output) | Out-Null
-    $buildRoot = Join-Path $script:StateRoot ("DiagnosticsBuild-{0}" -f $PID)
-    if (Test-Path -LiteralPath $buildRoot) { Remove-Item -LiteralPath $buildRoot -Recurse -Force }
-    [IO.Directory]::CreateDirectory($buildRoot) | Out-Null
-    $summary = [ordered] @{
-        schema = 'wows-toolbox-diagnostics/v1'
-        created = (Get-Date).ToString('o')
-        app_version = $script:AppVersion
-        os = [Environment]::OSVersion.VersionString
-        powershell = $PSVersionTable.PSVersion.ToString()
-        games = [ordered] @{
-            legends_path_valid = Test-Path -LiteralPath $script:Settings.LegendsPath -PathType Container
-            pc_path_valid = Test-Path -LiteralPath $script:Settings.PcPath -PathType Container
-            korabli_path_valid = Test-Path -LiteralPath $script:Settings.KorabliPath -PathType Container
-            blitz_path_valid = Test-Path -LiteralPath $script:Settings.BlitzPath -PathType Container
+    try {
+        $data=Invoke-MetadataTool @('diagnostics','--state-root',$script:StateRoot,'--toolbox-root',$script:PackageRoot)
+        $projection=Show-DiagnosticsProjection $data
+        if ($null -eq $projection) { return }
+        $save=[Microsoft.Win32.SaveFileDialog]::new();$save.Filter='Diagnostics ZIP (*.zip)|*.zip';$save.FileName='WoWSToolbox-Diagnostics.zip'
+        if (-not $save.ShowDialog($window)) { return }
+        $buildRoot=Join-Path $script:StateRoot ('DiagnosticsBuild-' + [guid]::NewGuid().ToString('N'))
+        [IO.Directory]::CreateDirectory($buildRoot)|Out-Null
+        try {
+            Write-JsonAtomic -Path (Join-Path $buildRoot 'summary.json') -Value $projection -Depth 12
+            Compress-Archive -Path (Join-Path $buildRoot 'summary.json') -DestinationPath $save.FileName -Force
+        } finally {
+            $resolved=[IO.Path]::GetFullPath($buildRoot)
+            $boundary=[IO.Path]::GetFullPath($script:StateRoot).TrimEnd('\') + '\'
+            if ($resolved.StartsWith($boundary,[StringComparison]::OrdinalIgnoreCase)) { Remove-Item -LiteralPath $resolved -Recurse -Force }
         }
-        native_obj_pipeline = $true
-        cache_bytes = Get-FolderBytes (Get-CacheRoot)
-        last_batch_report_present = Test-Path -LiteralPath (Join-Path $script:StateRoot 'last-batch-report.json')
-    }
-    [IO.File]::WriteAllText(
-        (Join-Path $buildRoot 'summary.json'),
-        ($summary | ConvertTo-Json -Depth 8),
-        [Text.UTF8Encoding]::new($false)
-    )
-    $lastReport = Join-Path $script:StateRoot 'last-batch-report.json'
-    if (Test-Path -LiteralPath $lastReport -PathType Leaf) {
-        $text = [IO.File]::ReadAllText($lastReport)
-        $text = $text.Replace([Environment]::GetFolderPath('UserProfile'), '%USERPROFILE%')
-        foreach ($pair in @(
-            @([string] $script:Settings.LegendsPath, '%LEGENDS%'),
-            @([string] $script:Settings.PcPath, '%WOWS_PC%'),
-            @([string] $script:Settings.KorabliPath, '%KORABLI%'),
-            @([string] $script:Settings.BlitzPath, '%WOWS_BLITZ%'),
-            @([string] $script:Settings.OutputPath, '%OUTPUT%')
-        )) {
-            if (-not [string]::IsNullOrWhiteSpace($pair[0])) { $text = $text.Replace($pair[0], $pair[1]) }
-        }
-        $text = [regex]::Replace(
-            $text,
-            '(?i)"(?:[a-z]:\\\\|\\\\\\\\)(?:\\\\.|[^"])*"',
-            '"%PATH%"'
-        )
-        [IO.File]::WriteAllText(
-            (Join-Path $buildRoot 'last-batch-report.sanitized.json'),
-            $text,
-            [Text.UTF8Encoding]::new($false)
-        )
-    }
-    $zip = Join-Path $output ("WoWSToolbox-Diagnostics-{0:yyyyMMdd-HHmmss}.zip" -f (Get-Date))
-    Compress-Archive -Path (Join-Path $buildRoot '*') -DestinationPath $zip -Force
-    Remove-Item -LiteralPath $buildRoot -Recurse -Force
-    Add-Log "개인 경로와 모델 자산을 제외한 진단 ZIP 생성: $zip"
-    [Windows.MessageBox]::Show(
-        $window, (Get-UiText "진단 ZIP을 만들었어요.`n$zip" "Diagnostic ZIP created.`n$zip"), (Get-UiText '진단 ZIP 완료' 'Diagnostic ZIP ready'),
-        [Windows.MessageBoxButton]::OK, [Windows.MessageBoxImage]::Information
-    ) | Out-Null
+        Add-Log (Get-UiText '선택한 메타데이터만 담은 진단 ZIP을 저장했어요.' 'Saved a diagnostic ZIP containing only selected metadata.')
+    } catch { Add-Log $_.Exception.Message }
 }
 
 $controls.QueueList.Add_SelectionChanged({
@@ -5477,6 +5598,7 @@ $controls.QueueList.Add_Drop({
 })
 $controls.QueueUpButton.Add_Click({ Move-QueueItem -Direction -1 })
 $controls.QueueDownButton.Add_Click({ Move-QueueItem -Direction 1 })
+$controls.WorkbenchButton.Add_Click({ Show-Workbench })
 $controls.SaveQueueButton.Add_Click({ Save-QueueFile })
 $controls.LoadQueueButton.Add_Click({ Load-QueueFile })
 $controls.PauseButton.Add_Click({
@@ -5804,6 +5926,7 @@ $controls.OpenViewerFolderButton.Add_Click({
 })
 $window.Dispatcher.Add_UnhandledException({
     param($sender, $eventArgs)
+    if($PickerTestCatalog){$script:PickerTestResult.error=$eventArgs.Exception.Message}
     Recover-GuiError -Context '화면 처리 중 오류가 발생했어요' `
         -Exception $eventArgs.Exception
     $eventArgs.Handled = $true
@@ -5866,7 +5989,24 @@ if (-not [string]::IsNullOrWhiteSpace($script:SettingsRecoveryNotice)) {
     Add-Log $script:SettingsRecoveryNotice -ErrorLine
 }
 Add-Log (Get-UiText "WoWS Toolbox $($script:AppVersion) 준비 완료. 설치본 선택·대기열 추출·모델/장갑 뷰어를 사용할 수 있어요." "WoWS Toolbox $($script:AppVersion) ready. Select an installation, extract queued ships, and use the model/armor viewer.")
+$runtimePath = [Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+Add-Log ("PowerShell runtime: $($PSVersionTable.PSVersion) ($($PSVersionTable.PSEdition)); $runtimePath")
 Switch-Page 'extract'
+if ($PickerTestCatalog) {
+    $script:Catalogs['blitz']=@(ConvertFrom-ToolboxJsonArray (Get-Content -Raw -Encoding UTF8 -LiteralPath $PickerTestCatalog))
+    $controls.SourceCombo.SelectedIndex=3
+    $script:PickerTestResult=@{opened=$false;matches=0;detail='';error=''}
+    $window.Opacity=0
+    $window.Add_ContentRendered({
+        try {Show-ShipPicker} catch {$script:PickerTestResult.error=$_.Exception.Message}
+        finally {$window.Close()}
+    })
+    [void]$window.ShowDialog()
+    $timer.Stop()
+    $script:PickerTestResult|ConvertTo-Json -Compress
+    if(-not $script:PickerTestResult.opened -or $script:PickerTestResult.error){throw 'Actual picker dialog regression failed'}
+    return
+}
 if ($QueueSelfTest) {
     $dummyShip = [pscustomobject] @{
         Id = 'queue-self-test'

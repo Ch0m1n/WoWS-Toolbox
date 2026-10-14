@@ -32,6 +32,8 @@ from extract_ship import (  # noqa: E402
     validate_output_location,
 )
 from runtime_i18n import translate_payload, translate_text  # noqa: E402
+from output_provenance import finalize_output  # noqa: E402
+from workflow import make_plan, Journal, retry_guidance, run_staged  # noqa: E402
 
 
 try:
@@ -308,6 +310,10 @@ def compatibility(args: SimpleNamespace, previous: dict | None = None) -> dict:
 
 def item_contract(args: SimpleNamespace, index: int) -> dict:
     errors: list[str] = []
+    if args.source not in {"pc", "korabli", "legends", "blitz"}:
+        errors.append("Unsupported game source")
+    if set(str(getattr(args, "formats", "obj")).split(',')) != {"obj"}:
+        errors.append("Unsupported output format")
     if args.source == "legends":
         if getattr(args, "camouflage", "default") != "default":
             errors.append("Legends 영구 위장 추출은 아직 지원하지 않아요")
@@ -366,11 +372,17 @@ def run_one(args: SimpleNamespace, output_dir: Path) -> dict:
     output_dir.parent.mkdir(parents=True, exist_ok=True)
     if args.source in {"legends", "blitz"}:
         args.prefetch_event.set()
-    if args.source == "legends":
-        return extract_legends(args, output_dir)
-    if args.source == "blitz":
-        return extract_blitz(args, output_dir)
-    return extract_pc_family(args, output_dir)
+    def extract(staged_args, staged_output):
+        if staged_args.source == "legends":
+            result = extract_legends(staged_args, staged_output)
+        elif staged_args.source == "blitz":
+            result = extract_blitz(staged_args, staged_output)
+        else:
+            result = extract_pc_family(staged_args, staged_output)
+        return finalize_output(staged_args, result)
+    if hasattr(args, "output_action"):
+        return run_staged(args, output_dir, extract)
+    return extract(args, output_dir)
 
 
 def update_history(history: dict, source: str, seconds: float, result: dict) -> None:
@@ -387,6 +399,8 @@ def update_history(history: dict, source: str, seconds: float, result: dict) -> 
 def main() -> int:
     parser = argparse.ArgumentParser(description="WoWS Toolbox persistent queue extractor")
     parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--plan-only", action="store_true")
+    parser.add_argument("--plan-output", type=Path)
     args_cli = parser.parse_args()
     manifest_path = args_cli.manifest.resolve()
     manifest = load_json(manifest_path, None)
@@ -401,6 +415,21 @@ def main() -> int:
 
     output_root = Path(common["output_root"]).resolve()
     state_root = Path(common.get("state_root") or manifest_path.parent).resolve()
+    previous_report = load_json(state_root / "last-batch-report.json", {})
+    if not isinstance(previous_report, dict):
+        previous_report = {}
+    plan, planned_args = make_plan(manifest, load_json(state_root / "batch-history.json", {}), previous_report.get("failures", []))
+    if args_cli.plan_only:
+        if args_cli.plan_output:
+            args_cli.plan_output.parent.mkdir(parents=True, exist_ok=True)
+            save_json(args_cli.plan_output, plan)
+        print(json.dumps(plan, ensure_ascii=False), flush=True)
+        return 0
+    approved = common.get("approved_plan")
+    if approved and approved != plan["fingerprint"]:
+        raise RuntimeError("Plan identity changed; recalculate plan")
+    if not plan["ok"]:
+        raise RuntimeError("Plan blocked: " + " / ".join(reason for row in plan["items"] for reason in row["blockers"]))
     state_root.mkdir(parents=True, exist_ok=True)
     control_file = Path(common["control_file"]).resolve() if common.get("control_file") else None
     history_path = state_root / "batch-history.json"
@@ -411,7 +440,7 @@ def main() -> int:
         history = {}
     if not isinstance(compatibility_history, dict):
         compatibility_history = {}
-    namespaces = [item_namespace(common, item) for item in items]
+    namespaces = planned_args
     for item in namespaces:
         item.game_dir, item.output_root = validate_output_location(
             item.game_dir, output_root
@@ -423,10 +452,7 @@ def main() -> int:
         )
     namespaces[0].promoted_event.set()
     reserved: set[str] = set()
-    outputs = [
-        validate_output_child(output_root, output_for(item, reserved))
-        for item in namespaces
-    ]
+    outputs = [item.planned_output for item in namespaces]
 
     item_contract_rows = [
         item_contract(item, index)
@@ -473,6 +499,7 @@ def main() -> int:
         "available_memory": memory,
         "disk_ok": disk.free >= int(estimated_bytes * 1.2),
         "memory_ok": memory is None or memory >= 2 * 1024**3,
+        "plan": plan,
     }
     emit("BATCH", preflight)
     if not preflight["disk_ok"]:
@@ -487,11 +514,16 @@ def main() -> int:
         )
 
     started = time.perf_counter()
+    journal = Journal(state_root, plan)
     successes: list[dict] = []
     failures: list[dict] = []
     emit("BATCH", {"event": "start", "count": len(items), "prefetch": True})
 
-    executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="wows-queue")
+    try:
+        executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="wows-queue")
+    except Exception:
+        journal.close()
+        raise
     current_index = 0
     launch_times: dict[int, float] = {0: time.perf_counter()}
     current_future: Future = executor.submit(run_one, namespaces[0], outputs[0])
@@ -499,6 +531,7 @@ def main() -> int:
     try:
         while current_index < len(items):
             current_args = namespaces[current_index]
+            journal.update(current_index, "running")
             current_output = outputs[current_index]
             item_started = launch_times.get(current_index, time.perf_counter())
             emit("BATCH", {
@@ -533,6 +566,7 @@ def main() -> int:
 
             try:
                 result = current_future.result()
+                journal.update(current_index, "completed", manifest=result.get("provenance_manifest"))
                 elapsed = time.perf_counter() - item_started
                 update_history(history, current_args.source, elapsed, result)
                 successes.append({"index": current_index, "result": result, "seconds": elapsed})
@@ -553,12 +587,20 @@ def main() -> int:
                     "index": current_index + 1,
                     "name": current_args.display_name,
                     "source": current_args.source,
+                    "ship_index": current_args.ship_index,
+                    "ship_key": current_args.ship_key,
+                    "model_path": current_args.selected_model_path,
+                    "diagnostics_output": getattr(exc, "staged_output", None),
                     "seconds": round(elapsed, 3),
                     "error_type": type(exc).__name__,
                     "message": translate_text(str(exc)),
+                    "guidance": retry_guidance(exc),
+                    "request_identity": current_args.request_identity,
+                    "requested": plan["items"][current_index]["requested"],
                     "traceback": traceback.format_exc(),
                 }
                 failures.append(failure)
+                journal.update(current_index, "failed", guidance=failure["guidance"])
                 emit("BATCH", {"event": "item_failed", **{k: v for k, v in failure.items() if k != "traceback"}})
 
             save_json(history_path, history)
@@ -580,6 +622,10 @@ def main() -> int:
                 )
     finally:
         executor.shutdown(wait=True, cancel_futures=True)
+        for index, row in enumerate(journal.data["items"]):
+            if row["state"] in {"queued", "running"}:
+                journal.update(index, "interrupted")
+        journal.close()
 
     report = {
         "schema": "wows-toolbox-batch/v1",

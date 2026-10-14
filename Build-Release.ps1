@@ -2,7 +2,7 @@
 
 [CmdletBinding()]
 param(
-    [string] $Version = '5.0.76',
+    [string] $Version = '5.0.78',
     [string] $OutputRoot = (Join-Path $PSScriptRoot '..\..\outputs'),
     [switch] $CreateZip
 )
@@ -67,6 +67,7 @@ foreach ($relativeRoot in @('Backend', 'BlenderExtractor', 'FullAssembly', 'GUI'
     $root = Join-Path $releaseRoot $relativeRoot
     Get-ChildItem -LiteralPath $root -File -Recurse -ErrorAction SilentlyContinue |
         Where-Object {
+            $_.Name -like '*.codexbak*' -or
             $_.Name -like 'test_*.py' -or
             $_.Name -like '*_test.py' -or
             $_.Extension -eq '.pyc'

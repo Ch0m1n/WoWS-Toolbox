@@ -15,6 +15,7 @@ function Test-ExcludedSourcePath {
     $normalized = $RelativePath.Replace('\', '/')
     return (
         $normalized -eq 'MANIFEST.sha256' -or
+        $normalized.StartsWith('.tmp/', [StringComparison]::OrdinalIgnoreCase) -or
         $normalized.StartsWith('.git/', [StringComparison]::OrdinalIgnoreCase) -or
         $normalized.StartsWith('.test-', [StringComparison]::OrdinalIgnoreCase) -or
         $normalized.StartsWith('test-results/', [StringComparison]::OrdinalIgnoreCase) -or

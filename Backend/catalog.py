@@ -56,6 +56,18 @@ CLASS_KO = {
 }
 
 
+NATION_EN = {
+    "USA": "United States", "USSR": "Soviet Union", "Russia": "Soviet Union",
+    "Soviet_Russia": "Soviet Union", "UK": "United Kingdom", "United_Kingdom": "United Kingdom",
+    "PanAsia": "Pan-Asia", "Pan_Asia": "Pan-Asia", "PanAmerica": "Pan-America", "Pan_America": "Pan-America",
+}
+CLASS_EN = {"AirCarrier": "Aircraft carrier", "AircraftCarrier": "Aircraft carrier"}
+
+def category_label(value: str, language: str, *, nation: bool = False) -> str:
+    labels = (NATION_KO if nation else CLASS_KO) if language == "ko" else (NATION_EN if nation else CLASS_EN)
+    return labels.get(value, value or ("기타" if language == "ko" else "Other"))
+
+
 # Increment when the per-ship camouflage payload changes. Cached catalog rows
 # carry this marker so the GUI can rebuild old files that already contained an
 # empty Camouflages array and would otherwise look current.
@@ -360,7 +372,7 @@ def _pc_camouflages(
     return choices
 
 
-def pc_catalog(game_dir: Path, language: str, source: str, *, cache_root: Path | None = None, refresh_materials: bool = False) -> list[dict[str, Any]]:
+def pc_catalog(game_dir: Path, language: str, source: str, *, cache_root: Path | None = None, refresh_materials: bool = False, refresh_models: set[str] | None = None) -> list[dict[str, Any]]:
     build, entries = read_archive_index(game_dir)
     entry = find_entry(entries, ("GameParams.data", "GameParams_py2.data"))
     raw = extract_entry(game_dir, entry)
@@ -449,9 +461,9 @@ def pc_catalog(game_dir: Path, language: str, source: str, *, cache_root: Path |
                 "InternalName": internal_name,
                 "VariantLabel": _fallback_name(str(param_key), index),
                 "ShipResource": resource or internal_name,
-                "Nation": NATION_KO.get(nation_raw, nation_raw or "기타"),
+                "Nation": category_label(nation_raw, language, nation=True),
                 "NationRaw": nation_raw,
-                "ShipClass": CLASS_KO.get(class_raw, class_raw or "기타"),
+                "ShipClass": category_label(class_raw, language),
                 "ShipClassRaw": class_raw,
                 "Tier": tier,
                 "GameParamsKey": str(param_key),
@@ -482,7 +494,7 @@ def pc_catalog(game_dir: Path, language: str, source: str, *, cache_root: Path |
         )
 
     if source == "korabli":
-        annotate_ship_materials(rows, game_dir, build, entries, cache_root=cache_root, refresh=refresh_materials)
+        annotate_ship_materials(rows, game_dir, build, entries, cache_root=cache_root, refresh=refresh_materials, refresh_models=refresh_models)
 
     rows.sort(
         key=lambda row: (
@@ -534,8 +546,8 @@ def legends_catalog(
         localized = str(legacy.get("localized_name") or "").strip() or variant
         nation_raw = str(legacy.get("nation") or "")
         class_raw = str(legacy.get("class") or "")
-        nation = NATION_KO.get(nation_raw, nation_raw or "기타")
-        ship_class = CLASS_KO.get(class_raw, class_raw or "기타")
+        nation = category_label(nation_raw, language, nation=True)
+        ship_class = category_label(class_raw, language)
         tier_value = legacy.get("tier")
         try:
             tier = int(tier_value) if tier_value is not None else 0
@@ -589,6 +601,7 @@ def main() -> int:
     parser.add_argument("--output", type=Path)
     parser.add_argument("--cache-root", type=Path)
     parser.add_argument("--refresh-materials", action="store_true")
+    parser.add_argument("--material-models", type=Path)
     args = parser.parse_args()
 
     if args.source == "legends":
@@ -596,7 +609,20 @@ def main() -> int:
     elif args.source == "blitz":
         rows = blitz_catalog(args.game_dir, args.language)
     else:
-        rows = pc_catalog(args.game_dir, args.language, args.source, cache_root=args.cache_root, refresh_materials=args.refresh_materials)
+        selected = None
+        if args.material_models:
+            selected = json.loads(args.material_models.read_text(encoding="utf-8"))
+            if not isinstance(selected, list) or not all(isinstance(path, str) for path in selected):
+                raise ValueError("Invalid selected material model list")
+        rows = pc_catalog(args.game_dir, args.language, args.source, cache_root=args.cache_root,
+                          refresh_materials=args.refresh_materials, refresh_models=set(selected) if selected is not None else None)
+
+    if args.cache_root:
+        from workbench import save_snapshot
+        try:
+            save_snapshot(rows, args.cache_root.parent, args.source)
+        except (OSError, ValueError) as error:
+            print(f"[WARN] Catalog snapshot unavailable: {error}", file=sys.stderr)
 
     encoded = json.dumps(rows, ensure_ascii=False, indent=2)
     if args.output:

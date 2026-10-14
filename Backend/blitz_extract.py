@@ -816,6 +816,9 @@ def extract_blitz(args: Any, output_dir: Path) -> dict[str, Any]:
         "dependency_bundle_count": len(dependency_paths),
         "cab_index": str(index_path),
         "lod": int(args.lod),
+        "quality_contract": {"model_lod": int(args.lod),
+                             "texture_max_size": int(args.texture_max_size),
+                             "camouflage": camouflage},
         "formats": ["obj"],
         "obj_file": str(assembled["obj_path"]),
         "coordinate_system": {

@@ -17,6 +17,26 @@ function Assert-ExitCode([string] $Label) {
     if ($LASTEXITCODE -ne 0) { throw "$Label failed with exit code $LASTEXITCODE." }
 }
 
+$pickerTestPath=(Join-Path $PSScriptRoot 'examples/Test-ShipMaterialPicker.ps1').Replace("'", "''")
+& $pwshCommand -STA -NoLogo -NoProfile -Command "& { & '$pickerTestPath' }"
+Assert-ExitCode 'Ship material picker test'
+$deferredTestPath=(Join-Path $PSScriptRoot 'examples/Test-PickerDeferredScope.ps1').Replace("'", "''")
+& $pwshCommand -STA -NoLogo -NoProfile -Command "& { & '$deferredTestPath' }"
+Assert-ExitCode 'Deferred picker callback test'
+& $pwshCommand -STA -NoLogo -NoProfile -File (Join-Path $PSScriptRoot 'examples/Test-Workbench.ps1')
+Assert-ExitCode 'Workbench test'
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+if ($nodeCommand) {
+    & $nodeCommand.Source (Join-Path $PSScriptRoot 'Viewer/web/test-viewer-workflows.cjs')
+    Assert-ExitCode 'Viewer workflow test'
+} else { Write-Host 'Viewer workflow Node harness skipped: Node is unavailable.' }
+
+foreach ($regression in @('Test-CatalogArrayCompatibility.ps1','Test-ExtractionStartPolicy.ps1','Test-Workbench.ps1')) {
+    $testPath=(Join-Path $PSScriptRoot "examples/$regression").Replace("'", "''")
+    & $pwshCommand -STA -NoLogo -NoProfile -Command "& { & '$testPath' }"
+    Assert-ExitCode $regression
+}
+
 Write-Host '1/9 Main GUI and queue self-tests'
 $mainSelf = & $pwshCommand -STA -NoLogo -NoProfile -File $mainGui -SelfTest |
     Select-Object -Last 1 | ConvertFrom-Json
@@ -147,7 +167,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.76',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.78',
     'ConvertTo-ValidatedQueueEntries', '[PIPELINE] ', 'child_heartbeat',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -617,8 +637,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.76.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.76') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.78.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.78') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -668,7 +688,10 @@ else {
 }
 
 Write-Host '7/9 Bundled-asset audit'
-$files = @(Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -File)
+$files = @(Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -File | Where-Object {
+    $relative = [IO.Path]::GetRelativePath($PSScriptRoot, $_.FullName).Replace('\','/')
+    $relative -notmatch '^(\.tmp|validation|output|test-results|\.git)/'
+})
 $forbiddenExtensions = @(
     '.geometry','.dds','.wowsreplay','.korablireplay','.blend','.blend1',
     '.glb','.obj','.mtl','.png','.jpg','.jpeg','.tga','.bmp','.pkg','.idx','.pyc'
@@ -697,7 +720,7 @@ $unexpectedDll = @($files | Where-Object Extension -eq '.dll' | Where-Object {
     $allowedDll -notcontains [IO.Path]::GetRelativePath($PSScriptRoot, $_.FullName)
 })
 $cacheDirs = @(Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -Directory |
-    Where-Object { $_.Name -in @('__pycache__','.selftest-state') })
+    Where-Object { $_.Name -in @('__pycache__','.selftest-state') -and [IO.Path]::GetRelativePath($PSScriptRoot,$_.FullName).Replace('\','/') -notmatch '^(\.tmp|validation|output|test-results|\.git)/' })
 if ($forbidden.Count -or $unexpectedDll.Count -or $cacheDirs.Count) {
     throw 'Asset/cleanup audit failed.'
 }
@@ -763,6 +786,7 @@ $expectedFiles = @(Get-ChildItem -LiteralPath $PSScriptRoot -Recurse -File -Forc
         if ($_.FullName -eq $manifest) { return $false }
         $relative = [IO.Path]::GetRelativePath($PSScriptRoot, $_.FullName).Replace('\','/')
         return (
+            (-not $relative.StartsWith('.tmp/', [StringComparison]::OrdinalIgnoreCase)) -and
             (-not $relative.StartsWith('.git/', [StringComparison]::OrdinalIgnoreCase)) -and
             (-not $relative.StartsWith('.test-', [StringComparison]::OrdinalIgnoreCase)) -and
             (-not $relative.StartsWith('test-results/', [StringComparison]::OrdinalIgnoreCase)) -and
@@ -781,9 +805,9 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.76 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.78 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.76 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.78 self-tests passed.'
 }
 

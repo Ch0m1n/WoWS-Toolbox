@@ -101,7 +101,8 @@ asynchronous requests for one cached image resolve to the decoded bitmap.
 - Packaged executables:
   - `Backend/ship_material_probe.exe` — read-only Korabli hull material inspector;
     its source is included as `Backend/ship_material_probe.rs` and build details
-    are in `docs/SHIP_2_MATERIAL_DETECTION.md`
+    are in `docs/SHIP_2_MATERIAL_DETECTION.md`. The complete modified library,
+    example and locked dependencies for this inspector are in `Backend/probe-source`
   - `Backend/wowsunpack.exe` — normal PC/Korabli ship-model exporter
   - `Backend/wowsunpack_armor.exe` — armor-sidecar exporter used only with the
     no-texture armor pass; it also emits exact per-triangle thickness metadata
@@ -123,7 +124,7 @@ The MIT license text is reproduced by the package's root `LICENSE`.
 Packaged SHA-256 values:
 
 ```text
-8FF1D19335BB2768E91C9F07E19E47CF879C696242EA475CA8EBCAFE4E1DE41F  Backend/ship_material_probe.exe
+3466A3FDC6C7EEEE696F365806D968BD1B2D5867E8537DD73A2C2F5795411A65  Backend/ship_material_probe.exe
 5D465F21E8DDDD00605ABF1BF52B0C0AE5ABF0967144E22FE54C61F8CD82101F  Backend/wowsunpack.exe
 5D465F21E8DDDD00605ABF1BF52B0C0AE5ABF0967144E22FE54C61F8CD82101F  Backend/wowsunpack_armor.exe
 ```

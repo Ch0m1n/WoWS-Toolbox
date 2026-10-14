@@ -63,3 +63,6 @@ Upgrade-*.ps1
 Run-SelfTests-v5.ps1
 README_KO-v5.md
 WoWS-Legends-Toolbox-GUI.cmd
+
+# Material inspector working backups
+Backend/probe-source/**/*.codexbak*

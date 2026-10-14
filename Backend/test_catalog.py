@@ -17,6 +17,21 @@ CATALOG = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CATALOG)
 
 
+class CategoryLanguageTests(unittest.TestCase):
+    def test_categories_follow_ui_language(self):
+        self.assertEqual(CATALOG.category_label("USA", "en", nation=True), "United States")
+        self.assertEqual(CATALOG.category_label("USA", "ko", nation=True), "미국")
+        self.assertEqual(CATALOG.category_label("Cruiser", "en"), "Cruiser")
+        self.assertEqual(CATALOG.category_label("Cruiser", "ko"), "순양함")
+
+    def test_english_legends_keeps_categories_english(self):
+        process = mock.Mock(stdout=json.dumps([{"ship_code":"TEST", "nation":"Germany", "class":"Battleship"}]))
+        with mock.patch.object(CATALOG.subprocess, "run", return_value=process):
+            row = CATALOG.legends_catalog(Path("toolbox"), Path("game"), "en")[0]
+        self.assertEqual(row["Nation"], "Germany")
+        self.assertEqual(row["ShipClass"], "Battleship")
+
+
 class FakeTranslations:
     def __init__(self, value: str):
         self.value = value
@@ -26,7 +41,7 @@ class FakeTranslations:
 
 
 class CatalogTranslationTests(unittest.TestCase):
-    def catalog_with_translation(self, value: str) -> list[dict]:
+    def catalog_with_translation(self, value: str, source: str = "pc") -> list[dict]:
         params = {
             "PTEST001_Test_Ship": {
                 "index": "PTEST001",
@@ -69,7 +84,7 @@ class CatalogTranslationTests(unittest.TestCase):
                 return_value=(FakeTranslations(value), "ko"),
             ),
         ):
-            return CATALOG.pc_catalog(Path("game"), "ko", "pc")
+            return CATALOG.pc_catalog(Path("game"), "ko", source)
 
     def test_whitespace_only_translation_uses_fallback(self) -> None:
         rows = self.catalog_with_translation(" \t\r\n ")
