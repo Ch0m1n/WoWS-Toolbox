@@ -11,9 +11,9 @@ using System.Windows.Forms;
 [assembly: AssemblyCompany("WoWS Toolbox contributors")]
 [assembly: AssemblyProduct("WoWS Toolbox")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 WoWS Toolbox contributors")]
-[assembly: AssemblyVersion("5.0.79.0")]
-[assembly: AssemblyFileVersion("5.0.79.0")]
-[assembly: AssemblyInformationalVersion("5.0.79")]
+[assembly: AssemblyVersion("5.0.80.0")]
+[assembly: AssemblyFileVersion("5.0.80.0")]
+[assembly: AssemblyInformationalVersion("5.0.80")]
 
 namespace WoWSToolboxLauncher
 {

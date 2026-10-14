@@ -108,3 +108,9 @@ button { color: inherit; }
 .inspector-foot p { margin: 0; font-family: "Malgun Gothic", sans-serif; font-size: 8px; text-align: center; }.inspector-foot b { display: block; color: #879bb3; font-weight: 500; }
 @media (max-width: 850px) { #app { grid-template-columns: minmax(0,1fr) 240px; }.tool { min-width: 38px; padding: 0 6px; }.brand-block { display: none; } }
 
+
+.zone-actions { display: flex; gap: 6px; }
+.armor-zone-hint { margin: -2px 0 8px; color: #8fa4bd; font-size: 10px; line-height: 1.5; }
+.zones .armor-swatch { display: grid; place-items: center; width: 11px; height: 11px; border: 1px solid #65a8ed; border-radius: 2px; box-shadow: none; color: #081525 !important; font-size: 10px; font-weight: bold; line-height: 1; }
+.zones .armor-filter:not(.active) .armor-swatch { background: transparent !important; border-color: #61758e; }
+.zones .armor-filter:focus-visible, .zone-actions button:focus-visible { outline: 2px solid #65a8ed; outline-offset: 2px; }

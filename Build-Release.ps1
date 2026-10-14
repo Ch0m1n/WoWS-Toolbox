@@ -2,7 +2,7 @@
 
 [CmdletBinding()]
 param(
-    [string] $Version = '5.0.79',
+    [string] $Version = '5.0.80',
     [string] $OutputRoot = (Join-Path $PSScriptRoot '..\..\outputs'),
     [switch] $CreateZip
 )

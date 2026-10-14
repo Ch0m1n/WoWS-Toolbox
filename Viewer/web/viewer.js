@@ -114,7 +114,7 @@ let armorRoot = null;
 let armorMeshes = [];
 let armorData = null;
 let activeArmorBucket = null;
-let activeArmorZone = null;
+const hiddenArmorZones = new Set();
 let displayMode = 'model';
 let parts = [];
 let selected = null;
@@ -1087,7 +1087,7 @@ function clearModel(invalidateLoads = true) {
   armorMeshes = [];
   armorData = null;
   activeArmorBucket = null;
-  activeArmorZone = null;
+  hiddenArmorZones.clear();
   displayMode = 'model';
   armorModeButton.disabled = true;
   thicknessFilters.replaceChildren();
@@ -1460,7 +1460,7 @@ function applyArmorFilters() {
   let visibleTriangles = 0;
   for (const mesh of armorMeshes) {
     const matchesBucket = activeArmorBucket === null || mesh.userData.armorBucket === activeArmorBucket;
-    const matchesZone = activeArmorZone === null || mesh.userData.armorZone === activeArmorZone;
+    const matchesZone = !hiddenArmorZones.has(mesh.userData.armorZone);
     mesh.visible = matchesBucket && matchesZone;
     if (mesh.visible) visibleTriangles += mesh.userData.triangleCount;
   }
@@ -1468,7 +1468,10 @@ function applyArmorFilters() {
     button.classList.toggle('active', Number(button.dataset.bucket) === activeArmorBucket);
   });
   zoneFilters.querySelectorAll('.armor-filter').forEach((button) => {
-    button.classList.toggle('active', button.dataset.zone === activeArmorZone);
+    const enabled = !hiddenArmorZones.has(button.dataset.zone);
+    button.classList.toggle('active', enabled);
+    button.setAttribute('aria-pressed', String(enabled));
+    button.querySelector('.armor-swatch').textContent = enabled ? '✓' : '';
   });
   if (armorData) {
     armorSummary.textContent = `표시 ${visibleTriangles.toLocaleString()} / 전체 ${armorData.triangle_count.toLocaleString()} 삼각형 · ${armorData.zones.length}개 구역`;
@@ -1629,7 +1632,8 @@ function renderArmorFilters() {
     button.dataset.zone = zone;
     appendArmorFilterContents(button, '#65a8ed', zone, zoneCounts.get(zone) || 0);
     button.addEventListener('click', () => {
-      activeArmorZone = activeArmorZone === zone ? null : zone;
+      if (hiddenArmorZones.has(zone)) hiddenArmorZones.delete(zone);
+      else hiddenArmorZones.add(zone);
       applyArmorFilters();
     });
     zoneFilters.append(button);
@@ -2014,7 +2018,14 @@ canvas.addEventListener('pointerup', (event) => {
 modelModeButton.addEventListener('click', () => setDisplayMode('model'));
 armorModeButton.addEventListener('click', () => setDisplayMode('armor'));
 document.querySelector('#allThickness').addEventListener('click', () => { activeArmorBucket = null; applyArmorFilters(); });
-document.querySelector('#allZones').addEventListener('click', () => { activeArmorZone = null; applyArmorFilters(); });
+document.querySelector('#allZones').addEventListener('click', () => {
+  hiddenArmorZones.clear();
+  applyArmorFilters();
+});
+document.querySelector('#noZones').addEventListener('click', () => {
+  for (const zone of armorData?.zones || []) hiddenArmorZones.add(zone);
+  applyArmorFilters();
+});
 armorOpacity.addEventListener('input', () => {
   const opacity = Number(armorOpacity.value) / 100;
   for (const mesh of armorMeshes) {

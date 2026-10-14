@@ -22,6 +22,8 @@ if (core) {
   const waterlinePanel = document.querySelector('#waterlinePanel');
   const waterlinePosition = document.querySelector('#waterlinePosition');
   const waterlineValue = document.querySelector('#waterlineValue');
+  const waterlineOpacity = document.querySelector('#waterlineOpacity');
+  const waterlineOpacityValue = document.querySelector('#waterlineOpacityValue');
   const compareLayoutButton = document.querySelector('#compareLayoutButton');
   const clearCompareButton = document.querySelector('#clearCompareButton');
   const resetPartButton = document.querySelector('#resetPartButton');
@@ -783,6 +785,19 @@ if (core) {
     core.hostMessage({ type: 'compareLoaded', name: message.displayName || '비교 모델' });
   }
 
+  function updateWaterlineOpacity() {
+    const requested = Number(waterlineOpacity.value);
+    const percent = Number.isFinite(requested) ? Math.min(100, Math.max(0, requested)) : 18;
+    waterlineOpacity.value = String(percent);
+    waterline.material.opacity = percent / 100;
+    const transparent = percent < 100;
+    if (waterline.material.transparent !== transparent) {
+      waterline.material.transparent = transparent;
+      waterline.material.needsUpdate = true;
+    }
+    waterlineOpacityValue.textContent = `${percent}%`;
+  }
+
   function updateWaterline() {
     const radius = Math.max(core.getModelRadius(), 0.01);
     // OBJ coordinates place the source waterline at Y=0. The core recenters
@@ -818,6 +833,8 @@ if (core) {
     waterline.scale.set(1, 1, 1);
     waterlinePosition.value = '0';
     waterlineValue.textContent = 'Y 0.000';
+    waterlineOpacity.value = '18';
+    updateWaterlineOpacity();
     waterlineButton.classList.remove('active');
     waterlineButton.setAttribute('aria-pressed', 'false');
     waterlinePanel.hidden = true;
@@ -841,6 +858,7 @@ if (core) {
     core.setStatus(waterlineVisible ? '해수면 표시 켜짐' : '해수면 표시 꺼짐');
   });
   waterlinePosition.addEventListener('input', updateWaterline);
+  waterlineOpacity.addEventListener('input', updateWaterlineOpacity);
   compareLayoutButton.addEventListener('click', () => {
     compareMode = compareMode === 'overlay' ? 'side' : 'overlay';
     applyCompareLayout();
