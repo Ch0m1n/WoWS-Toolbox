@@ -1919,7 +1919,7 @@ impl ShipModelContext {
                         let png = if let Some(cached) = png_by_path.get(path) {
                             cached.clone()
                         } else {
-                            let Some(dds) = texture::load_dds_from_vfs(&self.vfs, path) else {
+                            let Some(dds) = texture::load_authored_texture_dds(&self.vfs, path) else {
                                 continue;
                             };
                             let converted = if let Some((_, colors)) = selected_color {
@@ -2127,6 +2127,7 @@ fn camouflage_texture_path_for_stem<'a>(
     if lower.ends_with("_hull")
         || lower.ends_with("_hull_wire")
         || lower.contains("_hull_")
+        || is_bare_ship_hull_stem(stem)
     {
         scheme
             .texture_paths_by_category
@@ -2136,6 +2137,20 @@ fn camouflage_texture_path_for_stem<'a>(
         None
     }
 }
+// Legacy hull albedos can be named HSB305_Eenhoorn_1950 without a Hull suffix.
+// Restrict this fallback to a ship resource prefix and an authored year; equipment
+// and named DeckHouse/Bulge/other parts must not receive the hull-only mask.
+fn is_bare_ship_hull_stem(stem: &str) -> bool {
+    let Some((prefix, rest)) = stem.split_once('_') else { return false; };
+    let bytes = prefix.as_bytes();
+    let year = rest.rsplit('_').next().unwrap_or("");
+    bytes.len() == 6 && bytes[0].is_ascii_alphabetic()
+        && bytes[1].eq_ignore_ascii_case(&b'S')
+        && matches!(bytes[2].to_ascii_uppercase(), b'B' | b'C' | b'D' | b'A' | b'S')
+        && bytes[3..].iter().all(u8::is_ascii_digit)
+        && year.len() == 4 && year.bytes().all(|b| b.is_ascii_digit())
+}
+
 fn camouflage_uv_transform_for_stem(scheme: &MatCamoScheme, stem: &str) -> [f32;4] {
     let cat = camouflage::classify_part_category(stem);
     scheme.uv_transforms.get(cat).or_else(|| scheme.uv_transforms.get("tile"))
@@ -2186,6 +2201,16 @@ mod camouflage_texture_path_tests {
         .is_none());
         assert!(camouflage_texture_path_for_stem(&scheme, "GGM123_Turret").is_none());
         assert!(camouflage_texture_path_for_stem(&scheme, "UnknownEquipment").is_none());
+    }
+
+    #[test]
+    fn legacy_bare_hull_receives_mask_without_painting_other_parts() {
+        let s = scheme(false, true, "hull");
+        assert!(camouflage_texture_path_for_stem(&s, "HSB305_Eenhoorn_1950").is_some());
+        assert!(camouflage_texture_path_for_stem(&s, "HSB302_Grote_Geus_1945").is_some());
+        for part in ["HSB305_Eenhoorn_1950_DeckHouse", "HSB305_Eenhoorn_1950_Bulge", "HGM009_283mm54_RF", "UnknownEquipment"] {
+            assert!(camouflage_texture_path_for_stem(&s, part).is_none(), "{part}");
+        }
     }
 
     #[test]

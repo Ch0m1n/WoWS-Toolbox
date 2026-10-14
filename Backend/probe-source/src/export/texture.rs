@@ -144,9 +144,13 @@ pub fn material_texture_ids(data: &[u8]) -> Option<Vec<(u32, u64)>> {
 }
 
 pub fn load_authored_texture_png(vfs: &vfs::VfsPath, path: &str) -> Option<Vec<u8>> {
-    let paths = authored_texture_candidates(path);
-    let bytes = load_texture_candidate(vfs, &paths)?;
+    let bytes = load_authored_texture_dds(vfs, path)?;
     dds_to_png(&bytes).ok()
+}
+
+/// Load the highest intact authored mip, retaining DDS bytes for palette baking.
+pub fn load_authored_texture_dds(vfs: &vfs::VfsPath, path: &str) -> Option<Vec<u8>> {
+    load_texture_candidate(vfs, &authored_texture_candidates(path))
 }
 
 fn authored_texture_candidates(path: &str) -> Vec<String> {
@@ -755,6 +759,32 @@ mod tests {
              "textures/hull_art.dd2", "textures/hull_art.dds"]);
         assert_eq!(super::authored_texture_candidates("textures/hull_art.dd1"),
             ["textures/hull_art.dd1"]);
+    }
+
+    #[test]
+    fn camouflage_mask_loader_prefers_intact_high_mip_and_falls_back() {
+        use std::io::Write;
+        fn dds(size: u32) -> Vec<u8> {
+            let mut bytes = vec![0u8; 148 + ((size / 4) * (size / 4) * 8) as usize];
+            bytes[..4].copy_from_slice(b"DDS ");
+            for (offset, value) in [(4,124u32),(8,0x81007),(12,size),(16,size),(28,1),(76,32),(80,4),(108,0x1000),(128,71),(132,3),(140,1)] {
+                bytes[offset..offset+4].copy_from_slice(&value.to_le_bytes());
+            }
+            bytes[84..88].copy_from_slice(b"DX10");
+            bytes
+        }
+        let root: vfs::VfsPath = vfs::MemoryFS::new().into();
+        for (name, bytes) in [("paint.dd0", dds(8)), ("paint.dds", dds(4))] {
+            root.join(name).unwrap().create_file().unwrap().write_all(&bytes).unwrap();
+        }
+        let read = || {
+            let bytes = super::load_authored_texture_dds(&root, "paint.dds").unwrap();
+            let parsed = image_dds::ddsfile::Dds::read(&mut std::io::Cursor::new(bytes)).unwrap();
+            parsed.get_width()
+        };
+        assert_eq!(read(), 8);
+        root.join("paint.dd0").unwrap().create_file().unwrap().write_all(b"broken").unwrap();
+        assert_eq!(read(), 4);
     }
 
     #[test]
