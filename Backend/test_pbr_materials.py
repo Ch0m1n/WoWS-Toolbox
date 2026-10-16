@@ -11,6 +11,62 @@ import pbr_materials as PBR
 
 
 class PbrMaterialsTests(unittest.TestCase):
+    def test_archive_reader_only_sends_failed_paths_to_native_extractor(self) -> None:
+        reader = mock.Mock()
+        reader.extract.return_value = ['/fallback.dd0']
+        with mock.patch.object(PBR, '_run') as run:
+            count = PBR._extract_paths(Path('exporter'), Path('game'), Path('out'), ['/ok.dd0', '/fallback.dd0'], reader=reader)
+        self.assertEqual(count, 1)
+        self.assertEqual(run.call_args.args[0][-1], '/fallback.dd0')
+        self.assertNotIn('/ok.dd0', run.call_args.args[0])
+        reader.extract.return_value = []
+        with mock.patch.object(PBR, '_run') as run:
+            self.assertEqual(PBR._extract_paths(Path('exporter'), Path('game'), Path('out'), ['/ok.dd0'], reader=reader), 0)
+        run.assert_not_called()
+
+    def test_shared_material_misses_are_rechecked_after_conversion(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            material = {"name": "Paint", "pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}}
+            document = {"materials": [material, material], "textures": [{"source": 0}], "images": [{"name": "Paint"}]}
+
+            def extract(exporter, game, raw, paths, **kwargs):
+                for logical in set(paths):
+                    if logical.endswith(("Paint_n.dd0", "Paint_mg.dd0", "Paint_ao.dd0")):
+                        target = PBR._raw_path(raw, logical)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        Image.new("RGBA", (2, 2), (128, 128, 0, 255)).save(target, format="DDS")
+                return 0
+
+            with mock.patch.object(PBR, "load_mfm_paths", return_value=(["/content/test/Paint.mfm"], True)), mock.patch.object(PBR, "_extract_paths", side_effect=extract), mock.patch.object(PBR, "_valid_cached", wraps=PBR._valid_cached) as checks:
+                contract = PBR.prepare_pbr_materials(document, exporter=root/'exporter', game_dir=root/'game', texture_dir=root/'textures', work_dir=root/'work', cache_root=root/'cache')
+            self.assertEqual(contract['coverage']['pbr_materials'], 2)
+            self.assertEqual(contract['coverage']['channels'], 10)
+            self.assertEqual(contract['cache']['conversion_jobs'], 3)
+            self.assertEqual(contract['cache']['publish_files_hashed'], 5)
+            self.assertEqual(contract['materials'][0]['maps'], contract['materials'][1]['maps'])
+            # One selection check, one converter check, and one post-conversion check.
+            calls = [call.args for call in checks.call_args_list]
+            from collections import Counter
+            self.assertLessEqual(max(Counter(calls).values()), 3)
+
+    def test_publish_hashes_shared_file_once_and_keeps_independent_copy(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root/'shared.png'
+            Image.new('RGBA', (2, 2), (2, 4, 8, 16)).save(source)
+            allocations, names, digests = {}, set(), {}
+            with mock.patch.object(PBR.hashlib, 'sha256', wraps=PBR.hashlib.sha256) as hashes:
+                first = PBR._publish(source, root/'textures', 'Hull', 'normal', allocations, names, digests)
+                again = PBR._publish(source, root/'textures', 'Hull_wire', 'normal', allocations, names, digests)
+                distinct_role = PBR._publish(source, root/'textures', 'Hull', 'ao', allocations, names, digests)
+            hashes.assert_called_once()
+            self.assertEqual(first, again)
+            self.assertNotEqual(first, distinct_role)
+            original = source.read_bytes()
+            (root/first).write_bytes(b'edited output')
+            self.assertEqual(source.read_bytes(), original)
+
     def test_bc7prep_supported_decoder_output_is_used(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

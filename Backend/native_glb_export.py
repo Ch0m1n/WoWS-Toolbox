@@ -316,7 +316,7 @@ def publish_shared_texture(
 
     try:
         if library is None:
-            image.save(target, format="PNG", compress_level=9)
+            image.save(target, format="PNG", compress_level=3)
             return False
 
         shared = (
@@ -332,7 +332,7 @@ def publish_shared_texture(
                 f".png.{os.getpid()}.{id(image)}.part"
             )
             try:
-                image.save(temporary, format="PNG", compress_level=9)
+                image.save(temporary, format="PNG", compress_level=3)
                 try:
                     os.replace(temporary, shared)
                 except PermissionError:

@@ -7,6 +7,8 @@ module resolves the corresponding MFM asset paths, extracts the sibling `_n`,
 `_mg`, and `_ao` textures, and publishes viewer/DCC friendly PNG channels.
 """
 
+from game_archive import ArchiveReader
+
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
@@ -241,7 +243,7 @@ def _cache_outputs(cache_root: Path, logical_path: str, channel: str) -> dict[st
     if channel == "normal":
         return {"normal": prefix.with_name(prefix.name + "_normal_v6.png")}
     if channel == "ao":
-        # v4 stores lossless single-channel maps with maximum PNG compression.
+        # v4 stores lossless single-channel maps with fast lossless PNG compression.
         return {"ao": prefix.with_name(prefix.name + "_ao_l_v6.png")}
     return {
         "metallic_gloss": prefix.with_name(prefix.name + "_metallic_gloss_v6.png"),
@@ -335,8 +337,10 @@ def _chunks(paths: Iterable[str], max_characters: int = 22000, max_items: int = 
         yield chunk
 
 
-def _extract_paths(exporter: Path, game_dir: Path, raw_root: Path, paths: Iterable[str]) -> int:
+def _extract_paths(exporter: Path, game_dir: Path, raw_root: Path, paths: Iterable[str], *, reader: ArchiveReader | None = None) -> int:
     unique = sorted(set(paths), key=str.casefold)
+    if reader is not None:
+        unique = reader.extract(unique, raw_root)
     chunks = list(_chunks(unique))
     if not chunks:
         return 0
@@ -400,7 +404,7 @@ def _save_cached_png(image: Image.Image, target: Path) -> None:
     os.close(fd)
     temporary = Path(name)
     try:
-        image.save(temporary, format="PNG", compress_level=9)
+        image.save(temporary, format="PNG", compress_level=3)
         for attempt in range(10):
             try:
                 os.replace(temporary, target)
@@ -484,15 +488,21 @@ def _publish(
     role: str,
     allocations: dict[str, str],
     used_names: set[str],
+    digests: dict[Path, str] | None = None,
 ) -> str:
     """Publish one lossless copy for each unique role-and-content pair."""
 
     texture_dir.mkdir(parents=True, exist_ok=True)
-    digest = hashlib.sha256()
-    with cache_path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    key = role + "\0" + digest.hexdigest()
+    content_digest = digests.get(cache_path) if digests is not None else None
+    if content_digest is None:
+        digest = hashlib.sha256()
+        with cache_path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                digest.update(chunk)
+        content_digest = digest.hexdigest()
+        if digests is not None:
+            digests[cache_path] = content_digest
+    key = role + "\0" + content_digest
     previous = allocations.get(key)
     if previous is not None:
         return previous
@@ -522,6 +532,15 @@ def prepare_pbr_materials(
     max_size: int = 0,
 ) -> dict:
     """Extract, convert, and publish PBR maps aligned to GLB material indices."""
+
+    # Files are immutable during selection. Recheck after conversion publishes them.
+    validity: dict[tuple[str, str], bool] = {}
+
+    def valid_cached(logical: str, channel: str) -> bool:
+        key = (logical, channel)
+        if key not in validity:
+            validity[key] = _valid_cached(cache_root, logical, channel)
+        return validity[key]
 
     total_started = time.perf_counter()
     materials = document.get("materials", [])
@@ -625,7 +644,7 @@ def prepare_pbr_materials(
         if stored and all(
             channel in CHANNEL_SUFFIXES
             and logical in allowed[channel]
-            and _valid_cached(cache_root, logical, channel)
+            and valid_cached(logical, channel)
             for channel, logical in stored.items()
         ):
             cached_selection = dict(stored)
@@ -639,7 +658,7 @@ def prepare_pbr_materials(
                             (
                                 value
                                 for value in values
-                                if _valid_cached(cache_root, value, channel)
+                                if valid_cached(value, channel)
                             ),
                             None,
                         )
@@ -653,74 +672,75 @@ def prepare_pbr_materials(
         resolutions.append(resolution)
     resolution_seconds = time.perf_counter() - resolution_started
 
-    extraction_started = time.perf_counter()
-    # Prefer every high-resolution DD0 naming variant. A channel can have more
-    # than one suffix (Ships 2.0 normals use `_alpha_n` instead of `_n`), so do
-    # not assume candidate[0]/candidate[1] are the only DD0/DDS pair.
-    requested_dd0 = []
-    for resolution in resolutions:
-        if not resolution or resolution["cached_selection"]:
-            continue
-        for candidate in resolution["sets"]:
-            for channel, values in candidate.items():
-                requested_dd0.extend(
-                    value
-                    for value in values
-                    if value.casefold().endswith(".dd0")
-                    and value not in unavailable
-                    and not _valid_cached(cache_root, value, channel)
-                )
-    extraction_calls = (
-        _extract_paths(exporter, game_dir, raw_root, requested_dd0)
-        if requested_dd0
-        else 0
-    )
-    unavailable.update(
-        logical
-        for logical in requested_dd0
-        if not _raw_path(raw_root, logical).is_file()
-        and not _valid_cached(cache_root, logical, _channel_from_path(logical))
-    )
-
-    def available(logical: str, channel: str) -> bool:
-        return _valid_cached(cache_root, logical, channel) or (
-            logical not in unavailable and _raw_path(raw_root, logical).is_file()
-        )
-
-    requested_dds: list[str] = []
-    for resolution in resolutions:
-        if not resolution or resolution["cached_selection"]:
-            continue
-        for channel in CHANNEL_SUFFIXES:
-            if any(
-                available(value, channel)
-                for candidate in resolution["sets"]
-                for value in candidate[channel]
-                if value.casefold().endswith(".dd0")
-            ) and not any(
-                _is_bc7prep_file(_raw_path(raw_root, value))
-                for candidate in resolution["sets"] for value in candidate[channel]
-                if value.casefold().endswith(".dd0")
-            ):
+    with ArchiveReader(game_dir) as archive_reader:
+        extraction_started = time.perf_counter()
+        # Prefer every high-resolution DD0 naming variant. A channel can have more
+        # than one suffix (Ships 2.0 normals use `_alpha_n` instead of `_n`), so do
+        # not assume candidate[0]/candidate[1] are the only DD0/DDS pair.
+        requested_dd0 = []
+        for resolution in resolutions:
+            if not resolution or resolution["cached_selection"]:
                 continue
-            requested_dds.extend(
-                value
-                for candidate in resolution["sets"]
-                for value in candidate[channel]
-                if value.casefold().endswith(".dds")
-                and value not in unavailable
-                and not _valid_cached(cache_root, value, channel)
-            )
-    if requested_dds:
-        extraction_calls += _extract_paths(
-            exporter, game_dir, raw_root, requested_dds
+            for candidate in resolution["sets"]:
+                for channel, values in candidate.items():
+                    requested_dd0.extend(
+                        value
+                        for value in values
+                        if value.casefold().endswith(".dd0")
+                        and value not in unavailable
+                        and not valid_cached(value, channel)
+                    )
+        extraction_calls = (
+            _extract_paths(exporter, game_dir, raw_root, requested_dd0, reader=archive_reader)
+            if requested_dd0
+            else 0
         )
         unavailable.update(
             logical
-            for logical in requested_dds
+            for logical in requested_dd0
             if not _raw_path(raw_root, logical).is_file()
-            and not _valid_cached(cache_root, logical, _channel_from_path(logical))
+            and not valid_cached(logical, _channel_from_path(logical))
         )
+
+        def available(logical: str, channel: str) -> bool:
+            return valid_cached(logical, channel) or (
+                logical not in unavailable and _raw_path(raw_root, logical).is_file()
+            )
+
+        requested_dds: list[str] = []
+        for resolution in resolutions:
+            if not resolution or resolution["cached_selection"]:
+                continue
+            for channel in CHANNEL_SUFFIXES:
+                if any(
+                    available(value, channel)
+                    for candidate in resolution["sets"]
+                    for value in candidate[channel]
+                    if value.casefold().endswith(".dd0")
+                ) and not any(
+                    _is_bc7prep_file(_raw_path(raw_root, value))
+                    for candidate in resolution["sets"] for value in candidate[channel]
+                    if value.casefold().endswith(".dd0")
+                ):
+                    continue
+                requested_dds.extend(
+                    value
+                    for candidate in resolution["sets"]
+                    for value in candidate[channel]
+                    if value.casefold().endswith(".dds")
+                    and value not in unavailable
+                    and not valid_cached(value, channel)
+                )
+        if requested_dds:
+            extraction_calls += _extract_paths(
+                exporter, game_dir, raw_root, requested_dds, reader=archive_reader
+            )
+            unavailable.update(
+                logical
+                for logical in requested_dds
+                if not _raw_path(raw_root, logical).is_file()
+                and not valid_cached(logical, _channel_from_path(logical))
+            )
     extraction_seconds = time.perf_counter() - extraction_started
     cache_root.mkdir(parents=True, exist_ok=True)
     temporary_availability = availability_file.with_suffix(
@@ -769,7 +789,7 @@ def prepare_pbr_materials(
     conversion_jobs: dict[tuple[str, str], Path] = {}
     for selected in selected_sources:
         for channel, logical in selected.items():
-            if not _valid_cached(cache_root, logical, channel):
+            if not valid_cached(logical, channel):
                 conversion_jobs[(logical, channel)] = _raw_path(raw_root, logical)
     conversion_results: dict[tuple[str, str], tuple[dict[str, Path], bool]] = {}
     if conversion_jobs:
@@ -796,10 +816,12 @@ def prepare_pbr_materials(
     )
     conversion_seconds = time.perf_counter() - conversion_started
 
+    validity.clear()  # Conversion may have replaced cached misses with valid files.
     publish_started = time.perf_counter()
     published: set[str] = set()
     publish_allocations: dict[str, str] = {}
     publish_names: set[str] = set()
+    publish_digests: dict[Path, str] = {}
     for material_index, (resolution, selected) in enumerate(
         zip(resolutions, selected_sources)
     ):
@@ -817,7 +839,7 @@ def prepare_pbr_materials(
         }
         for channel, logical in selected.items():
             cache_outputs = _cache_outputs(cache_root, logical, channel)
-            if not _valid_cached(cache_root, logical, channel):
+            if not valid_cached(logical, channel):
                 raise RuntimeError(
                     f"PBR cache conversion did not publish {channel}: {logical}"
                 )
@@ -837,6 +859,7 @@ def prepare_pbr_materials(
                     role,
                     publish_allocations,
                     publish_names,
+                    publish_digests,
                 )
                 entry["maps"][role] = relative
                 published.add(relative)
@@ -844,14 +867,13 @@ def prepare_pbr_materials(
         contract["coverage"]["pbr_materials"] += 1
         contract["coverage"]["channels"] += len(entry["maps"])
     publish_seconds = time.perf_counter() - publish_started
-    for selected in selected_sources:
-        for logical in selected.values():
-            marker = _cache_prefix(cache_root, logical).with_suffix(".decode_v6.json")
-            if marker.is_file():
-                fallback = json.loads(marker.read_text(encoding="utf-8"))
-                warning = f"Unsupported BC7Prep uses authored standalone mip {fallback['size']}: {logical}"
-                if warning not in contract["warnings"]:
-                    contract["warnings"].append(warning)
+    for logical in sorted({logical for selected in selected_sources for logical in selected.values()}):
+        marker = _cache_prefix(cache_root, logical).with_suffix(".decode_v6.json")
+        if marker.is_file():
+            fallback = json.loads(marker.read_text(encoding="utf-8"))
+            warning = f"Unsupported BC7Prep uses authored standalone mip {fallback['size']}: {logical}"
+            if warning not in contract["warnings"]:
+                contract["warnings"].append(warning)
 
     for resolution, selected in zip(resolutions, selected_sources):
         if resolution and selected:
@@ -876,13 +898,16 @@ def prepare_pbr_materials(
     contract["cache"].update(
         {
             "extraction_calls": extraction_calls,
+            "archive_index_loads": archive_reader.index_loads,
+            "package_handles_reused": len(archive_reader.streams),
+            "publish_files_hashed": len(publish_digests),
             "converted_maps_reused": sum(
                 1
                 for resolution in resolutions
                 if resolution
                 for candidate in resolution["sets"]
                 for channel, values in candidate.items()
-                if any(_valid_cached(cache_root, value, channel) for value in values)
+                if any(valid_cached(value, channel) for value in values)
             ),
             "maps_resized": resized_count,
             "resolved_materials_reused": sum(

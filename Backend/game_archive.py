@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import builtins
+from contextlib import ExitStack, nullcontext
 import ctypes
 import io
 import json
@@ -10,7 +11,7 @@ import struct
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, BinaryIO, Iterable
 
 from runtime_i18n import translate_text
 from cache_retention import prune_old_build_caches
@@ -275,9 +276,10 @@ def extract_entry(
     entry: ArchiveEntry,
     *,
     oodle_dll: Path | None = None,
+    stream: BinaryIO | None = None,
 ) -> bytes:
     package = game_dir / "res_packages" / entry.volume
-    with package.open("rb") as stream:
+    with (nullcontext(stream) if stream is not None else package.open("rb")) as stream:
         stream.seek(entry.offset)
         packed = stream.read(entry.packed_size)
     if len(packed) != entry.packed_size:
@@ -300,6 +302,64 @@ def extract_entry(
             f"{entry.path} 복원 크기가 달라요: {len(decoded)} / {entry.unpacked_size}"
         )
     return decoded
+
+
+class ArchiveReader:
+    """One sequential extraction session; lazily index and retain package handles."""
+
+    def __init__(self, game_dir: Path):
+        self.game_dir = game_dir
+        self.entries: dict[str, ArchiveEntry] | None = None
+        self.streams: dict[Path, BinaryIO] = {}
+        self.stack = ExitStack()
+        self.disabled = False
+        self.index_loads = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            return self.stack.__exit__(*exc)
+        finally:
+            self.entries = None
+
+    def extract(self, paths: Iterable[str], destination: Path) -> list[str]:
+        """Return paths needing the native extractor; absent index entries are skipped."""
+        paths = list(paths)
+        if self.disabled:
+            return paths
+        if self.entries is None:
+            try:
+                _, self.entries = read_archive_index(self.game_dir)
+                if not self.entries:
+                    raise ValueError("Empty archive index")
+                self.index_loads += 1
+            except (OSError, ValueError, KeyError, struct.error, RecursionError):
+                self.disabled = True
+                return paths
+        pending = []
+        package_root = (self.game_dir / "res_packages").resolve()
+        output_root = destination.resolve()
+        for logical in paths:
+            entry = self.entries.get(logical.replace("\\", "/").lower())
+            if entry is None:
+                continue
+            package = (package_root / entry.volume).resolve()
+            target = (output_root / logical.lstrip("/")).resolve()
+            if not package.is_relative_to(package_root) or not target.is_relative_to(output_root):
+                raise ValueError("Archive path escapes extraction root")
+            try:
+                stream = self.streams.get(package)
+                if stream is None:
+                    stream = self.stack.enter_context(package.open("rb"))
+                    self.streams[package] = stream
+                payload = extract_entry(self.game_dir, entry, stream=stream)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(payload)
+            except (OSError, ValueError, RuntimeError):
+                pending.append(logical)
+        return pending
 
 
 class _Stub:

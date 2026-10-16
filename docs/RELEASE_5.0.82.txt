@@ -1,0 +1,17 @@
+WoWS Toolbox 5.0.82
+
+- Speed up lossless base-color and PBR PNG export with compression level 3; resolution, pixels and alpha are unchanged. Existing texture caches remain reusable.
+- Reuse the package index and open package files between PBR DD0 lookup and DDS fallback lookup. Unsupported reads fall back to the existing native extractor.
+- Avoid repeated PBR cache checks, shared texture hashing and duplicate publishing work. Exported textures remain independent copies of the cache.
+- Resolve case differences in PBR package paths, including Preussen's Hull metallic/gloss map.
+
+Performance example: PC Preussen GLB-to-OBJ/texture conversion took 78.2 s before and 18.8 s after with separate empty conversion caches. This is one local measurement of the conversion stage, not total ship extraction time or a guarantee for every ship. With reusable caches, both versions took about 10 s. The same PNG file set grew by about 10%.
+
+Validation: identical OBJ bytes and identical pixels in 308 common PNG pairs; 43 affected Python tests passed. Complete desktop self-tests and installer readiness are checked for this release.
+
+한국어
+
+- PNG 무손실 압축 속도 개선: 해상도·픽셀·알파는 유지하고 압축 레벨을 3으로 조정했습니다.
+- PBR 추출 중 패키지 색인과 파일 핸들을 재사용하고, 중복 캐시 검사와 해시 계산을 줄였습니다.
+- 프리센 선체 MG 맵처럼 파일명 대소문자가 다른 PBR 경로도 찾도록 개선했습니다.
+- 프리센 변환 단계 1회 측정: 78.2초 → 18.8초. 전체 추출 시간이 아닌 GLB→OBJ·텍스처 변환 기준입니다. 캐시 재사용 시에는 양쪽 모두 약 10초였으며, 같은 PNG 집합의 용량은 약 10% 늘었습니다.
