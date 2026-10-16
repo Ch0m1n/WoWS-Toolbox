@@ -14,7 +14,9 @@ class OutputProvenanceTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        # Windows CI TEMP can use an 8.3 alias (RUNNER~1). Match the canonical
+        # output root used by production without weakening linked-path checks.
+        self.root = Path(self.temp.name).resolve()
         self.output = self.root / 'ship'
         self.output.mkdir()
         self.obj = self.output / 'ship.obj'
