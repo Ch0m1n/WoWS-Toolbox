@@ -18,6 +18,14 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
+      - name: Normalize Windows temporary directory aliases
+        shell: pwsh
+        run: |
+          $tempRoot = & .\Runtime\Python\python.exe -B -c "from pathlib import Path; import tempfile; print(Path(tempfile.gettempdir()).resolve())"
+          if ($LASTEXITCODE -ne 0) { throw 'Temporary directory resolution failed.' }
+          "TEMP=$tempRoot" >> $env:GITHUB_ENV
+          "TMP=$tempRoot" >> $env:GITHUB_ENV
+
       - name: Generate source manifest
         shell: pwsh
         run: .\Update-SourceManifest.ps1
