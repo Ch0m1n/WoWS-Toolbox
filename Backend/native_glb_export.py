@@ -539,7 +539,10 @@ def write_texture_manifest(
 
 def classify_part(name: str) -> str:
     folded = name.casefold()
-    if not folded.startswith("hp_") and any(
+    attachment = "/mp_" in folded or folded.startswith("mp_")
+    if "/mp_" in folded:
+        folded = "mp_" + folded.rsplit("/mp_", 1)[1]
+    if not attachment and not folded.startswith("hp_") and any(
         token in folded for token in ("_bow", "_midback", "_midfront", "_stern", "hull")
     ):
         return "hull"
@@ -571,7 +574,7 @@ def classify_part(name: str) -> str:
         ("secondary", ("secondary", "secgun", "casemate")),
         ("anti_air", ("antiair", "anti_air", "aagun", "machinegun")),
         ("torpedo", ("torpedo", "ttube", "torp")),
-        ("radar_sensor", ("radar", "director", "rangefinder", "sensor")),
+        ("radar_sensor", ("radar", "director", "rangefinder", "sensor", "searchlight", "search_light")),
         ("main_gun", ("main_gun", "main_artillery", "turret")),
         ("deck_superstructure", ("deck", "superstructure", "deckhouse", "bridge")),
         ("aircraft", ("air_armament", "aircraft", "plane", "catapult")),
@@ -880,7 +883,7 @@ def export_obj(
                 normal_offset += len(normals)
                 object_vertices += len(positions)
             if object_vertices:
-                category = classify_part(object_name)
+                category = classify_part(str(node.get("name") or object_name))
                 objects.append(
                     {
                         "name": object_name,

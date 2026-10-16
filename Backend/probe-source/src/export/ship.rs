@@ -32,6 +32,7 @@ use crate::game_params::types::{ArmorMap, GameParamProvider, MountPoint, Vehicle
 use crate::models::assets_bin::{self, PrototypeDatabase};
 use crate::models::geometry;
 use crate::models::model;
+use crate::models::skeleton_ext;
 use crate::models::visual::{self, VisualPrototype};
 
 use super::camouflage::{self, CamouflageDb};
@@ -1266,11 +1267,9 @@ impl ShipAssets {
         let mut queue = Vec::new();
         let collect = |part: &OwnedSubModel, parent: Option<[f32;16]>, prefix: &str, selection: Option<&MountPoint>,
                        queue: &mut Vec<(String,String,[f32;16])>| {
-            for &id in &part.visual.nodes.name_map_name_ids {
-                let Some(name) = db.strings.get_string_by_id(id) else {continue};
-                let Some(stem) = name.strip_prefix("MP_") else {continue};
-                let stem = stem.split_once("_INDEX_").map(|(base,_)|base).unwrap_or(stem);
-                if selection.is_some_and(|m| !m.allows_misc(name, stem)) { continue; }
+            for (name, local) in collect_part_model_points(db, index, &paths, part) {
+                let Some(stem) = model_point_stem(&name) else {continue};
+                if selection.is_some_and(|m| !m.allows_misc(&name, stem)) { continue; }
                 // Descriptive MP_RM3502_Rangefinder_8m maps to the authored
                 // misc/RM3502/RM3502.model resource, not a descriptive filename.
                 let Some(path) = paths.get(stem).or_else(|| {
@@ -1280,7 +1279,6 @@ impl ShipAssets {
                     eprintln!("Warning: unresolved model point {prefix}/{name}");
                     continue;
                 };
-                let Some(local) = part.visual.find_hardpoint_transform(name, &db.strings) else {continue};
                 let transform = parent.map(|p|mat4_mul_col_major(&p,&local)).unwrap_or(local);
                 queue.push((format!("{prefix}/{name}"),path.clone(),transform));
             }
@@ -1292,7 +1290,7 @@ impl ShipAssets {
             let Some(selection) = mount_points.iter().find(|m| m.hp_name() == mount.hp_name) else {continue};
             collect(&loaded.turret_models[mount.turret_model_index],mount.armor_transform,&mount.hp_name,Some(selection),&mut queue);
         }
-        let count = queue.len();
+        let mut count = 0;
         for (name,path,transform) in queue {
             let model_idx = if let Some(&i) = loaded.turret_model_index.get(&path) { i } else {
                 match self.load_single_turret(db,index,&path) {
@@ -1309,6 +1307,7 @@ impl ShipAssets {
                 hp_name:name,turret_model_index:model_idx,transform:Some(transform),
                 armor_transform:Some(transform),mount_armor:None,species:None,barrel_pitch:None,
             });
+            count += 1;
         }
         eprintln!("Resolved {count} authored model-point attachment placements");
         Ok(())
@@ -1430,6 +1429,75 @@ pub struct ShipModelContext {
 /// If the suffix resolves to blob 1 (VisualPrototype), returns the data directly.
 /// If it resolves to blob 3 (ModelPrototype), parses the ModelPrototype and follows
 /// its `visual_resource_id` to look up the actual VisualPrototype.
+fn model_point_stem(name: &str) -> Option<&str> {
+    let stem = name.strip_prefix("MP_")?;
+    let stem = stem.split_once("_INDEX_").map(|(base,_)|base).unwrap_or(stem);
+    Some(stem.rsplit_once('.').filter(|(_,suffix)| !suffix.is_empty() && suffix.bytes().all(|b| b.is_ascii_digit())).map(|(base,_)|base).unwrap_or(stem))
+}
+
+fn collect_part_model_points(
+    db: &PrototypeDatabase<'_>, index: &HashMap<u64,usize>, paths: &HashMap<String,String>, part: &OwnedSubModel,
+) -> Vec<(String,[f32;16])> {
+    let mut result = Vec::new();
+    let mut seen = HashSet::new();
+    for &id in &part.visual.nodes.name_map_name_ids {
+        let Some(name) = db.strings.get_string_by_id(id) else { continue; };
+        if name.starts_with("MP_") && let Some(matrix) = part.visual.find_hardpoint_transform(name,&db.strings) {
+            seen.insert(name.to_string());
+            result.push((name.to_string(),matrix));
+        }
+    }
+    let extension_nodes = (|| -> Result<Vec<skeleton_ext::ExtensionNode>, Report> {
+        let Some(path) = paths.get(&part.name) else { return Ok(Vec::new()); };
+        let (loc,_) = db.resolve_path(path,index).context("Missing model for skeleton extensions")?;
+        let blob = &db.databases[loc.blob_index];
+        // Split-layout Ships 2.0 models use their own visual node hierarchy.
+        if blob.prototype_magic != 0xA957_6F28 || blob.prototype_checksum != 0x184C_73FC { return Ok(Vec::new()); }
+        let data = db.get_prototype_data(loc,model::MODEL_ITEM_SIZE)?;
+        let references = model::parse_model_skeleton_refs(data)?;
+        let mut nodes = Vec::new();
+        for resource in references {
+            let Some(mapping) = db.lookup_r2p(resource) else { continue; };
+            let location = db.decode_r2p_value(mapping)?;
+            let blob = &db.databases[location.blob_index];
+            if blob.prototype_magic != skeleton_ext::MAGIC || blob.prototype_checksum != skeleton_ext::CHECKSUM {
+                eprintln!("Warning: unsupported skeleton extension for {}",part.name); continue;
+            }
+            let data = db.get_prototype_data(location,skeleton_ext::ITEM_SIZE)?;
+            let parsed = skeleton_ext::parse_extension(data).map_err(|reason| rootcause::report!("{reason}"))?;
+            nodes.extend(parsed);
+        }
+        Ok(nodes)
+    })();
+    let nodes = match extension_nodes {
+        Ok(nodes) => nodes,
+        Err(error) => { eprintln!("Warning: skeleton extensions for {}: {error:?}",part.name); return result; }
+    };
+    for (i,node) in nodes.iter().enumerate() {
+        let Some(name) = db.strings.get_string_by_id(node.name_id) else { continue; };
+        if !name.starts_with("MP_") || seen.contains(name) { continue; }
+        let matrix = skeleton_ext::resolve_world_transform(i,&nodes,|id| {
+            let parent = db.strings.get_string_by_id(id)?;
+            part.visual.find_hardpoint_transform(parent,&db.strings)
+        });
+        if let Some(matrix) = matrix {
+            seen.insert(name.to_string()); result.push((name.to_string(),matrix));
+        } else { eprintln!("Warning: unresolved skeleton parent for {}/{name}",part.name); }
+    }
+    result
+}
+
+#[cfg(test)]
+mod model_point_stem_tests {
+    use super::model_point_stem;
+    #[test] fn resolves_authored_instance_names_without_changing_effect_nodes() {
+        assert_eq!(model_point_stem("MP_ZM001_Searchlight.001"),Some("ZM001_Searchlight"));
+        assert_eq!(model_point_stem("MP_FM701_Ammunition_Box_INDEX_1"),Some("FM701_Ammunition_Box"));
+        assert_eq!(model_point_stem("MP_Resource.variant"),Some("Resource.variant"));
+        assert_eq!(model_point_stem("EP_Fire_1"),None);
+    }
+}
+
 fn resolve_visual_prototype(
     db: &PrototypeDatabase<'_>,
     visual_suffix: &str,

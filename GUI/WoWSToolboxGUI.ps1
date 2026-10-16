@@ -326,7 +326,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.80'
+$script:AppVersion = '5.0.81'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -891,7 +891,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.80"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.81"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1371,7 +1371,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.80 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.81 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -2211,9 +2211,9 @@ function Get-ShipCamouflageOptions {
         }
         foreach ($color in $colors) {
             $order = [int] $color.Order
-            # Korabli's authored order is original then alternate (La Rochelle:
-            # Duperre, Diane). Preserve the existing PC client mapping separately.
-            $originalOrder = if ($Source -eq 'korabli') { 1 } else { 2 }
+            # Match the exporter's default: the first authored palette is original.
+            # PC and Korabli both preserve source order in the catalog.
+            $originalOrder = [int] $colors[0].Order
             $colorLabel = if ($colors.Count -gt 1 -and $order -eq $originalOrder) {
                 Get-UiText '원본 색상' 'Original color'
             }
@@ -4040,7 +4040,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.80&lang=' +
+            'https://viewer.local/index.html?app=5.0.81&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -4306,7 +4306,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.80&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.81&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }
@@ -6061,8 +6061,8 @@ if ($QueueSelfTest) {
         $controls.CamouflageCombo.IsEnabled -and
         @($controls.CamouflageCombo.ItemsSource).Count -eq 3 -and
         [string] $controls.CamouflageCombo.SelectedItem.ColorScheme -eq 'test-color-alternate' -and
-        [string] $pcCamouflageOptions[1].Name -match (Get-UiText '대체 색상' 'Alternate color') -and
-        [string] $pcCamouflageOptions[2].Name -match (Get-UiText '원본 색상' 'Original color') -and
+        [string] $pcCamouflageOptions[1].Name -match (Get-UiText '원본 색상' 'Original color') -and
+        [string] $pcCamouflageOptions[2].Name -match (Get-UiText '대체 색상' 'Alternate color') -and
         [string] $pcEntry.CamouflageId -eq 'PCEP999_Test_Permoflage' -and
         [string] $pcEntry.CamouflageColorScheme -eq 'test-color-alternate' -and
         [string] $pcEntry.Display -match 'Test Permanent Camouflage'

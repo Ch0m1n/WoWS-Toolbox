@@ -29,6 +29,40 @@ pub enum ModelError {
 
 /// Item size for ModelPrototype records in the database blob.
 pub const MODEL_ITEM_SIZE: usize = 0x28;
+/// Read only skeleton references; animated model records may contain unrelated
+/// animation/dye layouts that the full legacy model parser cannot interpret.
+pub fn parse_model_skeleton_refs(data: &[u8]) -> Result<Vec<u64>, Report<ModelError>> {
+    if data.len() < MODEL_ITEM_SIZE {
+        return Err(Report::new(ModelError::DataTooShort { offset:0, need:MODEL_ITEM_SIZE, have:data.len() }));
+    }
+    let count = data[8] as usize;
+    if count == 0 { return Ok(Vec::new()); }
+    let pointer = i64::from_le_bytes(data[16..24].try_into().unwrap());
+    let start = usize::try_from(pointer).ok().filter(|&offset| offset >= MODEL_ITEM_SIZE);
+    let bytes = start.and_then(|offset| offset.checked_add(count*8).and_then(|end| data.get(offset..end)));
+    let Some(bytes) = bytes else {
+        return Err(Report::new(ModelError::DataTooShort { offset:start.unwrap_or(16), need:count*8, have:data.len() }));
+    };
+    Ok(bytes.chunks_exact(8).map(|chunk| u64::from_le_bytes(chunk.try_into().unwrap())).collect())
+}
+
+#[cfg(test)]
+mod skeleton_reference_tests {
+    use super::*;
+    #[test] fn skeletons_do_not_depend_on_unrelated_animation_records() {
+        let mut bytes=vec![0u8;48];bytes[8]=1;bytes[10]=255;
+        bytes[16..24].copy_from_slice(&40i64.to_le_bytes());
+        bytes[24..32].copy_from_slice(&i64::MAX.to_le_bytes());
+        bytes[40..48].copy_from_slice(&123u64.to_le_bytes());
+        assert_eq!(parse_model_skeleton_refs(&bytes).unwrap(),vec![123]);
+        assert!(parse_model_skeleton_refs(&bytes[..47]).is_err());
+    }
+    #[test] fn empty_references_ignore_other_model_arrays() {
+        let mut bytes=vec![0u8;40];bytes[10]=255;
+        assert!(parse_model_skeleton_refs(&bytes).unwrap().is_empty());
+        assert!(parse_model_skeleton_refs(&bytes[..39]).is_err());
+    }
+}
 pub const MODEL_V2_CHECKSUM: u32 = 0xEBE3_5F0E;
 pub const MODEL_V2_ITEM_SIZE: usize = 0x20;
 

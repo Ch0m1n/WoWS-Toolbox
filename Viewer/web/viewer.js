@@ -113,7 +113,7 @@ let modelContent = null;
 let armorRoot = null;
 let armorMeshes = [];
 let armorData = null;
-let activeArmorBucket = null;
+const hiddenArmorBuckets = new Set();
 const hiddenArmorZones = new Set();
 let displayMode = 'model';
 let parts = [];
@@ -1086,7 +1086,7 @@ function clearModel(invalidateLoads = true) {
   armorRoot = null;
   armorMeshes = [];
   armorData = null;
-  activeArmorBucket = null;
+  hiddenArmorBuckets.clear();
   hiddenArmorZones.clear();
   displayMode = 'model';
   armorModeButton.disabled = true;
@@ -1459,13 +1459,16 @@ function setDisplayMode(mode) {
 function applyArmorFilters() {
   let visibleTriangles = 0;
   for (const mesh of armorMeshes) {
-    const matchesBucket = activeArmorBucket === null || mesh.userData.armorBucket === activeArmorBucket;
+    const matchesBucket = !hiddenArmorBuckets.has(mesh.userData.armorBucket);
     const matchesZone = !hiddenArmorZones.has(mesh.userData.armorZone);
     mesh.visible = matchesBucket && matchesZone;
     if (mesh.visible) visibleTriangles += mesh.userData.triangleCount;
   }
   thicknessFilters.querySelectorAll('.armor-filter').forEach((button) => {
-    button.classList.toggle('active', Number(button.dataset.bucket) === activeArmorBucket);
+    const enabled = !hiddenArmorBuckets.has(Number(button.dataset.bucket));
+    button.classList.toggle('active', enabled);
+    button.setAttribute('aria-pressed', String(enabled));
+    button.querySelector('.armor-swatch').textContent = enabled ? '✓' : '';
   });
   zoneFilters.querySelectorAll('.armor-filter').forEach((button) => {
     const enabled = !hiddenArmorZones.has(button.dataset.zone);
@@ -1620,7 +1623,8 @@ function renderArmorFilters() {
     button.dataset.bucket = String(bucket.id);
     appendArmorFilterContents(button, bucket.color, bucket.label, bucketCounts.get(bucket.id));
     button.addEventListener('click', () => {
-      activeArmorBucket = activeArmorBucket === bucket.id ? null : bucket.id;
+      if (hiddenArmorBuckets.has(bucket.id)) hiddenArmorBuckets.delete(bucket.id);
+      else hiddenArmorBuckets.add(bucket.id);
       applyArmorFilters();
     });
     thicknessFilters.append(button);
@@ -2017,7 +2021,12 @@ canvas.addEventListener('pointerup', (event) => {
 
 modelModeButton.addEventListener('click', () => setDisplayMode('model'));
 armorModeButton.addEventListener('click', () => setDisplayMode('armor'));
-document.querySelector('#allThickness').addEventListener('click', () => { activeArmorBucket = null; applyArmorFilters(); });
+document.querySelector('#allThickness').addEventListener('click', () => { hiddenArmorBuckets.clear(); applyArmorFilters(); });
+document.querySelector('#noThickness').addEventListener('click', () => {
+  for (const bucket of armorData?.buckets || []) hiddenArmorBuckets.add(bucket.id);
+  applyArmorFilters();
+});
+
 document.querySelector('#allZones').addEventListener('click', () => {
   hiddenArmorZones.clear();
   applyArmorFilters();

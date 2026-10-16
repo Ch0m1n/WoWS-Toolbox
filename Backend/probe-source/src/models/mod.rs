@@ -15,3 +15,6 @@ pub mod terrain;
 pub mod vertex_format;
 #[cfg(feature = "models")]
 pub mod visual;
+
+#[cfg(feature = "models")]
+pub mod skeleton_ext;

@@ -29,6 +29,7 @@ def synthetic_glb(
     *,
     duplicate_hull_primitive: bool = False,
     texture_transform: dict | None = None,
+    first_part_name: str = "ASC001_Test_Bow",
 ) -> None:
     binary = bytearray()
     views = []
@@ -70,7 +71,7 @@ def synthetic_glb(
         "scene": 0,
         "scenes": [{"nodes": [0, 1]}],
         "nodes": [
-            {"name": "ASC001_Test_Bow", "mesh": 0, "translation": [2, 3, 4]},
+            {"name": first_part_name, "mesh": 0, "translation": [2, 3, 4]},
             {"name": "HP_AGM_1 (TestGun)", "mesh": 1, "scale": [-1, 1, 1]},
         ],
         "meshes": [
@@ -293,6 +294,22 @@ class NativeGlbExportTests(unittest.TestCase):
             NATIVE.triangle_winding_is_reversed(positions, downward, 0, 1, 2)
         )
         self.assertFalse(NATIVE.triangle_winding_is_reversed(positions, [], 0, 1, 2))
+
+    def test_export_classifies_attachment_before_sanitizing_object_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "ship.glb"
+            synthetic_glb(source, first_part_name="ZSB304_Jiuhua_1955_MidBack/MP_ZM337_Motor_Lifeboat.001 (ZM337)")
+            args = SimpleNamespace(input=source, output=root/"ship.obj", report=root/"export.json", formats="obj", texture_max_size=0, texture_library=None, pbr_exporter=None, pbr_game_dir=None, pbr_cache=None)
+            report = NATIVE.build(args)
+            self.assertEqual(report["categories"].get("hull",0),0)
+            self.assertEqual(report["categories"]["other"],1)
+
+    def test_hull_attached_props_are_not_classified_as_the_hull(self) -> None:
+        self.assertEqual(NATIVE.classify_part("ZSB304_Jiuhua_1955_MidBack/MP_ZM337_Motor_Lifeboat.001 (ZM337)"), "other")
+        self.assertEqual(NATIVE.classify_part("ZSB304_Jiuhua_1955_MidFront/MP_ZM001_Searchlight (ZM001)"), "radar_sensor")
+        self.assertEqual(NATIVE.classify_part("ZSB304_Jiuhua_1955_MidBack/MP_CM093_Rope (CM093)"), "decoration")
+        self.assertEqual(NATIVE.classify_part("ZSB304_Jiuhua_1955_MidBack"), "hull")
 
     def test_catapult_hardpoint_is_classified_as_aircraft(self) -> None:
         self.assertEqual(

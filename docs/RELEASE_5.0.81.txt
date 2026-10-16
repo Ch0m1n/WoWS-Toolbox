@@ -1,0 +1,11 @@
+WoWS Toolbox 5.0.81
+
+- Fix missing authored attachment parts such as lifeboats and searchlights on legacy PC ship models (verified with Jiuhua).
+- Resolve supported skeleton extension parent transforms while retaining existing attachment restrictions.
+- Correct Original color / Alternate color labels for PC permanent camouflage selections.
+- Select multiple armor thicknesses independently, with Show all / Hide all and combined zone filtering.
+- Refresh viewer assets after upgrading.
+
+Validation: affected Rust/Python/JavaScript tests and complete desktop self-tests; real PC exports checked for Jiuhua, Manfred von Richthofen, Oswald Boelcke, and Preussen.
+
+Aircraft, projectile, missile and torpedo extraction experiments are not included as a new application feature.

@@ -171,7 +171,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.80',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.81',
     'ConvertTo-ValidatedQueueEntries', '[PIPELINE] ', 'child_heartbeat',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -508,8 +508,8 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerVendor -match 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
     $viewerIndex -notmatch '조명과 표면' -or
     $viewerLightingCss -notmatch '\.lighting-desk' -or
-    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.80\.0' -or
-    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.80\.0' -or
+    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.81\.0' -or
+    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.81\.0' -or
     $viewerScript -notmatch 'loadAssemblyMetadata' -or
     $viewerScript -notmatch 'matrixRowsDeterminant' -or
     $viewerScript -notmatch 'assembly-mirrored-standard-double-sided-v4' -or
@@ -641,8 +641,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.80.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.80') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.81.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.81') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -759,7 +759,7 @@ if ($threeCore.Length -lt 1000000 -or $threeModule.Length -lt 500000 -or
     throw 'Dependency or license acceptance failed.'
 }
 $expectedExporterHashes = @{
-    'Backend\wowsunpack.exe' = '671C8B3E8AB46B4FF30CE4E0389869A910770F6A0AB85E9A111682A968F8BE8D'
+    'Backend\wowsunpack.exe' = 'BBF7A5B0F0EFABECE3F23A0302B0DD23F8B709A846A40B14AEF545C8BDE104A6'
     'Backend\wowsunpack_armor.exe' = '5D465F21E8DDDD00605ABF1BF52B0C0AE5ABF0967144E22FE54C61F8CD82101F'
 }
 foreach ($relative in $expectedExporterHashes.Keys) {
@@ -809,9 +809,9 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.80 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.81 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.80 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.81 self-tests passed.'
 }
 

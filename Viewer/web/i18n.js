@@ -105,6 +105,7 @@
     '장갑 구역': 'Armor zone',
     '전체 켜기': 'Show all',
     '전체 끄기': 'Hide all',
+    '두께를 눌러 각각 켜거나 끌 수 있어요.': 'Click each thickness to show or hide it.',
     '구역을 눌러 각각 켜거나 끌 수 있어요.': 'Click each zone to show or hide it.',
     '단면 분석': 'Section analysis',
     '전체': 'All',
