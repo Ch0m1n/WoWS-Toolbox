@@ -326,7 +326,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.82'
+$script:AppVersion = '5.0.83'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -335,6 +335,7 @@ if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
 . $localizationScript
 . (Join-Path $PSScriptRoot 'Workbench.ps1')
 . (Join-Path $PSScriptRoot 'PickerTools.ps1')
+. (Join-Path $PSScriptRoot 'OtherModels.ps1')
 $script:InstallerLanguage = Get-WoWSToolboxLanguageMarker -PackageRoot $script:PackageRoot
 $script:ViewerRoot = Join-Path $script:PackageRoot 'Viewer'
 $script:ViewerRuntimeRoot = Join-Path $script:ViewerRoot 'Runtime'
@@ -891,7 +892,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.82"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.83"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1028,6 +1029,8 @@ $xaml = @'
                                     <Button x:Name="RemoveQueueButton" Content="선택 제거"
                                             Style="{StaticResource QuietButton}" Margin="0,0,8,0"
                                             IsEnabled="False"/>
+                                    <Button x:Name="OtherModelsButton" Content="기타 모델"
+                                            Style="{StaticResource QuietButton}" Margin="0,0,8,0"/>
                                     <Button x:Name="ClearQueueButton" Content="대기열 비우기"
                                             Style="{StaticResource QuietButton}" IsEnabled="False"/>
                                 </StackPanel>
@@ -1371,7 +1374,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.82 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.83 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -1429,7 +1432,7 @@ $controlNames = @(
     'ExtractPage', 'ViewerPage', 'SettingsPage', 'SourceCombo',
     'CurrentGamePathText', 'BrowseCurrentGameButton',
     'SelectedShipName', 'SelectedShipMeta', 'QueueList',
-    'RefreshCatalogButton', 'OpenPickerButton', 'RemoveQueueButton',
+    'RefreshCatalogButton', 'OpenPickerButton', 'OtherModelsButton', 'RemoveQueueButton',
     'QueueUpButton', 'QueueDownButton', 'SaveQueueButton', 'LoadQueueButton', 'WorkbenchButton',
     'ClearQueueButton', 'OutputPathLabel', 'OverwriteCheck',
     'BrowseOutputButton', 'ProgressStage', 'ProgressMessage',
@@ -4040,7 +4043,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.82&lang=' +
+            'https://viewer.local/index.html?app=5.0.83&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -4306,7 +4309,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.82&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.83&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }
@@ -4565,7 +4568,7 @@ function Update-QueueUi {
 function Set-BusyState {
     $busy = $null -ne $script:ActiveRunner -or $script:BatchActive
     foreach ($name in @(
-        'SourceCombo', 'BrowseCurrentGameButton', 'RefreshCatalogButton', 'OpenPickerButton',
+        'SourceCombo', 'BrowseCurrentGameButton', 'RefreshCatalogButton', 'OpenPickerButton', 'OtherModelsButton',
         'RemoveQueueButton', 'ClearQueueButton', 'QueueUpButton', 'QueueDownButton',
         'SaveQueueButton', 'LoadQueueButton', 'WorkbenchButton', 'BrowseOutputButton', 'InspectButton',
         'FormatCombo', 'TextureCombo', 'LodCombo', 'CamouflageCombo', 'OverwriteCheck',
@@ -5746,6 +5749,10 @@ $controls.RefreshCatalogButton.Add_Click({
         Recover-GuiError -Context '함선 목록 새로고침을 시작하지 못했어요' `
             -Exception $_.Exception
     }
+})
+$controls.OtherModelsButton.Add_Click({
+    try { Start-OtherModelCatalog }
+    catch { Recover-GuiError -Context '기타 모델 창을 열지 못했어요' -Exception $_.Exception }
 })
 $controls.OpenPickerButton.Add_Click({
     try { Show-ShipPicker }

@@ -1773,23 +1773,18 @@ fn run_export_model(params: &ExportModelParams<'_>) -> Result<(), Report> {
 
     let resolved_visual = if let (Some(db), Some(vis_suffix)) = (&db, &visual_suffix) {
         let self_id_index = db.build_self_id_index();
-        match db.resolve_path(vis_suffix, &self_id_index) {
-            Ok((vis_location, vis_full_path)) if vis_location.blob_index == 1 => {
-                let vis_data = db
-                    .get_prototype_data(vis_location, visual::VISUAL_ITEM_SIZE)
-                    .context("Failed to get visual prototype data")?;
-                let vp =
-                    visual::parse_visual(vis_data).context("Failed to parse VisualPrototype")?;
-                println!("Visual: {vis_full_path}");
-                println!(
-                    "  {} render sets, {} LODs, {} nodes",
-                    vp.render_sets.len(),
-                    vp.lods.len(),
-                    vp.nodes.name_ids.len()
-                );
+        match wowsunpack::export::ship::resolve_visual_prototype(
+            db, vis_suffix.trim_start_matches('/'), &self_id_index,
+        ) {
+            Ok(vp) => {
+                println!("Visual: {vis_suffix}");
+                println!("  {} render sets, {} LODs, {} nodes", vp.render_sets.len(), vp.lods.len(), vp.nodes.name_ids.len());
                 Some(vp)
             }
-            _ => None,
+            Err(error) => {
+                eprintln!("Warning: model visual unavailable: {error:?}");
+                None
+            }
         }
     } else {
         None

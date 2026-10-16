@@ -1,6 +1,7 @@
 ﻿$script:WoWSToolboxLanguage = 'en'
 
 $script:WoWSToolboxEnglishText = [ordered]@{
+    '기타 모델' = 'Other models'
     '2.0 구조' = '2.0 structure'
     '함선 재질 데이터를 기준으로 2.0 구조를 구분해요.' = 'Identify 2.0 structure from ship material data.'
     '블리츠 데이터 가져오기' = 'Import Blitz data'

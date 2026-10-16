@@ -114,6 +114,9 @@ armor geometry used by Ships 2.0 hulls. Their hashes are tracked individually
 below. Armor is converted to the adjacent viewer sidecar and is not
 merged into the editable OBJ.
 
+The individual model exporter also reuses the ship visual resolver for current
+Korabli split-layout assets, retaining authored LOD and material bindings.
+
 Local modifications add current Korabli executable recognition, split
 visual/node layouts, `_ports.visual` hardpoint merging, GameParams/assets-bin
 overrides, package codec dispatch, dynamically loaded Oodle decoding, RPC

@@ -1,0 +1,23 @@
+WoWS Toolbox 5.0.83
+
+- Add Other models to the extraction screen for PC, Korabli and Legends.
+- Browse installed aircraft, shells, torpedoes and missiles/rockets; search and select multiple models across filters.
+- Export OBJ/MTL/original-size PNGs without Blender, retain existing results, and optionally open the final model in the built-in viewer.
+- Exclude propeller rotation discs and shell tracer effects by default, with an option to retain them.
+- Supplement missing projectile albedo with exact model-stem matches; resolve declared Legends ModelUber texture references and aircraft material flags.
+- Reuse the current Korabli split-visual resolver for individual models, avoiding raw geometry with mixed LODs and missing material bindings.
+- Report missing/unsupported resources and continue with other selected models. Use the existing local Oodle discovery when a configured Korabli runtime path is no longer present.
+
+Validation: real installed-data exports across PC, Korabli and Legends; backend regression tests, interactive WPF picker checks and desktop self-tests. Only installed geometry is listed. The missile/rocket category includes aircraft rockets; absent guided-missile resources are not synthesized. Blitz other-model extraction is not included.
+Aircraft output is static source geometry without skeletal animation poses. Some animation-driven parts may remain separated.
+
+한국어
+
+- 추출 화면에 기타 모델 메뉴를 추가했습니다. PC·코라블리·레전드의 항공기·포탄·어뢰·미사일 및 로켓을 검색하고 여러 개 선택할 수 있습니다.
+- OBJ·MTL·원본 크기 PNG를 새 폴더에 저장하며 Blender가 필요하지 않습니다. 완료 후 내장 뷰어로 여는 옵션도 제공합니다.
+- 프로펠러 회전판과 포탄 궤적 효과는 기본 제외하며, 필요하면 포함 옵션을 켤 수 있습니다.
+- 발사체의 누락 알베도와 레전드의 선언된 텍스처를 연결하고, 항공기 재질 플래그를 처리했습니다.
+- 일부 모델이 실패해도 다른 선택 항목을 계속 추출하며, 실패·누락 이유는 로그에 표시합니다.
+
+사용법: 게임 소스 선택 → 추출 대기열의 기타 모델 → 검색·분류·체크 → 선택 모델 추출.
+자세한 안내: docs/OTHER_MODELS.md

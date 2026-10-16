@@ -1,4 +1,4 @@
-WoWS Toolbox 5.0.82
+WoWS Toolbox 5.0.83
 =======================================
 
 [한국어 빠른 사용법]
@@ -122,3 +122,5 @@ If something goes wrong
 Game installation folders are read only. All game assets remain the property of
 their respective owners. Use exported content only as permitted by the applicable
 game EULA, platform terms, and law. See LEGAL_NOTICE.txt for details.
+
+기타 모델 / Other models: 추출 화면의 기타 모델 버튼에서 항공기·포탄·어뢰·미사일/로켓을 선택합니다. PC, Korabli and Legends supported. See docs/OTHER_MODELS.md.

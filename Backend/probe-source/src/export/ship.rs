@@ -1498,7 +1498,7 @@ mod model_point_stem_tests {
     }
 }
 
-fn resolve_visual_prototype(
+pub fn resolve_visual_prototype(
     db: &PrototypeDatabase<'_>,
     visual_suffix: &str,
     self_id_index: &HashMap<u64, usize>,
