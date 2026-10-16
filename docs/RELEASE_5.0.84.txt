@@ -1,0 +1,21 @@
+WoWS Toolbox 5.0.84
+
+- Add independent hull, main-battery and torpedo research selectors for PC and Korabli ships. All three default to the fully upgraded configuration.
+- Rebuild AA, secondaries and other mounted equipment from the chosen hull; resolve weapon upgrades through that hull's compatible components.
+- Retain compatible weapon research choices on hull changes; reset incompatible choices to the final available upgrade.
+- Preserve selections in saved queues, output metadata, cache keys and request identities. Reject stale/foreign module IDs instead of silently falling back.
+- Use the same module-aware native exporter for visible geometry and exact armor, including ships with separate hull model directories.
+- Keep Legends and Blitz on their existing fixed configurations.
+
+Usage: refresh the ship catalog, add/select a queued ship, then click Select modules below the output controls. Choose A/B cards in three research columns; Fully upgrade all restores defaults.
+Validation: affected backend regression tests, native library tests, actual WPF selectors and queue checks; Charles Martel stock/researched guns on hull A and researched guns on hull B; textured OBJ/MTL/PNG and armor exports for Charles Martel and Icarus. Installed PC data confirmed 16 AA mounts on Charles Martel hull A and 24 on hull B. Icarus researched torpedoes produced two five-tube launchers.
+
+한국어
+
+- PC·코라블리 함선의 선체·주함포·어뢰를 각각 선택할 수 있어요. 기본값은 모두 최종 연구 부품이에요.
+- 대기열의 함선을 선택하면 출력 설정의 부품 선택 버튼을 눌러 인게임 연구 화면처럼 A/B 카드를 고를 수 있어요. 처음 사용 시 함선 목록을 새로고쳐 주세요.
+- 대공포·부포·사격지휘장치 등은 선택한 선체 구성을 따라가요. 호환되지 않는 무장은 새 선체의 최종 연구 부품으로 바뀌어요.
+- 부품 조합을 대기열 저장, 캐시, 출력 폴더와 추출 기록에 반영하고 모델과 장갑에도 같은 조합을 적용해요.
+- 레전드와 블리츠의 기존 고정 구성은 그대로예요.
+
+Details: docs/SHIP_MODULES.md

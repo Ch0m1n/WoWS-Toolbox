@@ -1,4 +1,4 @@
-WoWS Toolbox 5.0.83
+WoWS Toolbox 5.0.84
 =======================================
 
 [한국어 빠른 사용법]
@@ -124,3 +124,5 @@ their respective owners. Use exported content only as permitted by the applicabl
 game EULA, platform terms, and law. See LEGAL_NOTICE.txt for details.
 
 기타 모델 / Other models: 추출 화면의 기타 모델 버튼에서 항공기·포탄·어뢰·미사일/로켓을 선택합니다. PC, Korabli and Legends supported. See docs/OTHER_MODELS.md.
+
+Research modules (PC/Korabli): select a queued ship and click Select modules and choose Hull / Main battery / Torpedoes cards. Defaults are fully upgraded; refresh the catalog once. See docs/SHIP_MODULES.md.

@@ -326,7 +326,7 @@ if (-not $automatedMode) {
 }
 
 $script:PackageRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$script:AppVersion = '5.0.83'
+$script:AppVersion = '5.0.84'
 $script:UpdateApiUrl = 'https://api.github.com/repos/Ch0m1n/WoWS-Toolbox/releases/latest'
 $localizationScript = Join-Path $PSScriptRoot 'Localization.ps1'
 if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
@@ -336,6 +336,7 @@ if (-not (Test-Path -LiteralPath $localizationScript -PathType Leaf)) {
 . (Join-Path $PSScriptRoot 'Workbench.ps1')
 . (Join-Path $PSScriptRoot 'PickerTools.ps1')
 . (Join-Path $PSScriptRoot 'OtherModels.ps1')
+. (Join-Path $PSScriptRoot 'ShipModules.ps1')
 $script:InstallerLanguage = Get-WoWSToolboxLanguageMarker -PackageRoot $script:PackageRoot
 $script:ViewerRoot = Join-Path $script:PackageRoot 'Viewer'
 $script:ViewerRuntimeRoot = Join-Path $script:ViewerRoot 'Runtime'
@@ -892,7 +893,7 @@ $xaml = @'
                 <StackPanel Grid.Row="2">
                     <TextBlock Text="대기열 추출 · 파트별 모델"
                                Foreground="#71849F" FontSize="11"/>
-                    <TextBlock x:Name="FooterVersion" Text="v5.0.83"
+                    <TextBlock x:Name="FooterVersion" Text="v5.0.84"
                                Foreground="#536780" FontSize="11" Margin="0,4,0,0"/>
                 </StackPanel>
             </Grid>
@@ -1086,6 +1087,13 @@ $xaml = @'
                                     <ComboBox x:Name="CamouflageCombo" Width="250" Margin="8,0,0,0"
                                               DisplayMemberPath="Name" IsEnabled="False"
                                               ToolTip="위장 선택"/>
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button x:Name="ResearchModulesButton" Content="부품 선택" IsEnabled="False"/>
+                                    <TextBlock x:Name="ResearchModulesSummary" Foreground="#AAB9CD" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                                    <ComboBox x:Name="HullModuleCombo" DisplayMemberPath="Name" Visibility="Collapsed"/>
+                                    <ComboBox x:Name="ArtilleryModuleCombo" DisplayMemberPath="Name" Visibility="Collapsed"/>
+                                    <ComboBox x:Name="TorpedoModuleCombo" DisplayMemberPath="Name" Visibility="Collapsed"/>
                                 </StackPanel>
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal"
@@ -1374,7 +1382,7 @@ $xaml = @'
                         </Border>
                         <Border Style="{StaticResource CardBorder}" Margin="0,14,0,0">
                             <StackPanel>
-                                <TextBlock Text="WoWS Toolbox 5.0.83 · 비공식 커뮤니티 도구"
+                                <TextBlock Text="WoWS Toolbox 5.0.84 · 비공식 커뮤니티 도구"
                                            FontSize="15" FontWeight="SemiBold"/>
                                 <TextBlock Margin="0,6,0,0" Foreground="#8195AF" FontSize="11"
                                            TextWrapping="Wrap"
@@ -1438,6 +1446,8 @@ $controlNames = @(
     'BrowseOutputButton', 'ProgressStage', 'ProgressMessage',
     'MainProgress', 'InspectButton', 'PauseButton', 'CancelButton', 'ExtractButton',
     'FormatCombo', 'TextureCombo', 'LodCombo', 'CamouflageCombo', 'LanguageCombo',
+    'HullModuleCombo', 'ArtilleryModuleCombo', 'TorpedoModuleCombo',
+    'ResearchModulesButton', 'ResearchModulesSummary',
     'AutoUpdateCheck', 'CheckUpdateButton',
     'LogBox', 'ModelWebView', 'ViewerPathLabel', 'ViewerStatus',
     'OpenModelButton', 'OpenRecentModelButton', 'OpenCompareModelButton', 'OpenViewerFolderButton',
@@ -2271,7 +2281,9 @@ function Update-QueueEntryDisplay {
         [string] $Entry.CamouflageId
     }
     else { [string] $Entry.CamouflageName }
+    $moduleLabel = Get-QueueModuleLabel $Entry
     $display = "$installLabel  ·  $($ship.LocalizedName)  ·  $tier  ·  $($ship.ShipCode)  ·  $camouflageLabel"
+    if ($moduleLabel) { $display += "  ·  $moduleLabel" }
     if ($null -eq $Entry.PSObject.Properties['Display']) {
         $Entry | Add-Member -NotePropertyName Display -NotePropertyValue $display
     }
@@ -2348,7 +2360,7 @@ function New-ShipQueueEntry {
         $sourceLabel
     }
     else { "$sourceLabel · $install" }
-    [pscustomobject] @{
+    $entry = [pscustomobject] @{
         Source = $Source
         GamePath = $GamePath
         Ship = $Ship
@@ -2356,9 +2368,14 @@ function New-ShipQueueEntry {
         CamouflageName = $CamouflageName
         CamouflageScheme = $CamouflageScheme
         CamouflageColorScheme = $CamouflageColorScheme
+        HullUpgrade = $(if (Get-OptionalShipValue $Ship 'SelectedHullUpgrade') { Get-OptionalShipValue $Ship 'SelectedHullUpgrade' } else { 'top' })
+        ArtilleryUpgrade = $(if (Get-OptionalShipValue $Ship 'SelectedArtilleryUpgrade') { Get-OptionalShipValue $Ship 'SelectedArtilleryUpgrade' } else { 'top' })
+        TorpedoUpgrade = $(if (Get-OptionalShipValue $Ship 'SelectedTorpedoUpgrade') { Get-OptionalShipValue $Ship 'SelectedTorpedoUpgrade' } else { 'top' })
         Key = Get-ShipQueueKey -Source $Source -Ship $Ship -GamePath $GamePath
         Display = "$installLabel  ·  $($Ship.LocalizedName)  ·  $tier  ·  $($Ship.ShipCode)  ·  $camouflageLabel"
     }
+    Update-QueueEntryDisplay $entry
+    return $entry
 }
 
 function Update-SelectedShipUi {
@@ -2896,6 +2913,14 @@ function Show-ShipPicker {
             return
         }
     }
+    if ($source -in @('pc', 'korabli')) {
+        $staleModules = @($catalog | Where-Object { $null -eq $_.PSObject.Properties['Modules'] }).Count -gt 0
+        if ($staleModules -and (Test-AllowCatalogAutoRefresh -Source $source -Reason 'modules')) {
+            Add-Log (Get-UiText '선체·주함포·어뢰 부품 목록을 새로고쳐요.' 'Refreshing hull, main-battery and torpedo modules.')
+            Start-CatalogRefresh -OpenPickerAfter
+            return
+        }
+    }
     $staleCamouflageCatalog = @($catalog | Where-Object {
         $versionProperty = $_.PSObject.Properties['CamouflageCatalogVersion']
         $versionValue = 0
@@ -2951,7 +2976,10 @@ function Show-ShipPicker {
             @('SelectedCamouflageId', 'default'),
             @('SelectedCamouflageName', (Get-UiText '위장 없음' 'No camouflage')),
             @('SelectedCamouflageScheme', ''),
-            @('SelectedCamouflageColorScheme', '')
+            @('SelectedCamouflageColorScheme', ''),
+            @('SelectedHullUpgrade', 'top'),
+            @('SelectedArtilleryUpgrade', 'top'),
+            @('SelectedTorpedoUpgrade', 'top')
         )) {
             if ($null -eq $row.PSObject.Properties[$property[0]]) {
                 $row | Add-Member -NotePropertyName $property[0] -NotePropertyValue $property[1]
@@ -2963,6 +2991,10 @@ function Show-ShipPicker {
         }
         if ($queuedByKey.ContainsKey($rowKey)) {
             $queuedEntry = $queuedByKey[$rowKey]
+            Initialize-QueueModules $queuedEntry
+            $row.SelectedHullUpgrade = [string] $queuedEntry.HullUpgrade
+            $row.SelectedArtilleryUpgrade = [string] $queuedEntry.ArtilleryUpgrade
+            $row.SelectedTorpedoUpgrade = [string] $queuedEntry.TorpedoUpgrade
             $row.SelectedCamouflageId = [string] $queuedEntry.CamouflageId
             $row.SelectedCamouflageName = [string] $queuedEntry.CamouflageName
             $row.SelectedCamouflageScheme = [string] $queuedEntry.CamouflageScheme
@@ -4043,7 +4075,7 @@ function Send-ModelToViewer {
         $controls.ViewerStatus.Text = Convert-ToUiText '새 모델 폴더를 뷰어에 연결하는 중이에요...'
         $controls.OpenViewerFolderButton.IsEnabled = $true
         $core.Navigate(
-            'https://viewer.local/index.html?app=5.0.83&lang=' +
+            'https://viewer.local/index.html?app=5.0.84&lang=' +
                 [Uri]::EscapeDataString($script:WoWSToolboxLanguage) +
                 '&modelMapping=' + $script:ViewerMappingSerial
         )
@@ -4309,7 +4341,7 @@ function Complete-ModelViewerInitialization {
         )
         $script:ViewerMappedDirectory = $initialModelDirectory
     }
-    $core.Navigate("https://viewer.local/index.html?app=5.0.83&lang=$script:WoWSToolboxLanguage")
+    $core.Navigate("https://viewer.local/index.html?app=5.0.84&lang=$script:WoWSToolboxLanguage")
 }
 function Initialize-ModelViewer {
     if ($script:ViewerReady -or $script:ViewerInitializing) { return }
@@ -4456,6 +4488,7 @@ function Update-QueueCamouflageControl {
     }
     finally {
         $script:QueueCamouflageUpdating = $false
+        Update-QueueModuleControls
     }
 }
 
@@ -4572,6 +4605,7 @@ function Set-BusyState {
         'RemoveQueueButton', 'ClearQueueButton', 'QueueUpButton', 'QueueDownButton',
         'SaveQueueButton', 'LoadQueueButton', 'WorkbenchButton', 'BrowseOutputButton', 'InspectButton',
         'FormatCombo', 'TextureCombo', 'LodCombo', 'CamouflageCombo', 'OverwriteCheck',
+        'HullModuleCombo', 'ArtilleryModuleCombo', 'TorpedoModuleCombo', 'ResearchModulesButton',
         'NavViewer', 'NavSettings'
         'ImportBlitzButton', 'StartBlitzEmulatorButton', 'BrowseBlitzAdbButton', 'BlitzAdbPathBox', 'BlitzAdbDeviceBox',
         'BrowseBlitzButton', 'BlitzPathBox', 'SaveSettingsButton', 'AutoDetectButton'
@@ -4631,7 +4665,9 @@ function New-BatchManifest {
             ship_resource = Get-OptionalShipValue -Ship $ship -Name 'ShipResource'
             run_slug = if ($entry.Source -eq 'legends') { Get-SafeRunSlug $ship } else { '' }
             ship_index = if ($entry.Source -ne 'legends') { [string] $ship.GameParamsIndex } else { '' }
-            hull_upgrade = if ($entry.Source -ne 'legends') { Get-OptionalShipValue -Ship $ship -Name 'HullUpgrade' } else { '' }
+            hull_upgrade = Get-OptionalShipValue -Ship $entry -Name 'HullUpgrade'
+            artillery_upgrade = Get-OptionalShipValue -Ship $entry -Name 'ArtilleryUpgrade'
+            torpedo_upgrade = Get-OptionalShipValue -Ship $entry -Name 'TorpedoUpgrade'
             ship_code = [string] $ship.ShipCode
             nation = [string] $ship.Nation
             ship_class = [string] $ship.ShipClass
@@ -4938,6 +4974,9 @@ function Save-QueueFile {
             camouflage_name = [string] $_.CamouflageName
             camouflage_scheme = [string] $_.CamouflageScheme
             camouflage_color_scheme = [string] $_.CamouflageColorScheme
+            hull_upgrade = Get-OptionalShipValue $_ 'HullUpgrade'
+            artillery_upgrade = Get-OptionalShipValue $_ 'ArtilleryUpgrade'
+            torpedo_upgrade = Get-OptionalShipValue $_ 'TorpedoUpgrade'
             ship = $_.Ship
         }
     })
@@ -5018,6 +5057,14 @@ function ConvertTo-ValidatedQueueEntries {
             $camouflageColorScheme = ''
         }
         $entry = New-ShipQueueEntry -Source $source -Ship $ship -GamePath $gamePath -CamouflageId $camouflageId -CamouflageName $camouflageName -CamouflageScheme $camouflageScheme -CamouflageColorScheme $camouflageColorScheme
+        foreach ($pair in @(@('hull_upgrade','HullUpgrade'), @('artillery_upgrade','ArtilleryUpgrade'), @('torpedo_upgrade','TorpedoUpgrade'))) {
+            $value = Get-OptionalShipValue $row $pair[0]
+            if ($value) {
+                if ($value -notmatch '^[A-Za-z0-9_.-]{1,200}$' -or $value.Contains('..')) { throw 'Invalid ship module identifier' }
+                $entry.($pair[1]) = $value
+            }
+        }
+        Update-QueueEntryDisplay $entry
         if ([string]::IsNullOrWhiteSpace([string] $entry.Key)) {
             throw "대기열 $($index + 1)번째 함선 키를 만들지 못했어요."
         }
@@ -5616,6 +5663,10 @@ $controls.PauseButton.Add_Click({
 $controls.FormatCombo.Add_SelectionChanged({ Sync-UiToSettings; Save-Settings })
 $controls.TextureCombo.Add_SelectionChanged({ Sync-UiToSettings; Save-Settings })
 $controls.LodCombo.Add_SelectionChanged({ Sync-UiToSettings; Save-Settings })
+$controls.ResearchModulesButton.Add_Click({ Show-ResearchModulePicker })
+$controls.HullModuleCombo.Add_SelectionChanged({ Set-QueueModuleSelection 'HullUpgrade' 'HullModuleCombo' })
+$controls.ArtilleryModuleCombo.Add_SelectionChanged({ Set-QueueModuleSelection 'ArtilleryUpgrade' 'ArtilleryModuleCombo' })
+$controls.TorpedoModuleCombo.Add_SelectionChanged({ Set-QueueModuleSelection 'TorpedoUpgrade' 'TorpedoModuleCombo' })
 $controls.CamouflageCombo.Add_SelectionChanged({
     if ($script:QueueCamouflageUpdating) { return }
     $entry = $controls.QueueList.SelectedItem

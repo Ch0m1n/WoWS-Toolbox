@@ -27,6 +27,8 @@ Assert-ExitCode 'Deferred picker callback test'
 Assert-ExitCode 'Workbench test'
 & $pwshCommand -STA -NoLogo -NoProfile -File (Join-Path $PSScriptRoot 'examples/Test-OtherModels.ps1')
 Assert-ExitCode 'Other model picker test'
+& $pwshCommand -STA -NoLogo -NoProfile -File (Join-Path $PSScriptRoot 'examples/Test-ShipModules.ps1')
+Assert-ExitCode 'Ship module selector test'
 $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
 if ($nodeCommand) {
     & $nodeCommand.Source (Join-Path $PSScriptRoot 'Viewer/web/test-viewer-workflows.cjs')
@@ -173,7 +175,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.83',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.84',
     'ConvertTo-ValidatedQueueEntries', '[PIPELINE] ', 'child_heartbeat',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -510,8 +512,8 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerVendor -match 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
     $viewerIndex -notmatch '조명과 표면' -or
     $viewerLightingCss -notmatch '\.lighting-desk' -or
-    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.83\.0' -or
-    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.83\.0' -or
+    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.84\.0' -or
+    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.84\.0' -or
     $viewerScript -notmatch 'loadAssemblyMetadata' -or
     $viewerScript -notmatch 'matrixRowsDeterminant' -or
     $viewerScript -notmatch 'assembly-mirrored-standard-double-sided-v4' -or
@@ -643,8 +645,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.83.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.83') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.84.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.84') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -761,7 +763,7 @@ if ($threeCore.Length -lt 1000000 -or $threeModule.Length -lt 500000 -or
     throw 'Dependency or license acceptance failed.'
 }
 $expectedExporterHashes = @{
-    'Backend\wowsunpack.exe' = 'F93ACA99A9F95690F8E72C8CDE39FAB8F60ABA2D91ADC760992F2F932BCB2186'
+    'Backend\wowsunpack.exe' = '481258F5C33D7D15A0F7F0A22F2C7B3CAB4BE43D3F09FCBC01FCBCC8C33E27A2'
     'Backend\wowsunpack_armor.exe' = '5D465F21E8DDDD00605ABF1BF52B0C0AE5ABF0967144E22FE54C61F8CD82101F'
 }
 foreach ($relative in $expectedExporterHashes.Keys) {
@@ -811,9 +813,9 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.83 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.84 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.83 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.84 self-tests passed.'
 }
 

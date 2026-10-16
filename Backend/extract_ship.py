@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.dont_write_bytecode = True
 
+from ship_modules import resolve_loadout, loadout_key
 from blitz_extract import extract_blitz  # noqa: E402
 from compat_cache import prepare_game_params_cache  # noqa: E402
 from game_archive import (  # noqa: E402
@@ -743,7 +744,8 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
     formats = parse_formats(args.formats)
     backend = args.toolbox_root / "Backend"
     exporter = backend / "wowsunpack.exe"
-    armor_exporter = backend / "wowsunpack_armor.exe"
+    # Use the same module-aware engine for visible geometry and exact armor.
+    armor_exporter = exporter
     native_exporter = backend / "native_glb_export.py"
     if not exporter.is_file():
         raise FileNotFoundError(f"함선 내보내기 엔진이 없어요: {exporter}")
@@ -771,6 +773,10 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
     else:
         cache_info = prepare_game_params_cache(args.game_dir, cache_base, args.source)
         env["WOWS_GAME_PARAMS_OVERRIDE"] = cache_info["game_params"]
+    applied_modules = resolve_loadout(
+        cache_info["game_params"], args.ship_index, args.hull_upgrade,
+        getattr(args, "artillery_upgrade", "top"), getattr(args, "torpedo_upgrade", "top"),
+    )
     cache_prepare_seconds = time.perf_counter() - cache_prepare_started
     if prefetch_cancelled(args):
         raise RuntimeError("다음 함선의 미리 준비 작업을 취소했어요")
@@ -798,6 +804,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
         / args.source
         / str(build)
         / exporter_fingerprint
+        / loadout_key(args)
         / f"lod-{args.lod}"
         / ("camo-" + safe_name(args.camouflage or "default"))
         / ("color-" + safe_name(args.camouflage_color_scheme or "default"))
@@ -818,6 +825,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
             / args.source
             / str(build)
             / armor_fingerprint
+            / loadout_key(args)
             / f"lod-{args.lod}"
             / (safe_name(args.ship_index) + ".glb")
         )
@@ -849,9 +857,11 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
                 str(args.game_dir),
                 "export-ship",
                 args.ship_index,
+                *(["--artillery-component", applied_modules["artillery_component"]] if applied_modules["artillery_component"] else []),
+                *(["--torpedo-component", applied_modules["torpedo_component"]] if applied_modules["torpedo_component"] else []),
                 "--lod",
                 str(args.lod),
-                *(["--hull", args.hull_upgrade] if args.hull_upgrade else []),
+                *(["--hull", applied_modules["hull_upgrade"]] if applied_modules["hull_upgrade"] else []),
                 *(
                     ["--camouflage", args.camouflage]
                     if args.camouflage and args.camouflage != "default"
@@ -877,9 +887,11 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
                 str(args.game_dir),
                 "export-ship",
                 args.ship_index,
+                *(["--artillery-component", applied_modules["artillery_component"]] if applied_modules["artillery_component"] else []),
+                *(["--torpedo-component", applied_modules["torpedo_component"]] if applied_modules["torpedo_component"] else []),
                 "--lod",
                 str(args.lod),
-                *(["--hull", args.hull_upgrade] if args.hull_upgrade else []),
+                *(["--hull", applied_modules["hull_upgrade"]] if applied_modules["hull_upgrade"] else []),
                 "--no-textures",
                 "--armor-json",
                 str(armor_metadata),
@@ -1051,6 +1063,7 @@ def extract_pc_family(args: argparse.Namespace, output_dir: Path) -> dict:
             },
             "cache": cache_info,
             "glb_kept": bool(args.keep_glb),
+            "modules": applied_modules,
             "ship_glb_cache": str(glb_cache),
             "exporter_fingerprint": exporter_fingerprint,
             "ship_glb_cache_reused": glb_cache_reused,
@@ -1098,7 +1111,9 @@ def main() -> int:
     parser.add_argument("--ship-resource", default="")
     parser.add_argument("--run-slug", default="")
     parser.add_argument("--ship-index", default="")
-    parser.add_argument("--hull-upgrade", default="")
+    parser.add_argument("--hull-upgrade", default="top")
+    parser.add_argument("--artillery-upgrade", default="top")
+    parser.add_argument("--torpedo-upgrade", default="top")
     parser.add_argument("--camouflage", default="default")
     parser.add_argument("--camouflage-color-scheme", default="")
     parser.add_argument("--display-name", default="")
@@ -1146,6 +1161,8 @@ def main() -> int:
             args.camouflage,
             args.camouflage_color_scheme,
         )
+        if args.source in {"pc", "korabli"}:
+            stem += "_" + loadout_key(args)
         output_dir = next_output_dir(args.output_root, stem, args.overwrite)
     output_dir = validate_output_child(args.output_root, output_dir)
     args.output_root.mkdir(parents=True, exist_ok=True)

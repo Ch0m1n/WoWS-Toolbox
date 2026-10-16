@@ -103,14 +103,15 @@ asynchronous requests for one cached image resolve to the decoded bitmap.
     its source is included as `Backend/ship_material_probe.rs` and build details
     are in `docs/SHIP_2_MATERIAL_DETECTION.md`. The complete modified library,
     example and locked dependencies for this inspector are in `Backend/probe-source`
-  - `Backend/wowsunpack.exe` — normal PC/Korabli ship-model exporter
-  - `Backend/wowsunpack_armor.exe` — armor-sidecar exporter used only with the
-    no-texture armor pass; it also emits exact per-triangle thickness metadata
+  - `Backend/wowsunpack.exe` — module-aware PC/Korabli model and exact armor exporter
+  - `Backend/wowsunpack_armor.exe` — retained legacy armor-sidecar exporter; the current
+    pipeline uses the module-aware main exporter for the no-texture armor pass
 
 The model exporter includes the Ships 2.0 geometry/material and independently
 implemented BC7Prep texture changes. The dedicated armor exporter retains its
 separately verified no-texture build with `--armor-json` and includes unified-root
-armor geometry used by Ships 2.0 hulls. Their hashes are tracked individually
+armor geometry used by Ships 2.0 hulls. The current pipeline uses the module-aware main exporter for both model and
+exact armor passes so researched turrets and hull paths agree. Binary hashes are tracked individually
 below. Armor is converted to the adjacent viewer sidecar and is not
 merged into the editable OBJ.
 
@@ -128,7 +129,7 @@ Packaged SHA-256 values:
 
 ```text
 3466A3FDC6C7EEEE696F365806D968BD1B2D5867E8537DD73A2C2F5795411A65  Backend/ship_material_probe.exe
-BBF7A5B0F0EFABECE3F23A0302B0DD23F8B709A846A40B14AEF545C8BDE104A6  Backend/wowsunpack.exe
+481258F5C33D7D15A0F7F0A22F2C7B3CAB4BE43D3F09FCBC01FCBCC8C33E27A2  Backend/wowsunpack.exe
 5D465F21E8DDDD00605ABF1BF52B0C0AE5ABF0967144E22FE54C61F8CD82101F  Backend/wowsunpack_armor.exe
 ```
 

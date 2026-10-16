@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ship_modules import loadout_key, validate_module_id
+
 import argparse
 from concurrent.futures import Future, ThreadPoolExecutor
 import ctypes
@@ -182,7 +184,9 @@ def item_namespace(common: dict, item: dict) -> SimpleNamespace:
         ship_resource=str(item.get("ship_resource", "")),
         run_slug=run_slug,
         ship_index=str(item.get("ship_index", "")),
-        hull_upgrade=str(item.get("hull_upgrade", "")),
+        hull_upgrade=validate_module_id(item.get("hull_upgrade", "top")),
+        artillery_upgrade=validate_module_id(item.get("artillery_upgrade", "top")),
+        torpedo_upgrade=validate_module_id(item.get("torpedo_upgrade", "top")),
         camouflage=validate_camouflage_selection(
             item.get("camouflage", common.get("camouflage", "default"))
         ),
@@ -229,6 +233,8 @@ def output_for(args: SimpleNamespace, reserved: set[str]) -> Path:
         args.camouflage,
         args.camouflage_color_scheme,
     )
+    if args.source in {"pc", "korabli"}:
+        stem += "_" + loadout_key(args)
     candidate = next_output_dir(args.output_root, stem, args.overwrite)
     serial = 2
     while str(candidate).casefold() in reserved:

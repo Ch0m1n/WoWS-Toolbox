@@ -226,6 +226,14 @@ enum Commands {
         #[arg(long)]
         hull: Option<String>,
 
+        /// Resolved main-battery component for the selected hull.
+        #[arg(long)]
+        artillery_component: Option<String>,
+
+        /// Resolved torpedo component for the selected hull.
+        #[arg(long)]
+        torpedo_component: Option<String>,
+
         /// Skip loading camouflage textures
         #[arg(long)]
         no_textures: bool,
@@ -1105,6 +1113,8 @@ fn run() -> Result<(), Report> {
             lod,
             list_upgrades,
             hull,
+            artillery_component,
+            torpedo_component,
             no_textures,
             damaged,
             list_textures,
@@ -1126,6 +1136,8 @@ fn run() -> Result<(), Report> {
                 game_version,
                 list_upgrades,
                 hull.as_deref(),
+                artillery_component.as_deref(),
+                torpedo_component.as_deref(),
                 no_textures,
                 damaged,
                 list_textures,
@@ -2211,6 +2223,8 @@ fn run_export_ship(
     game_version: Option<u64>,
     list_upgrades: bool,
     hull_selection: Option<&str>,
+    artillery_component: Option<&str>,
+    torpedo_component: Option<&str>,
     no_textures: bool,
     damaged: bool,
     list_textures: bool,
@@ -2266,7 +2280,12 @@ fn run_export_ship(
         return Ok(());
     }
 
+    let mut module_overrides = std::collections::HashMap::new();
+    use wowsunpack::game_params::keys::ComponentType;
+    if let Some(value) = artillery_component { module_overrides.insert(ComponentType::Artillery, value.to_string()); }
+    if let Some(value) = torpedo_component { module_overrides.insert(ComponentType::Torpedoes, value.to_string()); }
     let options = ShipExportOptions {
+        module_overrides,
         lod,
         hull: hull_selection.map(|s| s.to_string()),
         textures: !no_textures,

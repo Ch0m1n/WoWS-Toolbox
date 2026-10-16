@@ -11,6 +11,7 @@ from typing import Any
 
 sys.dont_write_bytecode = True
 
+from ship_modules import module_options
 from blitz_assets import blitz_catalog  # noqa: E402
 from mo_reader import MoCatalog, read_mo  # noqa: E402
 from ship_materials import annotate_ship_materials  # noqa: E402
@@ -469,6 +470,7 @@ def pc_catalog(game_dir: Path, language: str, source: str, *, cache_root: Path |
                 "GameParamsKey": str(param_key),
                 "GameParamsIndex": index,
                 "ModelPath": model_path,
+                "Modules": module_options(data),
                 "HullUpgrade": hull_upgrade,
                 "HullComponent": hull_component,
                 "Id": data.get("id"),

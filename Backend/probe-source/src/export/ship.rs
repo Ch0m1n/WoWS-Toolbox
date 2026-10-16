@@ -519,10 +519,35 @@ impl ShipAssets {
 
     fn load_ship_inner(
         &self,
-        info: ShipInfo,
+        mut info: ShipInfo,
         vehicle: Option<&Vehicle>,
         options: &ShipExportOptions,
     ) -> Result<ShipModelContext, Report> {
+        // Explicit selections must fail closed instead of silently using stock mounts.
+        if let Some(selection) = options.hull.as_deref() {
+            let config = vehicle.and_then(|v| v.hull_upgrades()).and_then(|upgrades| {
+                upgrades.get(selection).or_else(|| {
+                    let mut names: Vec<_> = upgrades.iter().collect();
+                    names.sort_by_key(|(name, _)| *name);
+                    names.into_iter().find(|(name, config)| {
+                        name.to_lowercase().contains(&selection.to_lowercase()) ||
+                        config.component_name(keys::ComponentType::Hull)
+                            .is_some_and(|n| n.starts_with(&format!("{selection}_")))
+                    }).map(|(_, config)| config)
+                })
+            }).ok_or_else(|| rootcause::report!("Selected hull is unavailable: {selection}"))?;
+            for (kind, component) in &options.module_overrides {
+                if config.component_name(*kind) != Some(component.as_str()) &&
+                    !config.alternatives(*kind).contains(component) {
+                    bail!("Component {component} is incompatible with the selected hull");
+                }
+            }
+            if let Some(path) = config.hull_model_path() {
+                if let Some(directory) = path.rsplit('/').nth(1) { info.model_dir = directory.to_string(); }
+            }
+        } else if !options.module_overrides.is_empty() {
+            bail!("A hull selection is required for module overrides");
+        }
         let db = self.db()?;
         let self_id_index = db.build_self_id_index();
 

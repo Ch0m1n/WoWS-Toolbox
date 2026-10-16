@@ -37,7 +37,7 @@ def source_identity(args) -> dict:
         if path.is_file():
             identity["files"].append([str(path.relative_to(root)), path.stat().st_size, path.stat().st_mtime_ns])
     identity["tools"] = {name: digest(args.toolbox_root / "Backend" / name) for name in
-                         ("wowsunpack.exe", "native_glb_export.py", "blitz_extract.py")
+                         ("wowsunpack.exe", "native_glb_export.py", "blitz_extract.py", "ship_modules.py")
                          if (args.toolbox_root / "Backend" / name).is_file()}
     return identity
 
@@ -45,7 +45,7 @@ def source_identity(args) -> dict:
 def request_identity(args, source=None) -> str:
     return fingerprint({"source": source if source is not None else source_identity(args),
                         "selection": {key: getattr(args, key, None) for key in
-                                      ("ship_index", "ship_key", "selected_model_path", "ship_resource", "hull_upgrade")},
+                                      ("ship_index", "ship_key", "selected_model_path", "ship_resource", "hull_upgrade", "artillery_upgrade", "torpedo_upgrade")},
                         "options": {key: getattr(args, key, None) for key in
                                     ("formats", "lod", "texture_max_size", "camouflage", "camouflage_color_scheme")}})
 
@@ -142,7 +142,9 @@ def make_plan(manifest: dict, history: dict | None = None, failures: list | None
                      "request_identity": identity, "source_identity": fingerprint(source),
                      "requested": {"formats": args.formats, "lod": args.requested_lod,
                                    "texture_max_size": args.requested_texture_max_size, "camouflage": args.camouflage,
-                                   "camouflage_color_scheme": args.camouflage_color_scheme},
+                                   "camouflage_color_scheme": args.camouflage_color_scheme,
+                                   "hull_upgrade": args.hull_upgrade, "artillery_upgrade": args.artillery_upgrade,
+                                   "torpedo_upgrade": args.torpedo_upgrade},
                      "applied": {"formats": args.formats, "lod": args.lod, "texture_max_size": args.texture_max_size},
                      "output": str(output), "action": action, "existing": output.exists(),
                      "cache": "unverified", "blockers": blockers, "estimate": estimate_basis(history, args.source),

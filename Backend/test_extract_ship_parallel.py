@@ -154,7 +154,7 @@ class HullSelectionCommandTests(unittest.TestCase):
     def test_hull_upgrade_is_passed_to_model_and_armor_commands(self) -> None:
         source = (BACKEND / "extract_ship.py").read_text(encoding="utf-8")
         self.assertGreaterEqual(
-            source.count('*(["--hull", args.hull_upgrade] if args.hull_upgrade else [])'),
+            source.count('*(["--hull", applied_modules["hull_upgrade"]] if applied_modules["hull_upgrade"] else [])'),
             2,
         )
 
