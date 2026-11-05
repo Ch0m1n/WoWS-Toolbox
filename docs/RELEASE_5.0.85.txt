@@ -1,0 +1,14 @@
+WoWS Toolbox 5.0.85
+
+- Fix mounted component visual lookup to preserve the full gameplay asset path.
+- Prevent short names such as BM036 from accidentally matching unrelated port/location props (OBM036/LBM036).
+- Beatty now exports the two intended Hotchkiss 3-pounder 47mm guns instead of military tents. The same lookup fix applies to other mounted models.
+- Existing exports are retained. Re-extract affected ships after installing; the exporter hash automatically separates the new model cache.
+
+Validation: actual Korabli build 8871893 Beatty extraction. Both BM036 instances now use BM036_Hotchkiss_3pdr_47mm geometry and albedo instead of OGB100_military. All original named objects remain; two paravane instances also become available with the correct path lookup.
+
+한국어
+
+- 탑재 부품을 짧은 이름이 아닌 전체 원본 경로로 찾아, 항구·배경용 모델이 잘못 연결되는 문제를 고쳤어요.
+- Beatty의 천막 두 개가 원래 부품인 47mm 호치키스 포로 추출돼요.
+- 설치 후 해당 함선을 새로 추출해 주세요. 기존 결과물은 자동으로 수정되지 않아요.

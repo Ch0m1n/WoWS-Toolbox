@@ -1388,9 +1388,9 @@ impl ShipAssets {
     ) -> Result<OwnedSubModel, Report> {
         let visual_path = model_path.replace('\\', "/").replace(".model", ".visual");
 
-        let visual_lookup = visual_path.rsplit('/').next().unwrap_or(&visual_path);
-
-        let vp = resolve_visual_prototype(db, visual_lookup, self_id_index)
+        // Preserve the namespace: BM036 (a saluting gun) must never suffix-match
+        // OBM036/LBM036 (port/location props with unrelated geometry/materials).
+        let vp = resolve_visual_prototype(db, &visual_path, self_id_index)
             .context("Failed to parse turret visual")?;
 
         let geom_path_idx = self_id_index

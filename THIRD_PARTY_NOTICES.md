@@ -115,6 +115,9 @@ exact armor passes so researched turrets and hull paths agree. Binary hashes are
 below. Armor is converted to the adjacent viewer sidecar and is not
 merged into the editable OBJ.
 
+Mounted models resolve their full authored visual paths to avoid suffix collisions
+between gameplay weapons and port/location props, such as BM036 and OBM036.
+
 The individual model exporter also reuses the ship visual resolver for current
 Korabli split-layout assets, retaining authored LOD and material bindings.
 
@@ -129,7 +132,7 @@ Packaged SHA-256 values:
 
 ```text
 3466A3FDC6C7EEEE696F365806D968BD1B2D5867E8537DD73A2C2F5795411A65  Backend/ship_material_probe.exe
-481258F5C33D7D15A0F7F0A22F2C7B3CAB4BE43D3F09FCBC01FCBCC8C33E27A2  Backend/wowsunpack.exe
+874D1F9B83EDA1D54C94419E246AA413258BA04FC8A181CBCD3435D5DD08F6B2  Backend/wowsunpack.exe
 5D465F21E8DDDD00605ABF1BF52B0C0AE5ABF0967144E22FE54C61F8CD82101F  Backend/wowsunpack_armor.exe
 ```
 
