@@ -29,6 +29,8 @@ Assert-ExitCode 'Workbench test'
 Assert-ExitCode 'Other model picker test'
 & $pwshCommand -STA -NoLogo -NoProfile -File (Join-Path $PSScriptRoot 'examples/Test-ShipModules.ps1')
 Assert-ExitCode 'Ship module selector test'
+& $pwshCommand -NoLogo -NoProfile -File (Join-Path $PSScriptRoot 'examples/Test-StartupGamePathDetection.ps1')
+Assert-ExitCode 'Startup game path detection test'
 $nodeCommand = Get-Command node -ErrorAction SilentlyContinue
 if ($nodeCommand) {
     & $nodeCommand.Source (Join-Path $PSScriptRoot 'Viewer/web/test-viewer-workflows.cjs')
@@ -175,7 +177,7 @@ foreach ($marker in @(
     '''TopSubtitle'', ''TopStatusText'', ''SelectedShipName'', ''SelectedShipMeta''',
     '$searchable.IndexOf(', '$script:ExtractionQueue.Insert($to, $item)',
     'modelReportUrl', 'assemblyReportUrl', 'Get-AssemblyValidationPath',
-    'Test-DeprecatedPackagedOutputPath', '?app=5.0.85',
+    'Test-DeprecatedPackagedOutputPath', '?app=5.0.86',
     'ConvertTo-ValidatedQueueEntries', '[PIPELINE] ', 'child_heartbeat',
     'Get-OutputPathProblem', 'add_NavigationStarting', 'add_NewWindowRequested',
     '$grid.Add_MouseDoubleClick(', '$getPickerRowFromSource',
@@ -512,8 +514,8 @@ if ($viewerIndex -match 'https?://(cdn|unpkg|jsdelivr)' -or
     $viewerVendor -match 'WOWS_STABLE_DOUBLE_SIDED_NORMALS' -or
     $viewerIndex -notmatch '조명과 표면' -or
     $viewerLightingCss -notmatch '\.lighting-desk' -or
-    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.85\.0' -or
-    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.85\.0' -or
+    $viewerIndex -notmatch 'viewer\.js\?v=5\.0\.86\.0' -or
+    $viewerIndex -notmatch 'viewer-advanced\.js\?v=5\.0\.86\.0' -or
     $viewerScript -notmatch 'loadAssemblyMetadata' -or
     $viewerScript -notmatch 'matrixRowsDeterminant' -or
     $viewerScript -notmatch 'assembly-mirrored-standard-double-sided-v4' -or
@@ -645,8 +647,8 @@ foreach ($marker in @('WoWSToolboxGUI.ps1', 'launch-error.log')) {
 
 $launcherExe = Join-Path $PSScriptRoot 'WoWS Toolbox.exe'
 $launcherInfo = Get-Item -LiteralPath $launcherExe
-if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.85.0' -or
-    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.85') {
+if ($launcherInfo.VersionInfo.FileVersion.Trim() -ne '5.0.86.0' -or
+    $launcherInfo.VersionInfo.ProductVersion.Trim() -ne '5.0.86') {
     throw 'EXE launcher version metadata is wrong.'
 }
 $launcherProbe = Start-Process -FilePath $launcherExe -ArgumentList '--check' -Wait -PassThru
@@ -813,9 +815,9 @@ foreach ($file in $expectedFiles) {
 }
 
 if ($environmentSkips) {
-    Write-Host "WoWS Toolbox 5.0.85 self-tests passed with $environmentSkips environmental skip(s)."
+    Write-Host "WoWS Toolbox 5.0.86 self-tests passed with $environmentSkips environmental skip(s)."
 }
 else {
-    Write-Host 'WoWS Toolbox 5.0.85 self-tests passed.'
+    Write-Host 'WoWS Toolbox 5.0.86 self-tests passed.'
 }
 

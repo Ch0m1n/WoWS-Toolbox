@@ -1,0 +1,17 @@
+WoWS Toolbox 5.0.86
+
+- Fix startup failure after automatic game-path detection when one or more supported games are not installed or a previously saved installation path no longer exists.
+- Empty optional game paths are now accepted by Set-GamePath. Previously this raised "Cannot bind argument to parameter Path because it is an empty string" before the main window opened.
+- Add a regression that exercises normal startup detection (not automated-mode bypass) with no games, only PC installed, removed saved paths, and valid settings.
+- Includes 5.0.85's mounted-model path fix: Beatty's Hotchkiss 47mm guns no longer become port tents.
+
+Install over the existing installation. Uninstalling first is not required. Settings and exported models are retained by an in-place update.
+
+Validation: reproduced the reported empty-Path failure before the fix; all startup-path scenarios pass after the fix on PowerShell 7 and Windows PowerShell 5.1. Full desktop self-tests and package checks are required before publication.
+
+한국어
+
+- 업데이트 후 게임 경로를 자동 감지할 때 일부 게임이 설치되지 않았거나 저장된 경로가 사라져 있으면 창이 열리기 전에 종료되던 문제를 고쳤어요.
+- 게임 경로를 비워 두는 정상적인 상태를 허용하고, 게임이 전혀 없는 경우·PC만 설치된 경우·기존 경로가 사라진 경우를 검사해요.
+- Beatty 천막 오류 수정도 포함해요.
+- 기존 버전을 제거하지 않고 새 설치 파일로 덮어 설치해 주세요. 기존 설정과 추출 결과를 유지해요.
